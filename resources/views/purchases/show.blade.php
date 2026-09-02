@@ -14,7 +14,7 @@
 
       <header class="card-header d-flex justify-content-between align-items-center">
         <h2 class="card-title">
-          PUR-{{ $invoice->invoice_no }}
+          PI-{{ $invoice->invoice_no }}
           <span class="{{ $invoice->statusBadgeClass() }} ms-2">{{ $invoice->statusLabel() }}</span>
         </h2>
         <div>
@@ -41,7 +41,7 @@
 
       <div class="card-body">
         <div class="row mb-3">
-          <div class="col-md-3"><strong>Invoice Date:</strong><br>{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d-M-Y') }}</div>
+          <div class="col-md-3"><strong>Invoice Date:</strong><br>{{ $invoice->invoice_date->format('d-M-Y') }}</div>
           <div class="col-md-3"><strong>Vendor:</strong><br>{{ $invoice->vendor->name ?? 'N/A' }}</div>
           <div class="col-md-2"><strong>Vendor Bill #:</strong><br>{{ $invoice->bill_no ?? '—' }}</div>
           <div class="col-md-2"><strong>Bilty #:</strong><br>{{ $invoice->bilty_no ?? '—' }}</div>
@@ -49,12 +49,13 @@
         </div>
 
         <div class="table-responsive mb-4">
-          <table class="table table-bordered">
+          <table class="table table-bordered table-sm">
             <thead>
               <tr>
-                <th>#</th><th>Item</th><th>Variation</th>
-                <th>Ordered Qty</th><th>Dispatched</th><th>Received</th><th>Short</th>
-                <th>Rate</th><th>Line Total</th><th>Landed Unit Cost</th>
+                <th>#</th><th>Item</th><th>Variation</th><th>Packing</th>
+                <th>Wt/Packing</th><th>Qty</th><th>Gross Wt</th><th>Net Wt</th>
+                <th>Rec. Net Wt</th><th>Short Wt</th>
+                <th>Rate/40kg</th><th>Rate/kg</th><th>Amount</th><th>Landed/kg</th>
               </tr>
             </thead>
             <tbody>
@@ -63,25 +64,35 @@
                 <td>{{ $i + 1 }}</td>
                 <td>{{ $item->product->name ?? '-' }}</td>
                 <td>{{ $item->variation->sku ?? '-' }}</td>
-                <td>{{ number_format($item->quantity, 2) }}</td>
-                <td>{{ $item->dispatched_quantity !== null ? number_format($item->dispatched_quantity, 2) : '—' }}</td>
-                <td>{{ $item->received_quantity !== null ? number_format($item->received_quantity, 2) : '—' }}</td>
-                <td>{{ $item->short_quantity > 0 ? number_format($item->short_quantity, 2) : '—' }}</td>
-                <td>{{ number_format($item->price, 2) }}</td>
-                <td>{{ number_format($item->quantity * $item->price, 2) }}</td>
-                <td>{{ $item->received_quantity ? number_format($item->landedUnitCost(), 2) : '—' }}</td>
+                <td>{{ $item->packingUnit->name ?? '-' }}</td>
+                <td>{{ number_format($item->wt_per_packing, 2) }}</td>
+                <td>{{ number_format($item->quantity, 0) }}</td>
+                <td>{{ number_format($item->gross_weight, 2) }}</td>
+                <td>{{ number_format($item->net_weight, 2) }}</td>
+                <td>{{ $item->received_net_weight !== null ? number_format($item->received_net_weight, 2) : '—' }}</td>
+                <td>{{ $item->short_weight > 0 ? number_format($item->short_weight, 2) : '—' }}</td>
+                <td>{{ number_format($item->rate_per_40kg, 2) }}</td>
+                <td>{{ number_format($item->price, 4) }}</td>
+                <td>{{ number_format($item->amount, 2) }}</td>
+                <td>{{ $item->received_net_weight ? number_format($item->landedUnitCost(), 4) : '—' }}</td>
               </tr>
               @endforeach
             </tbody>
           </table>
         </div>
 
-        @if($invoice->isReceived())
-        <div class="row mb-4">
-          <div class="col-md-3"><strong>Bilty Charges:</strong><br>{{ number_format($invoice->bilty_charges, 2) }}</div>
-          <div class="col-md-3"><strong>Labor Charges:</strong><br>{{ number_format($invoice->labor_charges, 2) }}</div>
-          <div class="col-md-3"><strong>Other Charges:</strong><br>{{ number_format($invoice->other_charges, 2) }}</div>
-          <div class="col-md-3"><strong>Received Date:</strong><br>{{ optional($invoice->received_at)->format('d-M-Y') }}</div>
+        @if($invoice->expenses->count())
+        <h5>Other Expenses <small class="text-muted">(paid by FFK)</small></h5>
+        <div class="table-responsive mb-4">
+          <table class="table table-sm table-bordered">
+            <thead><tr><th>Type</th><th>Description</th><th>Amount</th></tr></thead>
+            <tbody>
+              @foreach($invoice->expenses as $exp)
+              <tr><td>{{ $exp->typeLabel() }}</td><td>{{ $exp->description }}</td><td>{{ number_format($exp->amount, 2) }}</td></tr>
+              @endforeach
+              <tr class="fw-bold table-light"><td colspan="2" class="text-end">Total Other Expenses</td><td>{{ number_format($invoice->total_other_expenses, 2) }}</td></tr>
+            </tbody>
+          </table>
         </div>
         @endif
 

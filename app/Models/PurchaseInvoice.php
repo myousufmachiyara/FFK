@@ -6,10 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * NOTE: Merge this into your existing PurchaseInvoice model rather than
- * blindly overwriting it — I don't have your original file, only what
- * the controller/blade views implied. Preserve any other relationships
- * or accessors already defined there.
+ * MERGE this into your existing PurchaseInvoice model — preserve
+ * anything else already added since the original purchase_module.zip.
  */
 class PurchaseInvoice extends Model
 {
@@ -30,23 +28,25 @@ class PurchaseInvoice extends Model
         'bilty_no',
         'received_at',
         'received_by',
-        'bilty_charges',
-        'labor_charges',
-        'other_charges',
+        'bilty_charges',      // legacy, unused going forward
+        'labor_charges',      // legacy, unused going forward
+        'other_charges',      // legacy, unused going forward
         'total_amount',
         'total_quantity',
+        'total_weight',
+        'total_other_expenses',
         'net_amount',
         'created_by',
     ];
 
     protected $casts = [
-        'invoice_date'  => 'date',
-        'received_at'   => 'datetime',
-        'bilty_charges' => 'decimal:2',
-        'labor_charges' => 'decimal:2',
-        'other_charges' => 'decimal:2',
-        'total_amount'  => 'decimal:2',
-        'net_amount'    => 'decimal:2',
+        'invoice_date'          => 'date',
+        'received_at'           => 'datetime',
+        'total_amount'          => 'decimal:2',
+        'total_quantity'        => 'decimal:2',
+        'total_weight'          => 'decimal:3',
+        'total_other_expenses'  => 'decimal:2',
+        'net_amount'            => 'decimal:2',
     ];
 
     public function vendor()
@@ -57,6 +57,11 @@ class PurchaseInvoice extends Model
     public function items()
     {
         return $this->hasMany(PurchaseInvoiceItem::class, 'purchase_invoice_id');
+    }
+
+    public function expenses()
+    {
+        return $this->hasMany(PurchaseInvoiceExpense::class, 'purchase_invoice_id');
     }
 
     public function attachments()
@@ -76,7 +81,6 @@ class PurchaseInvoice extends Model
 
     public function vouchers()
     {
-        // All vouchers generated for this invoice, across every stage.
         return Voucher::where('reference', 'like', "PI-{$this->id}-%")->get();
     }
 
@@ -95,9 +99,10 @@ class PurchaseInvoice extends Model
         return $this->status === self::STATUS_RECEIVED;
     }
 
+    /** Paid by FFK — total Other Expenses (Bilty/Labor/Weighing/etc), from the dynamic expense list. */
     public function totalAdditionalCharges(): float
     {
-        return (float) $this->bilty_charges + (float) $this->labor_charges + (float) $this->other_charges;
+        return (float) $this->total_other_expenses;
     }
 
     public function statusLabel(): string
