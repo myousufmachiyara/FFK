@@ -77,11 +77,11 @@
                   <th width="16%">Item</th>
                   <th width="11%">Variation</th>
                   <th width="10%">Packing</th>
-                  <th width="8%">Bag Wt.</th>
+                  <th width="8%">Packing Wt.</th>
                   <th width="6%">Qty</th>
                   <th width="9%">Gross Weight</th>
                   <th width="9%">Net Weight</th>
-                  <th width="10%">Rate (per {{ $kgPerMaund ?? '40' }}kg)</th>
+                  <th width="10%">Rate ({{ $kgPerMaund ?? '40' }}kg)</th>
                   <th width="9%">Rate (per kg)</th>
                   <th width="9%">Amount</th>
                   <th width="30px"></th>
@@ -150,7 +150,7 @@ function addItemRow() {
         </td>
         <td><input type="number" step="any" min="0" name="items[${idx}][wt_per_packing]" class="form-control wt-packing" oninput="calcRow(${idx})" required></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][quantity]" class="form-control qty" oninput="calcRow(${idx})" required></td>
-        <td><input type="text" class="form-control readonly-calc gross-weight" readonly value="0.00"></td>
+        <td><input type="text" class="form-control readonly-calc gross-weight" value="0.00"></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][net_weight]" class="form-control net-weight" placeholder="= gross wt" oninput="calcRow(${idx})"></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][rate_per_40kg]" class="form-control rate-40kg" oninput="calcRow(${idx})" required></td>
         <td><input type="text" class="form-control readonly-calc rate-kg" readonly value="0.0000"></td>

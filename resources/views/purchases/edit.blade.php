@@ -71,7 +71,7 @@
                   <th width="16%">Item</th>
                   <th width="11%">Variation</th>
                   <th width="10%">Packing</th>
-                  <th width="8%">Bag Wt.</th>
+                  <th width="8%">Packing Wt.</th>
                   <th width="6%">Qty</th>
                   <th width="9%">Gross Weight</th>
                   <th width="9%">Net Weight</th>
