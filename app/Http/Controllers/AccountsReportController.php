@@ -242,55 +242,55 @@ class AccountsReportController extends Controller
     private function partyLedger($from, $to, $accountId = null)
     {
         if (!$accountId) return collect();
-
+ 
         $account = ChartOfAccounts::find($accountId);
         if (!$account) return collect();
-
+ 
         $opData     = $this->getAccountBalance($accountId, null, null, Carbon::parse($from)->subDay()->toDateString());
         $isDebitNat = $this->isDebitNature($account->account_type);
         $runningBal = $isDebitNat
             ? ($opData['debit'] - $opData['credit'])
             : ($opData['credit'] - $opData['debit']);
-
+ 
         $rows = collect();
         $rows->push([
             $from,
             $account->name,
             'Opening Balance',
             '',                                   // narration
-            0,
-            0,
+            $this->fmt($opData['debit']),
+            $this->fmt($opData['credit']),
             $this->fmt($runningBal),
         ]);
-
+ 
         $vouchers = Voucher::whereBetween('date', [$from, $to])
             ->whereNull('deleted_at')
             ->where(fn($q) => $q->where('ac_dr_sid', $accountId)->orWhere('ac_cr_sid', $accountId))
             ->orderBy('date')
             ->get();
-
+ 
         $movements = $vouchers->map(function ($v) use ($accountId, $isDebitNat, &$runningBal) {
             $isDr     = $v->ac_dr_sid == $accountId;
             $drAmount = $isDr ? $v->amount : 0;
             $crAmount = $isDr ? 0 : $v->amount;
-
+ 
             $runningBal += $isDebitNat
                 ? ($drAmount - $crAmount)
                 : ($crAmount - $drAmount);
-
+ 
             $refLabel = $this->describeVoucherReference($v->reference, $v->id);
-
+ 
             return [
                 $v->date,
                 '',
                 $refLabel . ' — ' . ($isDr ? 'Debit' : 'Credit'),
                 $v->remarks ?? '',                // narration
-                $drAmount,
-                $crAmount,
+                $this->fmt($drAmount),
+                $this->fmt($crAmount),
                 $this->fmt($runningBal),
             ];
         });
-
+ 
         return $rows->concat($movements);
     }
 
