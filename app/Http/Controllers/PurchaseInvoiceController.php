@@ -21,9 +21,6 @@ use Carbon\Carbon;
 
 class PurchaseInvoiceController extends Controller
 {
-    // ─────────────────────────────────────────────────────────────
-    // Account resolution helpers — never hardcode IDs.
-    // ─────────────────────────────────────────────────────────────
     private function resolveAccount(string $configKey, string $label): ChartOfAccounts
     {
         $code = config("purchase_accounts.{$configKey}");
@@ -57,9 +54,6 @@ class PurchaseInvoiceController extends Controller
         ]);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // INDEX
-    // ─────────────────────────────────────────────────────────────
     public function index(Request $request)
     {
         $user  = auth()->user();
@@ -80,9 +74,6 @@ class PurchaseInvoiceController extends Controller
         return view('purchases.index', compact('invoices'));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // CREATE FORM
-    // ─────────────────────────────────────────────────────────────
     public function create()
     {
         $products = Product::with('variations')->orderBy('name')->get();
@@ -93,10 +84,6 @@ class PurchaseInvoiceController extends Controller
         return view('purchases.create', compact('products', 'vendors', 'units', 'kgPerMaund'));
     }
 
-    /**
-     * Shared server-side item computation, used by store() and update().
-     * NEVER trust client-submitted gross_weight / amount — recompute here.
-     */
     private function syncItems(PurchaseInvoice $invoice, array $items): array
     {
         $invoice->items()->delete();
@@ -139,9 +126,6 @@ class PurchaseInvoiceController extends Controller
         ];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // STORE — creates a PENDING record only.
-    // ─────────────────────────────────────────────────────────────
     public function store(Request $request)
     {
         Log::info('[PI] Store started', ['user_id' => auth()->id()]);
@@ -150,6 +134,8 @@ class PurchaseInvoiceController extends Controller
             'invoice_date'                 => 'required|date',
             'vendor_id'                    => 'required|exists:chart_of_accounts,id',
             'bill_no'                      => 'nullable|string|max:100',
+            'bilty_no'                     => 'nullable|string|max:100',
+            'transport_name'               => 'nullable|string|max:150',
             'ref_no'                       => 'nullable|string|max:100',
             'remarks'                      => 'nullable|string',
             'attachments.*'                => 'nullable|file|mimes:jpg,jpeg,png,pdf,zip|max:2048',
@@ -170,14 +156,16 @@ class PurchaseInvoiceController extends Controller
             $invoiceNo = str_pad($last ? intval($last->invoice_no) + 1 : 1, 6, '0', STR_PAD_LEFT);
 
             $invoice = PurchaseInvoice::create([
-                'invoice_no'   => $invoiceNo,
-                'vendor_id'    => $request->vendor_id,
-                'invoice_date' => $request->invoice_date,
-                'bill_no'      => $request->bill_no,
-                'ref_no'       => $request->ref_no,
-                'remarks'      => $request->remarks,
-                'status'       => PurchaseInvoice::STATUS_PENDING,
-                'created_by'   => auth()->id(),
+                'invoice_no'      => $invoiceNo,
+                'vendor_id'       => $request->vendor_id,
+                'invoice_date'    => $request->invoice_date,
+                'bill_no'         => $request->bill_no,
+                'bilty_no'        => $request->bilty_no,
+                'transport_name'  => $request->transport_name,
+                'ref_no'          => $request->ref_no,
+                'remarks'         => $request->remarks,
+                'status'          => PurchaseInvoice::STATUS_PENDING,
+                'created_by'      => auth()->id(),
             ]);
 
             $totals = $this->syncItems($invoice, $request->items);
@@ -210,9 +198,6 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // SHOW
-    // ─────────────────────────────────────────────────────────────
     public function show($id)
     {
         $invoice = PurchaseInvoice::with([
@@ -225,9 +210,6 @@ class PurchaseInvoiceController extends Controller
         return view('purchases.show', compact('invoice', 'vouchers'));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // EDIT FORM — only while Pending
-    // ─────────────────────────────────────────────────────────────
     public function edit($id)
     {
         $invoice = PurchaseInvoice::with(['items.product.variations', 'items.variation', 'items.packingUnit', 'attachments'])
@@ -246,15 +228,14 @@ class PurchaseInvoiceController extends Controller
         return view('purchases.edit', compact('invoice', 'vendors', 'products', 'units', 'kgPerMaund'));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // UPDATE — only while Pending
-    // ─────────────────────────────────────────────────────────────
     public function update(Request $request, $id)
     {
         $request->validate([
             'invoice_date'                 => 'required|date',
             'vendor_id'                    => 'required|exists:chart_of_accounts,id',
             'bill_no'                      => 'nullable|string|max:100',
+            'bilty_no'                     => 'nullable|string|max:100',
+            'transport_name'               => 'nullable|string|max:150',
             'ref_no'                       => 'nullable|string|max:100',
             'remarks'                      => 'nullable|string',
             'attachments.*'                => 'nullable|file|mimes:jpg,jpeg,png,pdf,zip|max:2048',
@@ -279,11 +260,13 @@ class PurchaseInvoiceController extends Controller
             }
 
             $invoice->update([
-                'vendor_id'    => $request->vendor_id,
-                'invoice_date' => $request->invoice_date,
-                'bill_no'      => $request->bill_no,
-                'ref_no'       => $request->ref_no,
-                'remarks'      => $request->remarks,
+                'vendor_id'       => $request->vendor_id,
+                'invoice_date'    => $request->invoice_date,
+                'bill_no'         => $request->bill_no,
+                'bilty_no'        => $request->bilty_no,
+                'transport_name'  => $request->transport_name,
+                'ref_no'          => $request->ref_no,
+                'remarks'         => $request->remarks,
             ]);
 
             $totals = $this->syncItems($invoice, $request->items);
@@ -312,19 +295,19 @@ class PurchaseInvoiceController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────
-    // MOVE TO IN TRANSIT
-    //
-    // Accounting: DR Inventory In Transit / CR Vendor = total_amount
-    // (unchanged in mechanics — only the underlying cost basis changed
-    // from qty*price to net_weight*rate_per_kg).
+    // MOVE TO IN TRANSIT — bill_no/bilty_no/transport_name are shown
+    // as optional at creation; here they're always required, but the
+    // modal pre-fills whatever was already entered so nothing needs
+    // retyping if it was already provided (same pattern as Commission).
     // ─────────────────────────────────────────────────────────────
     public function moveToInTransit(Request $request, $id)
     {
         $request->validate([
-            'bill_no'    => 'required|string|max:100',
-            'bilty_no'   => 'required|string|max:100',
-            'attachment' => 'nullable|file|mimes:jpg,jpeg,png,pdf,zip|max:2048',
-            'remarks'    => 'nullable|string',
+            'bill_no'         => 'required|string|max:100',
+            'bilty_no'        => 'required|string|max:100',
+            'transport_name'  => 'required|string|max:150',
+            'attachment'      => 'nullable|file|mimes:jpg,jpeg,png,pdf,zip|max:2048',
+            'remarks'         => 'nullable|string',
         ]);
 
         DB::beginTransaction();
@@ -343,15 +326,15 @@ class PurchaseInvoiceController extends Controller
                 return back()->withErrors(['attachment' => 'An attachment (dispatch proof) is required to move to In Transit.']);
             }
 
-            // Bag-count snapshot, informational only.
             foreach ($invoice->items as $item) {
                 $item->update(['dispatched_quantity' => $item->quantity]);
             }
 
             $invoice->update([
-                'bill_no'  => $request->bill_no,
-                'bilty_no' => $request->bilty_no,
-                'status'   => PurchaseInvoice::STATUS_IN_TRANSIT,
+                'bill_no'        => $request->bill_no,
+                'bilty_no'       => $request->bilty_no,
+                'transport_name' => $request->transport_name,
+                'status'         => PurchaseInvoice::STATUS_IN_TRANSIT,
             ]);
 
             if ($request->hasFile('attachment')) {
@@ -390,8 +373,53 @@ class PurchaseInvoiceController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────
-    // RECEIVE FORM
+    // REVERT DISPATCH — In Transit -> Pending, undo of a mistaken
+    // "Move to In Transit" action. Deletes the INTRANSIT voucher
+    // (nothing else was posted at that stage — receiving hasn't
+    // happened yet, so there's nothing else to reverse). Bag-count
+    // snapshot and bill_no/bilty_no/transport_name are left as-is so
+    // the user doesn't have to retype them when re-dispatching.
     // ─────────────────────────────────────────────────────────────
+    public function revertToPending(Request $request, $id)
+    {
+        $request->validate([
+            'remarks' => 'nullable|string',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $invoice = PurchaseInvoice::lockForUpdate()->findOrFail($id);
+
+            if (!$invoice->isInTransit()) {
+                DB::rollBack();
+                return back()->with('error', 'This invoice is not In Transit — nothing to revert.');
+            }
+
+            Voucher::where('reference', "PI-{$invoice->id}-INTRANSIT")->delete();
+
+            $invoice->update(['status' => PurchaseInvoice::STATUS_PENDING]);
+
+            $this->logStatusChange(
+                $invoice,
+                PurchaseInvoice::STATUS_IN_TRANSIT,
+                PurchaseInvoice::STATUS_PENDING,
+                'Reverted from In Transit (mistaken dispatch). ' . ($request->remarks ?? '')
+            );
+
+            DB::commit();
+            Log::info('[PI] Reverted to Pending', ['invoice_id' => $invoice->id]);
+
+            return redirect()->route('purchase_invoices.show', $invoice->id)
+                ->with('success', 'Dispatch reverted. Invoice is back to Pending and the vendor payable voucher was removed.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('[PI] RevertToPending error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
     public function receiveForm($id)
     {
         $invoice = PurchaseInvoice::with(['items.product', 'items.variation', 'items.packingUnit', 'vendor'])->findOrFail($id);
@@ -404,23 +432,6 @@ class PurchaseInvoiceController extends Controller
         return view('purchases.receive', compact('invoice'));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // RECEIVE  (In Transit -> Received)
-    //
-    // Costing driver is now NET WEIGHT (kg), not bag count. Other
-    // Expenses (Bilty/Labor/Weighing/etc — paid by FFK) are a dynamic
-    // list, allocated per KG dispatched (same "equal per unit" pattern
-    // as before, just with KG as the unit instead of bags).
-    //
-    //   DR Actual Inventory        CR Inventory In Transit   (received value, by weight)
-    //   DR Shortage/Loss Account   CR Inventory In Transit   (shortage value, if any)
-    //   DR Actual Inventory        CR Purchase Expenses Payable  (sum of Other Expenses)
-    //
-    // ProductVariation.stock_quantity is incremented by RECEIVED NET
-    // WEIGHT (kg), not bag count — see README for why, and what this
-    // means for how Sale Invoice quantities need to be entered for
-    // these products.
-    // ─────────────────────────────────────────────────────────────
     public function receive(Request $request, $id)
     {
         $request->validate([
@@ -448,7 +459,6 @@ class PurchaseInvoiceController extends Controller
                 return back()->with('error', 'This invoice is not In Transit — no action taken.');
             }
 
-            // ── Other Expenses (dynamic list, paid by FFK) ──
             $invoice->expenses()->delete();
             $totalOtherExpenses = 0;
             foreach ($request->expenses ?? [] as $expenseData) {
@@ -496,7 +506,6 @@ class PurchaseInvoiceController extends Controller
                 $totalReceivedValue   += $receivedWeight * (float) $item->price;
                 $totalDispatchedValue += $dispatchedWeight * (float) $item->price;
 
-                // Stock increment is by WEIGHT (kg), not bag count.
                 if ($item->variation_id) {
                     $variation = ProductVariation::find($item->variation_id);
                     if ($variation) {
@@ -585,9 +594,6 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // DESTROY  (soft delete) — only while Pending.
-    // ─────────────────────────────────────────────────────────────
     public function destroy($id)
     {
         $invoice = PurchaseInvoice::with('items')->findOrFail($id);
@@ -610,9 +616,6 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // RESTORE
-    // ─────────────────────────────────────────────────────────────
     public function restore($id)
     {
         $invoice = PurchaseInvoice::onlyTrashed()->with('items')->findOrFail($id);
@@ -631,9 +634,6 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // PRINT (PDF)
-    // ─────────────────────────────────────────────────────────────
     public function print($id)
     {
         $invoice = PurchaseInvoice::with(['vendor', 'items.product', 'items.variation', 'expenses'])->findOrFail($id);
@@ -671,6 +671,7 @@ class PurchaseInvoiceController extends Controller
             <tr><td width="40%"><b>Vendor:</b></td><td width="60%">' . ($invoice->vendor->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Vendor Bill No:</b></td><td>'  . ($invoice->bill_no ?? '-') . '</td></tr>
             <tr><td><b>Bilty No:</b></td><td>'  . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td><b>Transport:</b></td><td>'  . ($invoice->transport_name ?? '-') . '</td></tr>
             <tr><td><b>Ref:</b></td><td>'       . ($invoice->ref_no  ?? '-') . '</td></tr>
         </table>';
         $pdf->writeHTML($vendorHtml, true, false, false, false, '');

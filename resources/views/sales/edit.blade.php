@@ -87,7 +87,7 @@
                     @foreach($products as $product)
                       @php
                         $isCurrentProduct = ($item->product_id == $product->id);
-                        $displayStock = ($product->real_time_stock ?? 0) + ($isCurrentProduct ? $item->quantity : 0);
+                        $displayStock = ($product->computed_stock ?? 0) + ($isCurrentProduct ? $item->quantity : 0);
                       @endphp
                       <option value="{{ $product->id }}" 
                               data-price="{{ $product->selling_price }}"
@@ -280,8 +280,8 @@
                     <select name="items[${idx}][product_id]" class="form-control product-select" onchange="onItemNameChange(this)" required>
                         <option value="">Select Product</option>
                         @foreach($products as $product)
-                            <option value="{{ $product->id }}" data-price="{{ $product->selling_price }}" data-stock="{{ $product->real_time_stock ?? 0 }}">
-                                {{ $product->name }} (Stock: {{ $product->real_time_stock ?? 0 }})
+                            <option value="{{ $product->id }}" data-price="{{ $product->selling_price }}" data-stock="{{ $product->computed_stock ?? 0 }}">
+                                {{ $product->name }} (Stock: {{ $product->computed_stock ?? 0 }})
                             </option>
                         @endforeach
                     </select>

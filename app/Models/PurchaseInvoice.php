@@ -26,6 +26,7 @@ class PurchaseInvoice extends Model
         'remarks',
         'status',
         'bilty_no',
+        'transport_name',
         'received_at',
         'received_by',
         'bilty_charges',      // legacy, unused going forward

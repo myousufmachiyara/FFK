@@ -35,6 +35,9 @@
             <a href="{{ route('purchase_invoices.receiveForm', $invoice->id) }}" class="btn btn-success">
               <i class="fas fa-box-open"></i> Receive Goods
             </a>
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#revertModal">
+              <i class="fas fa-undo"></i> Revert Dispatch
+            </button>
           @endif
         </div>
       </header>
@@ -93,6 +96,17 @@
               <tr class="fw-bold table-light"><td colspan="2" class="text-end">Total Other Expenses</td><td>{{ number_format($invoice->total_other_expenses, 2) }}</td></tr>
             </tbody>
           </table>
+        </div>
+        @endif
+
+        @if($invoice->attachments->count())
+        <h5>Attachments</h5>
+        <div class="mb-4">
+          @foreach($invoice->attachments as $file)
+            <a href="{{ asset('storage/' . $file->file_path) }}" target="_blank" class="badge bg-light text-dark border me-1 p-2">
+              <i class="fas fa-file"></i> {{ ucfirst($file->stage) }}: {{ $file->original_name }}
+            </a>
+          @endforeach
         </div>
         @endif
 
@@ -158,7 +172,11 @@
           </div>
           <div class="mb-3">
             <label>Bilty Number *</label>
-            <input type="text" name="bilty_no" class="form-control" required>
+            <input type="text" name="bilty_no" class="form-control" value="{{ $invoice->bilty_no }}" required>
+          </div>
+          <div class="mb-3">
+            <label>Transport Name *</label>
+            <input type="text" name="transport_name" class="form-control" value="{{ $invoice->transport_name }}" required>
           </div>
           <div class="mb-3">
             <label>Attachment (dispatch proof) *</label>
@@ -176,6 +194,32 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-default" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-warning">Confirm Dispatch</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<!-- Revert Dispatch modal -->
+<div class="modal fade" id="revertModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form action="{{ route('purchase_invoices.revertToPending', $invoice->id) }}" method="POST">
+      @csrf
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Revert Dispatch</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>This will move the invoice back to <strong>Pending</strong> and remove the vendor payable
+             voucher created when it was dispatched. Use this only if the dispatch was done by mistake.</p>
+          <div class="mb-3">
+            <label>Reason (optional)</label>
+            <textarea name="remarks" class="form-control" rows="2" placeholder="e.g. Wrong invoice dispatched by mistake"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Confirm Revert</button>
         </div>
       </div>
     </form>

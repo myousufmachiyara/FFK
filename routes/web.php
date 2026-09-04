@@ -135,6 +135,10 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('check.permission:purchase_invoices.restore')
         ->name('purchase_invoices.restore');
 
+        
+    Route::post('purchase_invoices/{id}/revert-to-pending', [PurchaseInvoiceController::class, 'revertToPending'])
+        ->middleware('check.permission:purchase_invoices.revert_to_pending')
+        ->name('purchase_invoices.revertToPending');
     // ─────────────────────────────────────────────────────────────
     // Commission Invoice — status workflow (Pending -> In Transit -> Delivered)
     // ─────────────────────────────────────────────────────────────

@@ -143,6 +143,16 @@ class SaleInvoiceController extends Controller
     public function create()
     {
         $products = Product::with('variations')->orderBy('name')->get();
+
+        // FIX (#9): don't rely on a possibly-missing/broken 'real_time_stock'
+        // accessor on Product — compute stock explicitly here from the
+        // live, authoritative ProductVariation.stock_quantity column and
+        // expose it under a new key the blade reads directly, so this
+        // works regardless of what real_time_stock does or doesn't do.
+        $products->each(function ($p) {
+            $p->computed_stock = $p->variations->sum('stock_quantity');
+        });
+
         $customers = ChartOfAccounts::where('account_type', config('sale_accounts.customer_account_type'))
             ->orderBy('name')->get();
         $paymentAccounts = ChartOfAccounts::whereIn('account_type', config('sale_accounts.payment_account_types'))
@@ -306,6 +316,10 @@ class SaleInvoiceController extends Controller
         $invoice = SaleInvoice::with(['items.product', 'items.variation'])->findOrFail($id);
 
         $products = Product::with('variations')->orderBy('name')->get();
+        $products->each(function ($p) {
+            $p->computed_stock = $p->variations->sum('stock_quantity');
+        });
+
         $customers = ChartOfAccounts::where('account_type', config('sale_accounts.customer_account_type'))
             ->orderBy('name')->get();
         $paymentAccounts = ChartOfAccounts::whereIn('account_type', config('sale_accounts.payment_account_types'))

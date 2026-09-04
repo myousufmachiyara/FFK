@@ -94,8 +94,8 @@
                                         @foreach($products as $product)
                                             <option value="{{ $product->id }}"
                                                     data-price="{{ $product->selling_price ?? 0 }}"
-                                                    data-stock="{{ $product->real_time_stock ?? 0 }}">
-                                                {{ $product->name }} (Stock: {{ $product->real_time_stock ?? 0 }})
+                                                    data-stock="{{ $product->computed_stock ?? 0 }}">
+                                                {{ $product->name }} (Stock: {{ $product->computed_stock ?? 0 }})
                                             </option>
                                         @endforeach
                                     </select>
@@ -194,6 +194,19 @@ $(document).ready(function () {
         validateStock($(this).closest('tr'));
     });
 
+    // (#10) When a variation is selected and it carries its own selling
+    // price, use that instead of the product-level price.
+    $(document).on('change', '.variation-select', function () {
+        const $row = $(this).closest('tr');
+        const $selected = $(this).find('option:selected');
+        const vPrice = $selected.data('price');
+        if (vPrice !== undefined && vPrice !== '' && vPrice !== null) {
+            $row.find('.sale-price').val(vPrice);
+            calcRowTotal($row);
+        }
+        validateStock($row);
+    });
+
     // Prevent duplicate submission on double-click / repeated Enter.
     $('#saleInvoiceForm').on('submit', function () {
         $('#saveBtn').prop('disabled', true).text('Saving...');
@@ -242,8 +255,8 @@ function addRow() {
                 @foreach($products as $product)
                     <option value="{{ $product->id }}"
                             data-price="{{ $product->selling_price ?? 0 }}"
-                            data-stock="{{ $product->real_time_stock ?? 0 }}">
-                        {{ $product->name }} (Stock: {{ $product->real_time_stock ?? 0 }})
+                            data-stock="{{ $product->computed_stock ?? 0 }}">
+                        {{ $product->name }} (Stock: {{ $product->computed_stock ?? 0 }})
                     </option>
                 @endforeach
             </select>
@@ -302,8 +315,12 @@ function onItemNameChange(selectElement) {
                 let html = '<option value="">Select Variation</option>';
                 variations.forEach(v => {
                     const vStock = v.stock_quantity ?? v.current_stock ?? 0;
+                    // (#10) Use the variation's own selling price once your
+                    // /product/{id}/variations endpoint returns one —
+                    // falls back to the product-level price until then.
+                    const vPrice = v.selling_price ?? null;
                     const label  = [v.sku, v.name].filter(Boolean).join(' ');
-                    html += `<option value="${v.id}" data-stock="${vStock}">${label} (Stock: ${vStock})</option>`;
+                    html += `<option value="${v.id}" data-stock="${vStock}" data-price="${vPrice ?? ''}">${label} (Stock: ${vStock})</option>`;
                 });
                 $variationSelect.html(html);
             } else {

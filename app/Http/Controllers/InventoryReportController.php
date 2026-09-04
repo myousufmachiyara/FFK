@@ -48,7 +48,7 @@ class InventoryReportController extends Controller
                 ->where('purchase_invoices.status', 'received')
                 ->whereNull('purchase_invoices.deleted_at')
                 ->where('purchase_invoices.received_at', '<', $from)
-                ->sum('purchase_invoice_items.received_quantity');
+                ->sum('purchase_invoice_items.received_net_weight');
 
             $opSold = DB::table('sale_invoice_items')
                 ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
@@ -81,7 +81,7 @@ class InventoryReportController extends Controller
                     'purchase_invoices.received_at as date',
                     DB::raw("'Purchase' as type"),
                     DB::raw("CONCAT('PI-', purchase_invoices.invoice_no) as description"),
-                    'purchase_invoice_items.received_quantity as qty_in',
+                    'purchase_invoice_items.received_net_weight as qty_in',
                     DB::raw('0 as qty_out')
                 )
                 ->where('purchase_invoice_items.item_id', $itemId)
@@ -99,11 +99,11 @@ class InventoryReportController extends Controller
                     DB::raw("'Shortage' as type"),
                     DB::raw("CONCAT('PI-', purchase_invoices.invoice_no, ' (Shortage)') as description"),
                     DB::raw('0 as qty_in'),
-                    'purchase_invoice_items.short_quantity as qty_out'
+                    'purchase_invoice_items.short_weight as qty_out'
                 )
                 ->where('purchase_invoice_items.item_id', $itemId)
                 ->where('purchase_invoices.status', 'received')
-                ->where('purchase_invoice_items.short_quantity', '>', 0)
+                ->where('purchase_invoice_items.short_weight', '>', 0)
                 ->whereNull('purchase_invoices.deleted_at')
                 ->whereBetween('purchase_invoices.received_at', [$from, $to]);
 
@@ -166,6 +166,19 @@ class InventoryReportController extends Controller
         // toward on-hand stock. A Purchase Invoice sitting at Pending or
         // In Transit has NOT physically arrived and must not inflate
         // available stock.
+        //
+        // FIX: for products WITH variations, this now reads
+        // ProductVariation.stock_quantity DIRECTLY instead of
+        // reconstructing a balance from historical purchase/sale sums.
+        // stock_quantity is already the live, authoritative value —
+        // incremented right when goods are received and decremented
+        // right when a sale is posted — so re-deriving it from a
+        // parallel set of queries here is both redundant and exactly
+        // how this report drifted out of sync before (it was still
+        // summing the old bag-count 'received_quantity' column after
+        // Purchase moved to weight-based 'received_net_weight').
+        // Products WITHOUT variations have no such live column, so
+        // those still reconstruct from transaction history below.
         // ================================================================
         if ($tab === 'SR') {
 
@@ -191,7 +204,7 @@ class InventoryReportController extends Controller
                         ->where('purchase_invoice_items.item_id', $product->id)
                         ->where('purchase_invoices.status', 'received')
                         ->whereNull('purchase_invoices.deleted_at')
-                        ->sum('purchase_invoice_items.received_quantity');
+                        ->sum('purchase_invoice_items.received_net_weight');
 
                     $sold = (float) DB::table('sale_invoice_items')
                         ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
@@ -219,71 +232,15 @@ class InventoryReportController extends Controller
 
                 } else {
 
-                    // Catch-all row: received purchases/sales where variation_id is null
-                    $nullQtyIn = (float) DB::table('purchase_invoice_items')
-                        ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
-                        ->where('purchase_invoice_items.item_id', $product->id)
-                        ->whereNull('purchase_invoice_items.variation_id')
-                        ->where('purchase_invoices.status', 'received')
-                        ->whereNull('purchase_invoices.deleted_at')
-                        ->sum('purchase_invoice_items.received_quantity');
-
-                    $nullQtyOut = (float) DB::table('sale_invoice_items')
-                        ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
-                        ->where('sale_invoice_items.product_id', $product->id)
-                        ->whereNull('sale_invoice_items.variation_id')
-                        ->sum('sale_invoice_items.quantity');
-
-                    $nullPR = $hasPurchaseReturns
-                        ? (float) DB::table('purchase_return_items')->where('item_id', $product->id)->whereNull('variation_id')->sum('quantity')
-                        : 0.0;
-
-                    $nullSR = $hasSaleReturns
-                        ? (float) DB::table('sale_return_items')->where('product_id', $product->id)->whereNull('variation_id')->sum('qty')
-                        : 0.0;
-
-                    $nullQty = ($nullQtyIn + $nullSR) - ($nullQtyOut + $nullPR);
-
-                    if ($nullQty > 0) {
-                        $stockInHand->push([
-                            'product'   => $product->name,
-                            'variation' => 'No Variation',
-                            'quantity'  => $nullQty,
-                            'unit'      => $product->unit_shortcode ?? '',
-                        ]);
-                    }
-
+                    // Variation-level stock — read the live column directly.
                     foreach ($product->variations as $v) {
+                        $qty = (float) $v->stock_quantity;
 
-                        $vPurchased = (float) DB::table('purchase_invoice_items')
-                            ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
-                            ->where('purchase_invoice_items.item_id', $product->id)
-                            ->where('purchase_invoice_items.variation_id', $v->id)
-                            ->where('purchase_invoices.status', 'received')
-                            ->whereNull('purchase_invoices.deleted_at')
-                            ->sum('purchase_invoice_items.received_quantity');
-
-                        $vSold = (float) DB::table('sale_invoice_items')
-                            ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
-                            ->where('sale_invoice_items.product_id', $product->id)
-                            ->where('sale_invoice_items.variation_id', $v->id)
-                            ->sum('sale_invoice_items.quantity');
-
-                        $vPR = $hasPurchaseReturns
-                            ? (float) DB::table('purchase_return_items')->where('item_id', $product->id)->where('variation_id', $v->id)->sum('quantity')
-                            : 0.0;
-
-                        $vSR = $hasSaleReturns
-                            ? (float) DB::table('sale_return_items')->where('product_id', $product->id)->where('variation_id', $v->id)->sum('qty')
-                            : 0.0;
-
-                        $vQty = ($vPurchased + $vSR) - ($vSold + $vPR);
-
-                        if ($vQty > 0) {
+                        if ($qty > 0) {
                             $stockInHand->push([
                                 'product'   => $product->name,
                                 'variation' => $v->sku ?? $v->name ?? '—',
-                                'quantity'  => $vQty,
+                                'quantity'  => $qty,
                                 'unit'      => $product->unit_shortcode ?? '',
                             ]);
                         }
@@ -318,7 +275,7 @@ class InventoryReportController extends Controller
                     'v.name as vendor_name',
                     'p.name as product_name',
                     'pv.sku as variation_sku',
-                    'pii.dispatched_quantity',
+                    'pii.net_weight as dispatched_net_weight',
                     'pii.price'
                 )
                 ->where('pi.status', 'in_transit')
@@ -329,7 +286,7 @@ class InventoryReportController extends Controller
             }
 
             $stockInTransit = $query->orderBy('pi.invoice_date', 'desc')->get()->map(function ($row) {
-                $row->dispatched_value = (float) $row->dispatched_quantity * (float) $row->price;
+                $row->dispatched_value = (float) $row->dispatched_net_weight * (float) $row->price;
                 return $row;
             });
         }

@@ -49,6 +49,14 @@
               <input type="text" name="bill_no" class="form-control" value="{{ $invoice->bill_no }}">
             </div>
             <div class="col-md-2 mb-3">
+              <label>Bilty #</label>
+              <input type="text" name="bilty_no" class="form-control" value="{{ $invoice->bilty_no }}">
+            </div>
+            <div class="col-md-2 mb-3">
+              <label>Transport Name</label>
+              <input type="text" name="transport_name" class="form-control" value="{{ $invoice->transport_name }}">
+            </div>
+            <div class="col-md-2 mb-3">
               <label>Ref.</label>
               <input type="text" name="ref_no" class="form-control" value="{{ $invoice->ref_no }}">
             </div>
@@ -68,10 +76,13 @@
             <table class="table table-bordered table-sm" id="purchaseTable">
               <thead>
                 <tr>
+                  <th style="background:#ff8c00;color:#fff;text-align:center" colspan="11">Purchase Invoice Format</th>
+                </tr>
+                <tr>
                   <th width="16%">Item</th>
                   <th width="11%">Variation</th>
                   <th width="10%">Packing</th>
-                  <th width="8%">Packing Wt.</th>
+                  <th width="8%">Wt./Packing (kg)</th>
                   <th width="6%">Qty</th>
                   <th width="9%">Gross Weight</th>
                   <th width="9%">Net Weight</th>

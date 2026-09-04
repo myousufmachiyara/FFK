@@ -273,7 +273,7 @@
                         <tr>
                             <th>PI #</th><th>Date</th><th>Vendor</th><th>Vendor Bill #</th><th>Bilty #</th>
                             <th>Product</th><th>Variation</th>
-                            <th class="text-end">Dispatched Qty</th>
+                            <th class="text-end">Dispatched Net Wt (kg)</th>
                             <th class="text-end">Rate</th>
                             <th class="text-end">Value</th>
                         </tr>
@@ -292,7 +292,7 @@
                             <td>{{ $row->bilty_no ?? '—' }}</td>
                             <td>{{ $row->product_name }}</td>
                             <td>{{ $row->variation_sku ?? '—' }}</td>
-                            <td class="text-end">{{ number_format($row->dispatched_quantity, 2) }}</td>
+                            <td class="text-end">{{ number_format($row->dispatched_net_weight, 2) }}</td>
                             <td class="text-end">{{ number_format($row->price, 2) }}</td>
                             <td class="text-end fw-bold">{{ number_format($row->dispatched_value, 2) }}</td>
                         </tr>
