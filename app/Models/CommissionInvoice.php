@@ -28,7 +28,9 @@ class CommissionInvoice extends Model
         'total_weight',
         'total_purchase_amount',
         'total_sale_amount',
-        'total_commission_amount',
+        'total_commission_amount',          // combined (vendor + customer)
+        'total_vendor_commission_amount',
+        'total_customer_commission_amount',
         'total_other_expenses',
         'delivered_at',
         'delivered_by',
@@ -38,14 +40,16 @@ class CommissionInvoice extends Model
     ];
 
     protected $casts = [
-        'invoice_date'             => 'date',
-        'delivered_at'             => 'datetime',
-        'total_quantity'           => 'decimal:2',
-        'total_weight'             => 'decimal:2',
-        'total_purchase_amount'    => 'decimal:2',
-        'total_sale_amount'        => 'decimal:2',
-        'total_commission_amount'  => 'decimal:2',
-        'total_other_expenses'     => 'decimal:2',
+        'invoice_date'                      => 'date',
+        'delivered_at'                       => 'datetime',
+        'total_quantity'                     => 'decimal:2',
+        'total_weight'                        => 'decimal:3',
+        'total_purchase_amount'              => 'decimal:2',
+        'total_sale_amount'                  => 'decimal:2',
+        'total_commission_amount'            => 'decimal:2',
+        'total_vendor_commission_amount'     => 'decimal:2',
+        'total_customer_commission_amount'   => 'decimal:2',
+        'total_other_expenses'               => 'decimal:2',
     ];
 
     public function vendor()
@@ -88,31 +92,24 @@ class CommissionInvoice extends Model
         return Voucher::where('reference', 'like', "CI-{$this->id}-%")->get();
     }
 
-    public function isPending(): bool
+    public function isPending(): bool    { return $this->status === self::STATUS_PENDING; }
+    public function isInTransit(): bool  { return $this->status === self::STATUS_IN_TRANSIT; }
+    public function isDelivered(): bool  { return $this->status === self::STATUS_DELIVERED; }
+
+    /**
+     * Total the Vendor owes/is owed changes by commission — the Vendor
+     * Payable posted at In Transit is total_purchase_amount; if vendor
+     * commission applies, it's reduced at Delivered by that amount.
+     */
+    public function totalVendorPayable(): float
     {
-        return $this->status === self::STATUS_PENDING;
+        return round((float) $this->total_purchase_amount - (float) $this->total_vendor_commission_amount, 2);
     }
 
-    public function isInTransit(): bool
-    {
-        return $this->status === self::STATUS_IN_TRANSIT;
-    }
-
-    public function isDelivered(): bool
-    {
-        return $this->status === self::STATUS_DELIVERED;
-    }
-
-    /** Total the Customer owes = Sale Amount + customer-payable Other Expenses. */
+    /** Customer Receivable = Sale Amount + Other Expenses (unaffected by which commission leg applies). */
     public function totalCustomerReceivable(): float
     {
         return round((float) $this->total_sale_amount + (float) $this->total_other_expenses, 2);
-    }
-
-    /** Total the company owes the Vendor. */
-    public function totalVendorPayable(): float
-    {
-        return round((float) $this->total_purchase_amount, 2);
     }
 
     public function statusLabel(): string

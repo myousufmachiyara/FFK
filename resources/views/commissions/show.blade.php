@@ -21,30 +21,20 @@
           <span class="{{ $invoice->statusBadgeClass() }} ms-2">{{ $invoice->statusLabel() }}</span>
         </h2>
         <div>
-          <a href="{{ route('commission_invoices.print', $invoice->id) }}" target="_blank" class="btn btn-outline-success">
-            <i class="fas fa-print"></i> Print
-          </a>
-
+          <a href="{{ route('commission_invoices.print', $invoice->id) }}" target="_blank" class="btn btn-outline-success"><i class="fas fa-print"></i> Print</a>
           @if($invoice->isPending())
-            <a href="{{ route('commission_invoices.edit', $invoice->id) }}" class="btn btn-outline-primary">
-              <i class="fas fa-edit"></i> Edit
-            </a>
-            <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#inTransitModal">
-              <i class="fas fa-truck"></i> Move to In Transit
-            </button>
+            <a href="{{ route('commission_invoices.edit', $invoice->id) }}" class="btn btn-outline-primary"><i class="fas fa-edit"></i> Edit</a>
+            <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#inTransitModal"><i class="fas fa-truck"></i> Move to In Transit</button>
           @endif
-
           @if($invoice->isInTransit())
-            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#deliverModal">
-              <i class="fas fa-box-open"></i> Mark as Delivered
-            </button>
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#deliverModal"><i class="fas fa-box-open"></i> Mark as Delivered</button>
           @endif
         </div>
       </header>
 
       <div class="card-body">
         <div class="row mb-3">
-          <div class="col-md-2"><strong>Invoice Date:</strong><br>{{ $invoice->invoice_date->format('d-M-Y') }}</div>
+          <div class="col-md-2"><strong>Date:</strong><br>{{ $invoice->invoice_date->format('d-M-Y') }}</div>
           <div class="col-md-2"><strong>Vendor:</strong><br>{{ $invoice->vendor->name ?? 'N/A' }}</div>
           <div class="col-md-2"><strong>Customer:</strong><br>{{ $invoice->customer->name ?? 'N/A' }}</div>
           <div class="col-md-2"><strong>Transport:</strong><br>{{ $invoice->transport_name ?? '—' }}</div>
@@ -53,12 +43,14 @@
         </div>
 
         <div class="table-responsive mb-3">
-          <table class="table table-bordered">
+          <table class="table table-bordered table-sm">
             <thead>
               <tr>
-                <th>#</th><th>Item</th><th>Variation</th><th>Qty</th><th>Weight</th>
-                <th>Purchase Price</th><th>Sale Price</th><th>Comm %</th><th>Comm Amt</th>
-                <th>Purchase Total</th><th>Sale Total</th>
+                <th>#</th><th>Item</th><th>Qty</th><th>Net Wt</th>
+                <th>Pur Rate/kg</th><th>Pur Total</th>
+                <th>Sale Rate/kg</th><th>Sale Total</th>
+                <th>Vendor Comm %</th><th>Vendor Comm</th>
+                <th>Cust Comm %</th><th>Cust Comm</th>
               </tr>
             </thead>
             <tbody>
@@ -66,15 +58,16 @@
               <tr>
                 <td>{{ $i + 1 }}</td>
                 <td>{{ $item->product->name ?? '-' }}</td>
-                <td>{{ $item->variation->sku ?? '-' }}</td>
-                <td>{{ number_format($item->quantity, 2) }}</td>
-                <td>{{ number_format($item->weight, 2) }}</td>
-                <td>{{ number_format($item->purchase_price, 2) }}</td>
-                <td>{{ number_format($item->sale_price, 2) }}</td>
-                <td>{{ number_format($item->commission_percentage, 2) }}</td>
-                <td>{{ number_format($item->commission_amount, 2) }}</td>
+                <td>{{ number_format($item->quantity, 0) }}</td>
+                <td>{{ number_format($item->net_weight, 2) }}</td>
+                <td>{{ number_format($item->purchase_price, 4) }}</td>
                 <td>{{ number_format($item->purchase_total, 2) }}</td>
+                <td>{{ number_format($item->sale_price, 4) }}</td>
                 <td>{{ number_format($item->sale_total, 2) }}</td>
+                <td>{{ number_format($item->vendor_commission_percentage, 2) }}</td>
+                <td>{{ number_format($item->vendor_commission_amount, 2) }}</td>
+                <td>{{ number_format($item->customer_commission_percentage, 2) }}</td>
+                <td>{{ number_format($item->customer_commission_amount, 2) }}</td>
               </tr>
               @endforeach
             </tbody>
@@ -85,10 +78,16 @@
         <h5>Other Expenses</h5>
         <div class="table-responsive mb-3">
           <table class="table table-sm table-bordered">
-            <thead><tr><th>Type</th><th>Description</th><th>Amount</th></tr></thead>
+            <thead><tr><th>Type</th><th>Description</th><th>Amount</th><th>Paid By</th><th>Payee</th></tr></thead>
             <tbody>
               @foreach($invoice->expenses as $exp)
-              <tr><td>{{ $exp->typeLabel() }}</td><td>{{ $exp->description }}</td><td>{{ number_format($exp->amount, 2) }}</td></tr>
+              <tr>
+                <td>{{ $exp->typeLabel() }}</td>
+                <td>{{ $exp->description }}</td>
+                <td>{{ number_format($exp->amount, 2) }}</td>
+                <td><span class="badge {{ $exp->paid_by === 'vendor' ? 'bg-secondary' : 'bg-info text-dark' }}">{{ $exp->paidByLabel() }}</span></td>
+                <td>{{ $exp->paid_by === 'vendor' ? ($invoice->vendor->name ?? '-') : ($exp->payeeAccount->name ?? '—') }}</td>
+              </tr>
               @endforeach
             </tbody>
           </table>
@@ -98,7 +97,8 @@
         <div class="row mb-4 text-center">
           <div class="col"><small class="text-muted d-block">Total Purchase</small><strong>{{ number_format($invoice->total_purchase_amount, 2) }}</strong></div>
           <div class="col"><small class="text-muted d-block">Total Sale</small><strong>{{ number_format($invoice->total_sale_amount, 2) }}</strong></div>
-          <div class="col"><small class="text-muted d-block">Total Commission</small><strong>{{ number_format($invoice->total_commission_amount, 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Vendor Commission</small><strong>{{ number_format($invoice->total_vendor_commission_amount, 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Customer Commission</small><strong>{{ number_format($invoice->total_customer_commission_amount, 2) }}</strong></div>
           <div class="col"><small class="text-muted d-block">Other Expenses</small><strong>{{ number_format($invoice->total_other_expenses, 2) }}</strong></div>
           <div class="col"><small class="text-muted d-block">Vendor Payable</small><strong class="text-danger">{{ number_format($invoice->totalVendorPayable(), 2) }}</strong></div>
           <div class="col"><small class="text-muted d-block">Customer Receivable</small><strong class="text-primary">{{ number_format($invoice->totalCustomerReceivable(), 2) }}</strong></div>
@@ -116,7 +116,7 @@
         <h5>Attachments</h5>
         <div class="mb-3">
           @foreach($invoice->attachments as $file)
-            <a href="{{ asset('storage/' . $file->file_path) }}" target="_blank" class="badge bg-light text-dark border me-1">
+            <a href="{{ asset('storage/' . $file->file_path) }}" target="_blank" class="badge bg-light text-dark border me-1 p-2">
               <i class="fas fa-file"></i> {{ ucfirst($file->stage) }}: {{ $file->original_name }}
             </a>
           @endforeach
@@ -151,8 +151,7 @@
             <tbody>
               @forelse($invoice->statusHistories as $h)
               <tr>
-                <td>{{ $h->from_status ?? '—' }}</td>
-                <td>{{ $h->to_status }}</td>
+                <td>{{ $h->from_status ?? '—' }}</td><td>{{ $h->to_status }}</td>
                 <td>{{ optional($h->changedBy)->name ?? '—' }}</td>
                 <td>{{ $h->created_at->format('d-M-Y H:i') }}</td>
                 <td>{{ $h->remarks }}</td>
@@ -174,35 +173,17 @@
     <form action="{{ route('commission_invoices.moveToInTransit', $invoice->id) }}" method="POST" enctype="multipart/form-data">
       @csrf
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Move to In Transit</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
+        <div class="modal-header"><h5 class="modal-title">Move to In Transit</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-          <div class="mb-3">
-            <label>Vendor Bill Number *</label>
-            <input type="text" name="vendor_bill_no" class="form-control" value="{{ $invoice->vendor_bill_no }}" required>
-          </div>
-          <div class="mb-3">
-            <label>Bilty Number *</label>
-            <input type="text" name="bilty_no" class="form-control" value="{{ $invoice->bilty_no }}" required>
-          </div>
-          <div class="mb-3">
-            <label>Transport Name *</label>
-            <input type="text" name="transport_name" class="form-control" value="{{ $invoice->transport_name }}" required>
-          </div>
+          <div class="mb-3"><label>Vendor Bill Number *</label><input type="text" name="vendor_bill_no" class="form-control" value="{{ $invoice->vendor_bill_no }}" required></div>
+          <div class="mb-3"><label>Bilty Number *</label><input type="text" name="bilty_no" class="form-control" value="{{ $invoice->bilty_no }}" required></div>
+          <div class="mb-3"><label>Transport Name *</label><input type="text" name="transport_name" class="form-control" value="{{ $invoice->transport_name }}" required></div>
           <div class="mb-3">
             <label>Attachment (dispatch proof) *</label>
-            <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip"
-                   {{ $invoice->attachments->count() ? '' : 'required' }}>
-            @if($invoice->attachments->count())
-              <small class="text-muted">An attachment already exists on this invoice; upload a new one only if needed.</small>
-            @endif
+            <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip" {{ $invoice->attachments->count() ? '' : 'required' }}>
+            @if($invoice->attachments->count())<small class="text-muted">Attachment already exists; upload only if needed.</small>@endif
           </div>
-          <div class="mb-3">
-            <label>Remarks</label>
-            <textarea name="remarks" class="form-control" rows="2"></textarea>
-          </div>
+          <div class="mb-3"><label>Remarks</label><textarea name="remarks" class="form-control" rows="2"></textarea></div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-default" data-bs-dismiss="modal">Cancel</button>
@@ -219,32 +200,16 @@
     <form action="{{ route('commission_invoices.deliver', $invoice->id) }}" method="POST" enctype="multipart/form-data">
       @csrf
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Mark as Delivered</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
+        <div class="modal-header"><h5 class="modal-title">Mark as Delivered</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-          <div class="mb-3">
-            <label>Delivery Date *</label>
-            <input type="date" name="delivered_at" class="form-control" value="{{ date('Y-m-d') }}" required>
-          </div>
-          <div class="mb-3">
-            <label>Received By (Customer's representative name)</label>
-            <input type="text" name="delivery_received_by_name" class="form-control">
-          </div>
-          <div class="mb-3">
-            <label>Delivery Proof (signed receipt / photo / document) *</label>
-            <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip" required>
-          </div>
-          <div class="mb-3">
-            <label>Remarks</label>
-            <textarea name="delivery_remarks" class="form-control" rows="2"></textarea>
-          </div>
+          <div class="mb-3"><label>Delivery Date *</label><input type="date" name="delivered_at" class="form-control" value="{{ date('Y-m-d') }}" required></div>
+          <div class="mb-3"><label>Received By</label><input type="text" name="delivery_received_by_name" class="form-control"></div>
+          <div class="mb-3"><label>Delivery Proof *</label><input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip" required></div>
+          <div class="mb-3"><label>Remarks</label><textarea name="delivery_remarks" class="form-control" rows="2"></textarea></div>
           <div class="alert alert-secondary small mb-0">
-            This will create a Customer Receivable of
-            <strong>{{ number_format($invoice->totalCustomerReceivable(), 2) }}</strong>
-            and recognize Commission Income of
-            <strong>{{ number_format($invoice->total_commission_amount, 2) }}</strong>.
+            This will create a Customer Receivable of <strong>{{ number_format($invoice->totalCustomerReceivable(), 2) }}</strong>,
+            recognize Vendor Commission of <strong>{{ number_format($invoice->total_vendor_commission_amount, 2) }}</strong> and
+            Customer Commission of <strong>{{ number_format($invoice->total_customer_commission_amount, 2) }}</strong>.
           </div>
         </div>
         <div class="modal-footer">
