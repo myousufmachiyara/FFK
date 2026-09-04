@@ -130,26 +130,6 @@
             </tbody>
           </table>
         </div>
-
-        <h5>Status History</h5>
-        <div class="table-responsive mb-2">
-          <table class="table table-sm table-bordered">
-            <thead><tr><th>From</th><th>To</th><th>Changed By</th><th>At</th><th>Remarks</th></tr></thead>
-            <tbody>
-              @forelse($invoice->statusHistories as $h)
-              <tr>
-                <td>{{ $h->from_status ?? '—' }}</td>
-                <td>{{ $h->to_status }}</td>
-                <td>{{ optional($h->changedBy)->name ?? '—' }}</td>
-                <td>{{ $h->created_at->format('d-M-Y H:i') }}</td>
-                <td>{{ $h->remarks }}</td>
-              </tr>
-              @empty
-              <tr><td colspan="5" class="text-muted text-center">No history yet.</td></tr>
-              @endforelse
-            </tbody>
-          </table>
-        </div>
       </div>
     </section>
   </div>
