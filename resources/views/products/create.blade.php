@@ -63,7 +63,7 @@
             </div>
 
             <div class="col-md-2">
-              <label>Selling Price / Unit</label>
+              <label>Selling Price / Unit <small class="text-muted">(default/fallback)</small></label>
               <input type="number" step="any" name="selling_price" class="form-control" value="{{ old('selling_price', '0.00') }}">
               @error('selling_price')<div class="text-danger">{{ $message }}</div>@enderror
             </div>
@@ -114,12 +114,18 @@
               <i class="fa fa-plus"></i> Generate Variations
             </button>
 
+            <p class="text-muted small">
+              <i class="fas fa-info-circle"></i> Leave Barcode blank to use the variation's SKU as its scannable code.
+            </p>
+
             <div class="table-responsive">
               <table class="table table-bordered" id="variationsTable">
                 <thead>
                   <tr>
                     <th>Variation</th>
                     <th>SKU</th>
+                    <th>Barcode</th>
+                    <th>Selling Price</th>
                     <th>Stock</th>
                     <th>Action</th>
                   </tr>
@@ -167,17 +173,21 @@
       tbody.empty();
 
       let mainSku = $('#sku').val();
+      let defaultPrice = $('input[name="selling_price"]').val() || 0;
 
       combos.forEach((combo, index) => {
         let label = combo.map(c => c.text).join(' - ');
         let inputs = combo.map((c, i) => `
           <input type="hidden" name="variations[${index}][attributes][${i}][attribute_value_id]" value="${c.id}">
         `).join('');
+        let variationSku = `${mainSku}-${label}`;
 
         tbody.append(`
           <tr>
             <td>${label}${inputs}</td>
-            <td><input type="text" name="variations[${index}][sku]" class="form-control" value="${mainSku}-${label}"></td>
+            <td><input type="text" name="variations[${index}][sku]" class="form-control variation-sku" value="${variationSku}"></td>
+            <td><input type="text" name="variations[${index}][barcode]" class="form-control" placeholder="= SKU if left blank"></td>
+            <td><input type="number" name="variations[${index}][selling_price]" step="any" class="form-control" value="${defaultPrice}" required></td>
             <td><input type="number" name="variations[${index}][stock_quantity]" step="any" class="form-control" value="0" required></td>
             <td><button type="button" class="btn btn-sm btn-danger remove-variation">X</button></td>
           </tr>

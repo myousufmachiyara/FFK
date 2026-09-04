@@ -22,7 +22,7 @@ class ProductController extends Controller
 {
     public function index()
     {
-        $products = Product::with('category', 'subcategory', 'variations')->get();        
+        $products = Product::with('category', 'subcategory', 'variations')->get();
         return view('products.index', compact('products'));
     }
 
@@ -31,7 +31,24 @@ class ProductController extends Controller
         $categories = ProductCategory::all();
         $attributes = Attribute::with('values')->get();
         $units = MeasurementUnit::all();
-        return view('products.create', compact('categories','attributes', 'units'));
+        return view('products.create', compact('categories', 'attributes', 'units'));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Auto-generate a barcode value if the user didn't provide one.
+    // Uses the variation's SKU as-is — Code128 (what BarcodeGeneratorPNG
+    // defaults to) encodes arbitrary alphanumeric text fine, so the SKU
+    // itself is a perfectly valid, human-readable barcode value. If you
+    // need strictly numeric EAN/UPC-style codes instead, replace this
+    // with a sequence generator.
+    // ─────────────────────────────────────────────────────────────
+    private function resolveBarcode(?string $provided, ?string $sku): ?string
+    {
+        $value = trim((string) $provided);
+        if ($value !== '') {
+            return $value;
+        }
+        return $sku ? trim($sku) : null;
     }
 
     public function store(Request $request)
@@ -46,12 +63,12 @@ class ProductController extends Controller
             'selling_price' => 'nullable|numeric',
             'opening_stock' => 'required|numeric',
             'is_active' => 'boolean',
+            'variations.*.barcode' => 'nullable|string|max:64|unique:product_variations,barcode',
         ]);
 
         DB::beginTransaction();
 
         try {
-            // ✅ Create Product
             $productData = $request->only([
                 'name', 'category_id', 'subcategory_id', 'sku', 'description',
                 'measurement_unit', 'opening_stock', 'selling_price', 'is_active'
@@ -60,17 +77,18 @@ class ProductController extends Controller
             $product = Product::create($productData);
             Log::info('[Product Store] Product created', ['product_id' => $product->id, 'data' => $productData]);
 
-            // ✅ Variations
             if ($request->has('variations')) {
                 foreach ($request->variations as $variationData) {
+                    $sku = $variationData['sku'] ?? null;
+
                     $variation = $product->variations()->create([
-                        'sku' => $variationData['sku'] ?? null,
+                        'sku'            => $sku,
+                        'barcode'        => $this->resolveBarcode($variationData['barcode'] ?? null, $sku),
                         'stock_quantity' => $variationData['stock_quantity'] ?? 0,
-                        'selling_price' => $variationData['selling_price'] ?? 0,
+                        'selling_price'  => $variationData['selling_price'] ?? 0,
                     ]);
                     Log::info('[Product Store] Variation created', ['variation_id' => $variation->id, 'product_id' => $product->id, 'data' => $variationData]);
 
-                    // Attribute Values
                     if (!empty($variationData['attributes'])) {
                         $variation->attributeValues()->sync($variationData['attributes']);
                         Log::info('[Product Store] Variation attributes synced', [
@@ -98,7 +116,7 @@ class ProductController extends Controller
     {
         return redirect()->route('products.index');
     }
-    
+
     public function details(Request $request)
     {
         $product = Product::findOrFail($request->id);
@@ -106,9 +124,9 @@ class ProductController extends Controller
         return response()->json([
             'id' => $product->id,
             'name' => $product->name,
-            'code' => $product->item_code ?? '',      // If you have `item_code`
-            'unit' => $product->unit ?? '',           // If your table has `unit`
-            'price' => $product->price ?? 0,          // Or get price from variation
+            'code' => $product->item_code ?? '',
+            'unit' => $product->unit ?? '',
+            'price' => $product->price ?? 0,
         ]);
     }
 
@@ -122,9 +140,8 @@ class ProductController extends Controller
         $categories = ProductCategory::all();
         $subcategories = ProductSubcategory::all();
         $attributes = Attribute::with('values')->get();
-        $units = MeasurementUnit::all(); // ✅ Add this line
+        $units = MeasurementUnit::all();
 
-        // Optional: attach parent attribute (if needed for UI or JS)
         $attributeValues = collect();
         foreach ($attributes as $attribute) {
             foreach ($attribute->values as $val) {
@@ -139,32 +156,36 @@ class ProductController extends Controller
             'subcategories',
             'attributes',
             'attributeValues',
-            'units' // ✅ Pass to view
+            'units'
         ));
     }
 
     public function update(Request $request, $id)
     {
+        $request->validate([
+            'variations.*.barcode'     => 'nullable|string|max:64|unique:product_variations,barcode,' . implode(',', array_column($request->variations ?? [], 'id')),
+            'new_variations.*.barcode' => 'nullable|string|max:64|unique:product_variations,barcode',
+        ]);
+
         DB::beginTransaction();
 
         try {
             $product = Product::findOrFail($id);
 
-            // ✅ Update product
             $product->update($request->only([
                 'name', 'category_id', 'subcategory_id', 'sku', 'measurement_unit', 'opening_stock', 'description', 'selling_price', 'is_active'
             ]));
 
             $handledVariationIds = [];
 
-            // ✅ Update existing variations
             if (is_array($request->variations)) {
                 foreach ($request->variations as $variationData) {
                     $variation = ProductVariation::findOrFail($variationData['id']);
                     $variation->update([
-                        'sku' => $variationData['sku'],
+                        'sku'            => $variationData['sku'],
+                        'barcode'        => $this->resolveBarcode($variationData['barcode'] ?? $variation->barcode, $variationData['sku']),
                         'stock_quantity' => $variationData['stock_quantity'] ?? 0,
-                        'selling_price' => $variationData['selling_price'] ?? 0,
+                        'selling_price'  => $variationData['selling_price'] ?? 0,
                     ]);
 
                     if (!empty($variationData['attributes'])) {
@@ -175,13 +196,15 @@ class ProductController extends Controller
                 }
             }
 
-            // ✅ Add new variations
             if (is_array($request->new_variations)) {
                 foreach ($request->new_variations as $newVar) {
+                    $sku = $newVar['sku'];
+
                     $variation = $product->variations()->create([
-                        'sku' => $newVar['sku'],
+                        'sku'            => $sku,
+                        'barcode'        => $this->resolveBarcode($newVar['barcode'] ?? null, $sku),
                         'stock_quantity' => $newVar['stock_quantity'] ?? 0,
-                        'selling_price' => $newVar['selling_price'] ?? 0,
+                        'selling_price'  => $newVar['selling_price'] ?? 0,
                     ]);
 
                     if (!empty($newVar['attributes'])) {
@@ -192,7 +215,6 @@ class ProductController extends Controller
                 }
             }
 
-            // ✅ Remove deleted variations
             if ($request->filled('removed_variations')) {
                 ProductVariation::whereIn('id', $request->removed_variations)->delete();
             }
@@ -214,6 +236,13 @@ class ProductController extends Controller
         return redirect()->route('products.index')->with('success', 'Product deleted successfully.');
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // FIX (#9, #10): this endpoint previously returned only id/sku/unit
+    // per variation — Sale Invoice's variation dropdown reads
+    // stock_quantity and selling_price from this exact response, so
+    // both showed as 0/blank no matter what was actually in the
+    // database. Now returns everything the frontend needs.
+    // ─────────────────────────────────────────────────────────────
     public function getVariations($productId)
     {
         $product = Product::with(['variations', 'measurementUnit'])->find($productId);
@@ -229,9 +258,12 @@ class ProductController extends Controller
 
         $variations = $product->variations->map(function ($v) use ($unitId) {
             return [
-                'id'   => $v->id,
-                'sku'  => $v->sku,
-                'unit' => $unitId,
+                'id'             => $v->id,
+                'sku'            => $v->sku,
+                'barcode'        => $v->barcode,
+                'unit'           => $unitId,
+                'stock_quantity' => (float) $v->stock_quantity,
+                'selling_price'  => $v->selling_price !== null ? (float) $v->selling_price : null,
             ];
         });
 
@@ -239,13 +271,36 @@ class ProductController extends Controller
             'success'   => true,
             'variation' => $variations,
 
-            // Extra product info (useful for BOM & costing)
             'product'   => [
                 'id'                 => $product->id,
                 'name'               => $product->name,
                 'manufacturing_cost' => $product->manufacturing_cost,
                 'unit'               => $unitId,
+                'selling_price'      => $product->selling_price,
             ],
+        ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // NEW: generate a scannable barcode PNG for a variation. The
+    // BarcodeGeneratorPNG import was already sitting unused in this
+    // file — this is the endpoint it was presumably meant for.
+    // Use e.g. <img src="/products/variations/{id}/barcode"> on a
+    // label/print view.
+    // ─────────────────────────────────────────────────────────────
+    public function variationBarcode($variationId)
+    {
+        $variation = ProductVariation::findOrFail($variationId);
+
+        if (!$variation->barcode) {
+            abort(404, 'This variation has no barcode value set.');
+        }
+
+        $generator = new BarcodeGeneratorPNG();
+        $png = $generator->getBarcode($variation->barcode, $generator::TYPE_CODE_128);
+
+        return Response::make($png, 200, [
+            'Content-Type' => 'image/png',
         ]);
     }
 
@@ -256,13 +311,11 @@ class ProductController extends Controller
         $purchased = DB::table('purchase_invoice_items')->where(['variation_id' => $v_id, 'location_id' => $l_id])->sum('quantity');
         $sold = DB::table('sale_invoice_items')->where(['variation_id' => $v_id, 'location_id' => $l_id])->sum('quantity');
 
-        // Transferred TO this location (Addition)
         $t_in = DB::table('stock_transfer_details')
             ->join('stock_transfers', 'stock_transfer_details.transfer_id', '=', 'stock_transfers.id')
             ->where(['variation_id' => $v_id, 'to_location_id' => $l_id])
             ->sum('quantity');
 
-        // Transferred FROM this location (Deduction)
         $t_out = DB::table('stock_transfer_details')
             ->join('stock_transfers', 'stock_transfer_details.transfer_id', '=', 'stock_transfers.id')
             ->where(['variation_id' => $v_id, 'from_location_id' => $l_id])
@@ -271,4 +324,3 @@ class ProductController extends Controller
         return response()->json(['stock' => ($purchased + $t_in) - ($sold + $t_out)]);
     }
 }
-

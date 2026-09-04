@@ -163,7 +163,7 @@ Route::middleware(['auth'])->group(function () {
     });
 
     Route::get('/get-location-stock', [ProductController::class, 'getLocationStock']);
-
+    Route::get('/products/variations/{variation}/barcode', [ProductController::class, 'variationBarcode'])->name('products.variation.barcode');
     // DISABLED: StockTransferController is referenced here but was never
     // imported above (and its existence hasn't been confirmed) — same class
     // of bug as PermissionController. Re-enable once that controller exists
