@@ -84,9 +84,6 @@
             <table class="table table-bordered table-sm" id="purchaseTable">
               <thead>
                 <tr>
-                  <th style="background:#ff8c00;color:#fff;text-align:center" colspan="10">Purchase Invoice Format</th>
-                </tr>
-                <tr>
                   <th width="16%">Item</th>
                   <th width="11%">Variation</th>
                   <th width="10%">Packing</th>
