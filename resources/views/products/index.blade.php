@@ -3,6 +3,11 @@
 @section('title', 'Product | All Product')
 
 @section('content')
+<style>
+    .item-ledger-link { text-decoration: none; font-weight: 500; }
+    .item-ledger-link:hover { text-decoration: underline; }
+</style>
+
 <div class="row">
   <div class="col">
     <section class="card">
@@ -36,7 +41,17 @@
               @foreach($products as $index => $product)
               <tr>
                 <td>{{ $index + 1 }}</td>
-                <td>{{ $product->name }}</td>
+                <td>
+                  {{-- FIX: product name now links to its Item Ledger --}}
+                  @can('reports.inventory')
+                    <a href="{{ route('reports.inventory', ['tab' => 'IL', 'item_id' => $product->id]) }}"
+                       class="item-ledger-link" title="View Item Ledger">
+                      {{ $product->name }}
+                    </a>
+                  @else
+                    {{ $product->name }}
+                  @endcan
+                </td>
                 <td>
                   @if($product->category || $product->subcategory)
                     {{ $product->category->name ?? '' }}
