@@ -22,6 +22,11 @@
         ];
     @endphp
 
+    <style>
+        .account-ledger-link { text-decoration: none; font-weight: bold; }
+        .account-ledger-link:hover { text-decoration: underline; }
+    </style>
+
     <div class="row">
         <div class="col">
             <section class="card">
@@ -88,7 +93,17 @@
                                 <tr>
                                     <td>{{ $loop->iteration }}</td>
                                     <td><code>{{ $item->account_code }}</code></td>
-                                    <td><strong>{{ $item->name }}</strong></td>
+                                    <td>
+                                        {{-- FIX: account name now links to its General Ledger --}}
+                                        @can('reports.accounts')
+                                            <a href="{{ route('reports.accounts', ['tab' => 'general_ledger', 'account_id' => $item->id]) }}"
+                                               class="account-ledger-link" title="View General Ledger">
+                                                {{ $item->name }}
+                                            </a>
+                                        @else
+                                            <strong>{{ $item->name }}</strong>
+                                        @endcan
+                                    </td>
                                     <td>{{ $item->subHeadOfAccount->name ?? '—' }}</td>
                                     <td><strong>{{ $accountTypes[$item->account_type] ?? ucfirst($item->account_type ?? '—') }}</strong></td>
                                     <td>{{ $item->contact_no ?? '—' }}</td>
