@@ -43,7 +43,7 @@
               </select>
             </div>
             <div class="col-md-2"><label>Transport <small class="text-muted">(optional now)</small></label><input type="text" name="transport_name" class="form-control"></div>
-            <div class="col-md-2"><label>Bilty # <small class="text-muted">(optional now)</small></label><input type="text" name="bilty_no" class="form-control"></div>
+            <div class="col-md-2"><label>Bilti # <small class="text-muted">(optional now)</small></label><input type="text" name="bilty_no" class="form-control"></div>
             <div class="col-md-2"><label>Vendor Bill # <small class="text-muted">(optional now)</small></label><input type="text" name="vendor_bill_no" class="form-control"></div>
           </div>
           <div class="row mb-2">
