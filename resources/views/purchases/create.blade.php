@@ -56,7 +56,7 @@
             </div>
 
             <div class="col-md-2 mb-3">
-              <label>Bilty # <small class="text-muted">(optional now)</small></label>
+              <label>Bilti # <small class="text-muted">(optional now)</small></label>
               <input type="text" name="bilty_no" class="form-control">
             </div>
 
