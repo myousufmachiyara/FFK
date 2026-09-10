@@ -6,8 +6,8 @@
 <style>
     .select2-container--default .select2-selection--single { height: 38px !important; padding: 5px; border: 1px solid #ced4da; }
     .select2-container { display: block !important; width: 100% !important; }
-    #purchaseTable th { background: #f8f9fa; font-size: 12px; }
-    #purchaseTable td { vertical-align: middle; }
+    #purchaseTable th, #expenseTable th { background: #f8f9fa; font-size: 12px; }
+    #purchaseTable td, #expenseTable td { vertical-align: middle; }
     .readonly-calc { background-color: #f0f0f0 !important; }
 </style>
 
@@ -16,7 +16,9 @@
     <form id="purchaseEditForm" action="{{ route('purchase_invoices.update', $invoice->id) }}" method="POST" enctype="multipart/form-data" onkeydown="return event.key != 'Enter';">
       @csrf
       @method('PUT')
-      <section class="card">
+
+      {{-- ═══════════════ MASTER SECTION ═══════════════ --}}
+      <section class="card mb-3">
         <header class="card-header">
           <h2 class="card-title">Edit Purchase Invoice: PI-{{ $invoice->invoice_no }}</h2>
         </header>
@@ -60,31 +62,46 @@
               <label>Ref.</label>
               <input type="text" name="ref_no" class="form-control" value="{{ $invoice->ref_no }}">
             </div>
+            <div class="col-md-2 mb-3">
+              <label>Payment Terms</label>
+              <select name="payment_terms" id="paymentTerms" class="form-control" required>
+                <option value="cash" {{ $invoice->payment_terms == 'cash' ? 'selected' : '' }}>Cash</option>
+                <option value="credit" {{ $invoice->payment_terms == 'credit' ? 'selected' : '' }}>Credit</option>
+              </select>
+            </div>
+            <div class="col-md-2 mb-3" id="creditDaysWrap" style="display:none;">
+              <label>Credit Days</label>
+              <input type="number" min="1" name="credit_days" id="creditDays" class="form-control" value="{{ $invoice->credit_days }}">
+            </div>
             <div class="col-md-4 mb-3">
               <label>Attachments <small class="text-muted">(adds new, keeps existing)</small></label>
               <input type="file" name="attachments[]" class="form-control" multiple accept=".pdf,.jpg,.jpeg,.png,.zip">
             </div>
-          </div>
-          <div class="row">
-            <div class="col-md-12 mb-3">
+            <div class="col-md-8 mb-3">
               <label>Remarks</label>
-              <textarea name="remarks" class="form-control" rows="2">{{ $invoice->remarks }}</textarea>
+              <textarea name="remarks" class="form-control" rows="1">{{ $invoice->remarks }}</textarea>
             </div>
           </div>
+        </div>
+      </section>
 
+      {{-- ═══════════════ ITEMS GRID SECTION ═══════════════ --}}
+      <section class="card mb-3">
+        <header class="card-header"><h2 class="card-title">Items</h2></header>
+        <div class="card-body">
           <div class="table-responsive mb-3">
             <table class="table table-bordered table-sm" id="purchaseTable">
               <thead>
                 <tr>
-                  <th width="16%">Item</th>
-                  <th width="11%">Variation</th>
-                  <th width="10%">Packing</th>
+                  <th width="15%">Item</th>
+                  <th width="10%">Variation</th>
+                  <th width="9%">Packing</th>
                   <th width="8%">Wt./Packing (kg)</th>
                   <th width="6%">Qty</th>
                   <th width="9%">Gross Weight</th>
                   <th width="9%">Net Weight</th>
-                  <th width="10%">Rate (per {{ $kgPerMaund }}kg)</th>
-                  <th width="9%">Rate (per kg)</th>
+                  <th width="10%">Rate (40 kg)</th>
+                  <th width="8%">Rate (kg)</th>
                   <th width="9%">Amount</th>
                   <th width="30px"></th>
                 </tr>
@@ -93,23 +110,44 @@
             </table>
           </div>
           <button type="button" class="btn btn-outline-primary btn-sm" onclick="addItemRow()"><i class="fas fa-plus"></i> Add Item</button>
+        </div>
+      </section>
 
-          <div class="row mt-3">
-            <div class="col-md-3">
-              <label>Total Qty (packing units)</label>
-              <input type="text" id="sumQty" class="form-control" disabled>
-            </div>
-            <div class="col-md-3">
-              <label>Total Net Weight (kg)</label>
-              <input type="text" id="sumWeight" class="form-control" disabled>
-            </div>
-            <div class="col-md-6 text-end">
-              <label><strong>Total Amount</strong></label>
-              <h4 class="text-danger mt-0">PKR <span id="sumAmount">0.00</span></h4>
-            </div>
+      {{-- ═══════════════ EXTRA EXPENSES SECTION ═══════════════ --}}
+      <section class="card mb-3">
+        <header class="card-header"><h2 class="card-title">Other Expenses</h2></header>
+        <div class="card-body">
+          <div class="table-responsive mb-2">
+            <table class="table table-bordered table-sm" id="expenseTable">
+              <thead>
+                <tr>
+                  <th width="15%">Type</th>
+                  <th width="27%">Description</th>
+                  <th width="13%">Amount</th>
+                  <th width="15%">Paid By</th>
+                  <th width="22%">Payee Account</th>
+                  <th width="30px"></th>
+                </tr>
+              </thead>
+              <tbody id="expenseBody"></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addExpenseRow()"><i class="fas fa-plus"></i> Add Expense</button>
+        </div>
+      </section>
+
+      {{-- ═══════════════ SUMMARY SECTION ═══════════════ --}}
+      <section class="card mb-3">
+        <header class="card-header"><h2 class="card-title">Purchase Invoice Summary</h2></header>
+        <div class="card-body">
+          <div class="row text-center">
+            <div class="col"><small class="text-muted d-block">Total Item Amount</small><strong id="sumItemAmount">0.00</strong></div>
+            <div class="col"><small class="text-muted d-block">Total Expense Amount</small><strong id="sumExpenseAmount">0.00</strong></div>
+            <div class="col"><small class="text-muted d-block">Gross Wt. (kg)</small><strong id="sumGrossWeight">0.00</strong></div>
+            <div class="col"><small class="text-muted d-block">Net Wt. (kg)</small><strong id="sumNetWeight">0.00</strong></div>
+            <div class="col"><small class="text-muted d-block">Total Bill Amount</small><strong class="text-danger" id="sumBillAmount">0.00</strong></div>
           </div>
         </div>
-
         <footer class="card-footer text-end">
           <button type="submit" id="updateBtn" class="btn btn-primary"><i class="fas fa-save"></i> Update Invoice</button>
         </footer>
@@ -121,16 +159,16 @@
 <script>
 let products = @json($products);
 let units = @json($units);
+let payeeAccounts = @json($payeeAccounts);
 let existingItems = @json($invoice->items);
+let existingExpenses = @json($invoice->expenses);
 const KG_PER_MAUND = {{ $kgPerMaund }};
 let itemIdx = 0;
+let expenseIdx = 0;
 
-function productOptions(selectedId) {
-    return products.map(p => `<option value="${p.id}" ${p.id == selectedId ? 'selected' : ''}>${p.name}</option>`).join('');
-}
-function unitOptions(selectedId) {
-    return units.map(u => `<option value="${u.id}" ${u.id == selectedId ? 'selected' : ''}>${u.name}</option>`).join('');
-}
+function productOptions(selectedId) { return products.map(p => `<option value="${p.id}" ${p.id == selectedId ? 'selected' : ''}>${p.name}</option>`).join(''); }
+function unitOptions(selectedId) { return units.map(u => `<option value="${u.id}" ${u.id == selectedId ? 'selected' : ''}>${u.name}</option>`).join(''); }
+function payeeOptions(selectedId) { return payeeAccounts.map(a => `<option value="${a.id}" ${a.id == selectedId ? 'selected' : ''}>${a.name}</option>`).join(''); }
 
 function addItemRow(existing = null) {
     const idx = itemIdx++;
@@ -225,16 +263,75 @@ function removeRow(btn) {
     calcSummary();
 }
 
+function addExpenseRow(existing = null) {
+    const idx = expenseIdx++;
+    const type = existing ? existing.expense_type : 'bilty';
+    const desc = existing ? existing.description : '';
+    const amount = existing ? existing.amount : '';
+    const paidBy = existing ? existing.paid_by : 'vendor';
+    const payeeId = existing ? existing.payee_account_id : null;
+
+    const row = `
+    <tr data-erow="${idx}">
+        <td>
+            <select name="expenses[${idx}][expense_type]" class="form-control">
+                <option value="local_cartage" ${type==='local_cartage'?'selected':''}>Local Cartage</option>
+                <option value="packaging" ${type==='packaging'?'selected':''}>Packaging</option>
+                <option value="plastic_bags" ${type==='plastic_bags'?'selected':''}>Plastic Bags</option>
+                <option value="bardana" ${type==='bardana'?'selected':''}>Bardana</option>
+                <option value="misc" ${type==='misc'?'selected':''}>Miscellaneous</option>
+                <option value="tulai" ${type==='tulai'?'selected':''}>Tulai</option>
+                <option value="others" ${type==='others'?'selected':''}>Others</option>
+            </select>
+        </td>
+        <td><input type="text" name="expenses[${idx}][description]" class="form-control" value="${desc ?? ''}"></td>
+        <td><input type="number" step="any" min="0" name="expenses[${idx}][amount]" class="form-control exp-amount" value="${amount}" oninput="calcSummary()"></td>
+        <td>
+            <select name="expenses[${idx}][paid_by]" class="form-control paid-by" onchange="togglePayee(${idx})">
+                <option value="vendor" ${paidBy==='vendor'?'selected':''}>Vendor</option>
+                <option value="company" ${paidBy==='company'?'selected':''}>Company (FFK)</option>
+            </select>
+        </td>
+        <td>
+            <select name="expenses[${idx}][payee_account_id]" class="form-control select2-js payee-select" id="payee${idx}" ${paidBy==='company'?'':'disabled'}>
+                <option value="">—</option>${payeeOptions(payeeId)}
+            </select>
+        </td>
+        <td><button type="button" class="btn btn-danger btn-sm" onclick="$(this).closest('tr').remove(); calcSummary();"><i class="fas fa-times"></i></button></td>
+    </tr>`;
+    $('#expenseBody').append(row);
+    $(`#expenseBody tr[data-erow="${idx}"] .select2-js`).select2({ width: '100%' });
+}
+
+function togglePayee(idx) {
+    const $row = $(`#expenseBody tr[data-erow="${idx}"]`);
+    const paidBy = $row.find('.paid-by').val();
+    const $payee = $(`#payee${idx}`);
+    if (paidBy === 'company') { $payee.prop('disabled', false); }
+    else { $payee.prop('disabled', true).val('').trigger('change.select2'); }
+}
+
 function calcSummary() {
-    let qty = 0, weight = 0, amount = 0;
+    let qty = 0, netWeight = 0, grossWeight = 0, itemAmount = 0, expenseAmount = 0;
+
     $('#itemBody tr').each(function () {
         qty += parseFloat($(this).find('.qty').val()) || 0;
-        weight += parseFloat($(this).find('.net-weight').val()) || parseFloat($(this).find('.gross-weight').val()) || 0;
-        amount += parseFloat($(this).find('.amount').val()) || 0;
+        grossWeight += parseFloat($(this).find('.gross-weight').val()) || 0;
+        netWeight += parseFloat($(this).find('.net-weight').val()) || parseFloat($(this).find('.gross-weight').val()) || 0;
+        itemAmount += parseFloat($(this).find('.amount').val()) || 0;
     });
-    $('#sumQty').val(qty.toFixed(2));
-    $('#sumWeight').val(weight.toFixed(2));
-    $('#sumAmount').text(amount.toLocaleString(undefined, { minimumFractionDigits: 2 }));
+
+    $('#expenseBody tr').each(function () {
+        expenseAmount += parseFloat($(this).find('.exp-amount').val()) || 0;
+    });
+
+    const billAmount = itemAmount + expenseAmount;
+
+    $('#sumItemAmount').text(itemAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }));
+    $('#sumExpenseAmount').text(expenseAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }));
+    $('#sumGrossWeight').text(grossWeight.toLocaleString(undefined, { minimumFractionDigits: 2 }));
+    $('#sumNetWeight').text(netWeight.toLocaleString(undefined, { minimumFractionDigits: 2 }));
+    $('#sumBillAmount').text(billAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }));
 }
 
 $(document).ready(function () {
@@ -246,7 +343,23 @@ $(document).ready(function () {
         addItemRow();
     }
 
+    if (existingExpenses.length) {
+        existingExpenses.forEach(exp => addExpenseRow(exp));
+    }
+
     calcSummary();
+
+    function togglePaymentTermDays() {
+        if ($('#paymentTerms').val() === 'credit') {
+            $('#creditDaysWrap').show();
+            $('#creditDays').prop('required', true);
+        } else {
+            $('#creditDaysWrap').hide();
+            $('#creditDays').prop('required', false).val('');
+        }
+    }
+    $('#paymentTerms').on('change', togglePaymentTermDays);
+    togglePaymentTermDays();
 
     $('#purchaseEditForm').on('submit', function () {
         $('#updateBtn').prop('disabled', true).text('Updating...');

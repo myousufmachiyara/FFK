@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\SaleInvoice;
 use App\Models\SaleInvoiceItem;
+use App\Models\SaleInvoiceExpense;
 use App\Models\PurchaseInvoiceItem;
 use App\Models\Product;
 use App\Models\ProductVariation;
+use App\Models\MeasurementUnit;
 use App\Models\Voucher;
 use App\Models\ChartOfAccounts;
 use Illuminate\Http\Request;
@@ -17,10 +19,6 @@ use Carbon\Carbon;
 
 class SaleInvoiceController extends Controller
 {
-    // ─────────────────────────────────────────────────────────────
-    // Account resolution — never hardcode IDs, always via config +
-    // Chart of Accounts lookup.
-    // ─────────────────────────────────────────────────────────────
     private function resolveAccount(string $configKey, string $label): ChartOfAccounts
     {
         $code = config("sale_accounts.{$configKey}");
@@ -33,59 +31,55 @@ class SaleInvoiceController extends Controller
         return $account;
     }
 
-    private function salesRevenueAccount(): ChartOfAccounts
+    private function salesRevenueAccount(): ChartOfAccounts { return $this->resolveAccount('sales_revenue', 'Sales Revenue'); }
+    private function cogsAccount(): ChartOfAccounts         { return $this->resolveAccount('cogs', 'Cost of Goods Sold'); }
+    private function inventoryAccount(): ChartOfAccounts    { return $this->resolveAccount('inventory', 'Inventory / Stock in Hand'); }
+
+    private function kgPerMaund(): int
     {
-        return $this->resolveAccount('sales_revenue', 'Sales Revenue');
+        return (int) config('purchase_settings.kg_per_maund', 40);
     }
 
-    private function cogsAccount(): ChartOfAccounts
+    /** Posts a simple DR/CR voucher, auto-flipping legs if the amount would be negative. */
+    private function postVoucher(string $date, ChartOfAccounts $dr, ChartOfAccounts $cr, float $amount, string $reference, string $remarks): void
     {
-        return $this->resolveAccount('cogs', 'Cost of Goods Sold');
-    }
+        if (abs($amount) < 0.01) return;
 
-    private function inventoryAccount(): ChartOfAccounts
-    {
-        return $this->resolveAccount('inventory', 'Inventory / Stock in Hand');
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // Stock helpers
-    // ─────────────────────────────────────────────────────────────
-
-    /** Server-side source of truth for available stock — never trust the frontend. */
-    private function resolveAvailableStock(int $productId, ?int $variationId): float
-    {
-        if ($variationId) {
-            $variation = ProductVariation::find($variationId);
-            return $variation ? (float) $variation->stock_quantity : 0;
+        if ($amount < 0) {
+            [$dr, $cr] = [$cr, $dr];
+            $amount = abs($amount);
+            Log::warning('[SI] Negative amount voucher leg flipped', ['reference' => $reference, 'amount' => $amount]);
         }
 
-        $product = Product::find($productId);
-        if (!$product) return 0;
-
-        // Prefer a real_time_stock accessor if the Product model defines one;
-        // otherwise fall back to summing all variations' stock.
-        if (isset($product->real_time_stock)) {
-            return (float) $product->real_time_stock;
-        }
-
-        return (float) ProductVariation::where('product_id', $productId)->sum('stock_quantity');
+        Voucher::create([
+            'date'         => $date,
+            'voucher_type' => 'journal',
+            'ac_dr_sid'    => $dr->id,
+            'ac_cr_sid'    => $cr->id,
+            'amount'       => round($amount, 2),
+            'reference'    => $reference,
+            'remarks'      => $remarks,
+        ]);
     }
 
-    private function adjustStock(int $productId, ?int $variationId, float $delta): void
+    private function resolveAvailableStock(?int $variationId): float
     {
-        // Positive delta = add back to stock, negative = deduct.
+        if (!$variationId) return 0;
+        $variation = ProductVariation::find($variationId);
+        return $variation ? (float) $variation->stock_quantity : 0;
+    }
+
+    private function adjustStock(?int $variationId, float $delta): void
+    {
         if (!$variationId) {
-            Log::warning('[SI] No variation_id on item — stock not adjusted (product-level stock only).', ['product_id' => $productId]);
+            Log::warning('[SI] No variation_id on item — stock not adjusted.');
             return;
         }
-
         $variation = ProductVariation::find($variationId);
         if (!$variation) {
             Log::warning('[SI] Variation not found for stock adjustment', ['variation_id' => $variationId]);
             return;
         }
-
         if ($delta >= 0) {
             $variation->increment('stock_quantity', $delta);
         } else {
@@ -93,36 +87,27 @@ class SaleInvoiceController extends Controller
         }
     }
 
-    /**
-     * Unit cost for COGS — uses the last RECEIVED Purchase Invoice item's
-     * landed cost for this variation/product (reuses the Purchase module's
-     * costing rather than inventing a new methodology). Falls back to the
-     * sale price itself (0 margin) only if no purchase history exists yet,
-     * and logs a warning so it's visible in reporting.
-     */
+    /** Cost per KG — reuses Purchase's landed cost, same as before. Now multiplied by net_weight, not quantity. */
     private function resolveUnitCost(int $productId, ?int $variationId, float $fallback): float
     {
-        $query = PurchaseInvoiceItem::whereNotNull('received_quantity')
+        $query = PurchaseInvoiceItem::whereNotNull('received_net_weight')
             ->where('item_id', $productId)
             ->when($variationId, fn ($q) => $q->where('variation_id', $variationId))
             ->latest('updated_at');
 
         $lastReceived = $query->first();
 
-        if ($lastReceived && (float) $lastReceived->received_quantity > 0) {
+        if ($lastReceived && (float) $lastReceived->received_net_weight > 0) {
             return $lastReceived->landedUnitCost();
         }
 
-        Log::warning('[SI] No purchase history found for costing — using sale price as fallback unit cost.', [
+        Log::warning('[SI] No purchase history found for costing — using sale rate as fallback unit cost.', [
             'product_id' => $productId, 'variation_id' => $variationId,
         ]);
 
         return $fallback;
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // INDEX
-    // ─────────────────────────────────────────────────────────────
     public function index(Request $request)
     {
         $user  = auth()->user();
@@ -137,163 +122,225 @@ class SaleInvoiceController extends Controller
         return view('sales.index', compact('invoices'));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // CREATE FORM
-    // ─────────────────────────────────────────────────────────────
     public function create()
     {
         $products = Product::with('variations')->orderBy('name')->get();
-
-        // FIX (#9): don't rely on a possibly-missing/broken 'real_time_stock'
-        // accessor on Product — compute stock explicitly here from the
-        // live, authoritative ProductVariation.stock_quantity column and
-        // expose it under a new key the blade reads directly, so this
-        // works regardless of what real_time_stock does or doesn't do.
         $products->each(function ($p) {
             $p->computed_stock = $p->variations->sum('stock_quantity');
         });
 
         $customers = ChartOfAccounts::where('account_type', config('sale_accounts.customer_account_type'))
             ->orderBy('name')->get();
+        $vendors = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $paymentAccounts = ChartOfAccounts::whereIn('account_type', config('sale_accounts.payment_account_types'))
             ->orderBy('name')->get();
+        $payeeAccounts = ChartOfAccounts::orderBy('name')->get();
+        $units = MeasurementUnit::all();
+        $kgPerMaund = $this->kgPerMaund();
 
-        return view('sales.create', [
-            'products'        => $products,
-            'customers'       => $customers,
-            'paymentAccounts' => $paymentAccounts,
-        ]);
+        return view('sales.create', compact('products', 'customers', 'vendors', 'paymentAccounts', 'payeeAccounts', 'units', 'kgPerMaund'));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // STORE
-    //
-    // DR Customer (AR)                CR Sales Revenue      (net_amount)
-    // DR Payment Account (if any)     CR Customer (AR)      (amount_received)
-    // DR COGS                         CR Inventory          (total cost)
-    // ─────────────────────────────────────────────────────────────
+    /** Shared server-side item + expense computation. Never trust client math. */
+    private function syncItemsAndExpenses(SaleInvoice $invoice, array $items, array $expenses): array
+    {
+        $invoice->items()->delete();
+        $invoice->expenses()->delete();
+
+        $kgPerMaund = $this->kgPerMaund();
+        $totalQty = $totalWeight = $totalGrossWeight = $totalAmount = $totalCost = 0;
+
+        foreach ($items as $itemData) {
+            $qty          = (float) $itemData['quantity'];
+            $wtPerPacking = (float) $itemData['wt_per_packing'];
+            $netOverride  = isset($itemData['net_weight']) && $itemData['net_weight'] !== ''
+                ? (float) $itemData['net_weight'] : null;
+            $ratePer40kg  = (float) $itemData['rate_per_40kg'];
+            $discountPct  = (float) ($itemData['discount'] ?? 0);
+
+            $calc = SaleInvoiceItem::computeLine($wtPerPacking, $qty, $netOverride, $ratePer40kg, $discountPct, $kgPerMaund);
+
+            $unitCost = $this->resolveUnitCost((int) $itemData['product_id'], $itemData['variation_id'] ?? null, $calc['ratePerKg']);
+
+            $invoice->items()->create([
+                'product_id'      => $itemData['product_id'],
+                'variation_id'    => $itemData['variation_id'] ?? null,
+                'packing_unit_id' => $itemData['packing_unit_id'] ?? null,
+                'wt_per_packing'  => $wtPerPacking,
+                'quantity'        => $qty,
+                'gross_weight'    => $calc['grossWeight'],
+                'net_weight'      => $calc['netWeight'],
+                'rate_per_40kg'   => $ratePer40kg,
+                'sale_price'      => $calc['ratePerKg'],
+                'discount'        => $discountPct,
+                'total'           => $calc['total'],
+                'unit_cost'       => $unitCost,
+            ]);
+
+            $totalQty        += $qty;
+            $totalWeight      += $calc['netWeight'];
+            $totalGrossWeight += $calc['grossWeight'];
+            $totalAmount      += $calc['total'];
+            $totalCost        += $unitCost * $calc['netWeight'];
+
+            $this->adjustStock($itemData['variation_id'] ?? null, -$calc['netWeight']);
+        }
+
+        $totalOtherExpenses = 0;
+        foreach ($expenses as $expenseData) {
+            if (empty($expenseData['amount'])) continue;
+            $amount = (float) $expenseData['amount'];
+            $totalOtherExpenses += $amount;
+
+            $invoice->expenses()->create([
+                'expense_type'      => $expenseData['expense_type'],
+                'description'       => $expenseData['description'] ?? null,
+                'amount'            => $amount,
+                'paid_by'           => $expenseData['paid_by'],
+                'payee_account_id'  => $expenseData['paid_by'] === 'company' ? ($expenseData['payee_account_id'] ?? null) : null,
+            ]);
+        }
+
+        return [
+            'totals' => [
+                'total_quantity'         => $totalQty,
+                'total_weight'           => round($totalWeight, 3),
+                'total_gross_weight'     => round($totalGrossWeight, 3),
+                'net_amount'             => round($totalAmount, 2),
+                'total_other_expenses'   => round($totalOtherExpenses, 2),
+            ],
+            'total_cost' => round($totalCost, 2),
+        ];
+    }
+
     public function store(Request $request)
     {
         $request->validate([
-            'date'                     => 'required|date',
-            'account_id'               => 'required|exists:chart_of_accounts,id',
-            'type'                     => 'required|in:cash,credit',
-            'remarks'                  => 'nullable|string',
-            'discount'                 => 'nullable|numeric|min:0',
-            'payment_account_id'       => 'nullable|exists:chart_of_accounts,id',
-            'amount_received'          => 'nullable|numeric|min:0',
-            'items'                    => 'required|array|min:1',
-            'items.*.product_id'       => 'required|exists:products,id',
-            'items.*.variation_id'     => 'nullable|exists:product_variations,id',
-            'items.*.sale_price'       => 'required|numeric|min:0',
-            'items.*.quantity'         => 'required|numeric|min:0.01',
-            'items.*.discount'         => 'nullable|numeric|min:0|max:100',
+            'date'                        => 'required|date',
+            'account_id'                  => 'required|exists:chart_of_accounts,id',
+            'vendor_id'                   => 'nullable|exists:chart_of_accounts,id',
+            'type'                        => 'required|in:cash,credit',
+            'credit_days'                 => 'required_if:type,credit|nullable|integer|min:1',
+            'remarks'                     => 'nullable|string',
+            'discount'                    => 'nullable|numeric|min:0',
+            'payment_account_id'          => 'nullable|exists:chart_of_accounts,id',
+            'amount_received'             => 'nullable|numeric|min:0',
+            'items'                       => 'required|array|min:1',
+            'items.*.product_id'          => 'required|exists:products,id',
+            'items.*.variation_id'        => 'nullable|exists:product_variations,id',
+            'items.*.packing_unit_id'     => 'nullable|exists:measurement_units,id',
+            'items.*.wt_per_packing'      => 'required|numeric|min:0.001',
+            'items.*.quantity'            => 'required|numeric|min:0.01',
+            'items.*.net_weight'          => 'nullable|numeric|min:0',
+            'items.*.rate_per_40kg'       => 'required|numeric|min:0',
+            'items.*.discount'            => 'nullable|numeric|min:0|max:100',
+            'expenses'                    => 'nullable|array',
+            'expenses.*.expense_type'     => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
+            'expenses.*.description'      => 'nullable|string|max:255',
+            'expenses.*.amount'           => 'required_with:expenses|numeric|min:0',
+            'expenses.*.paid_by'          => 'required_with:expenses|in:vendor,company',
+            'expenses.*.payee_account_id' => 'nullable|exists:chart_of_accounts,id',
         ]);
+
+        // Company-paid expenses need a payee; vendor-paid expenses need a vendor on the invoice.
+        foreach ($request->expenses ?? [] as $i => $exp) {
+            if (($exp['paid_by'] ?? null) === 'company' && empty($exp['payee_account_id'])) {
+                return back()->withInput()->withErrors(["expenses.$i.payee_account_id" => 'Select which account is being paid.']);
+            }
+            if (($exp['paid_by'] ?? null) === 'vendor' && empty($request->vendor_id)) {
+                return back()->withInput()->withErrors(["expenses.$i.paid_by" => 'This invoice has no Vendor selected — pick a Vendor above, or set this expense to Company.']);
+            }
+        }
 
         DB::beginTransaction();
 
         try {
-            // ── Server-side stock validation (never trust the frontend) ──
             foreach ($request->items as $itemData) {
-                $available = $this->resolveAvailableStock((int) $itemData['product_id'], $itemData['variation_id'] ?? null);
-                $requested = (float) $itemData['quantity'];
-                if ($requested > $available) {
-                    throw new \Exception("Insufficient stock for the selected item. Available: {$available}, Requested: {$requested}.");
+                $available = $this->resolveAvailableStock($itemData['variation_id'] ?? null);
+                $wtPerPacking = (float) $itemData['wt_per_packing'];
+                $qty = (float) $itemData['quantity'];
+                $netOverride = isset($itemData['net_weight']) && $itemData['net_weight'] !== '' ? (float) $itemData['net_weight'] : null;
+                $requestedWeight = $netOverride ?? ($wtPerPacking * $qty);
+
+                if ($requestedWeight > $available) {
+                    throw new \Exception("Insufficient stock. Available: {$available} kg, Requested: {$requestedWeight} kg.");
                 }
             }
 
-            $last      = SaleInvoice::withTrashed()->orderByDesc('id')->first() ?? SaleInvoice::orderByDesc('id')->first();
+            $last      = SaleInvoice::orderByDesc('id')->first();
             $invoiceNo = str_pad($last ? intval($last->invoice_no ?? $last->id) + 1 : 1, 6, '0', STR_PAD_LEFT);
 
             $invoice = SaleInvoice::create([
                 'invoice_no' => $invoiceNo,
                 'date'       => $request->date,
                 'account_id' => $request->account_id,
+                'vendor_id'  => $request->vendor_id,
                 'type'       => $request->type,
+                'credit_days'=> $request->type === 'credit' ? $request->credit_days : null,
                 'remarks'    => $request->remarks,
                 'discount'   => (float) ($request->discount ?? 0),
                 'created_by' => auth()->id(),
             ]);
 
-            $grossTotal = 0;
-            $totalCost  = 0;
+            $result = $this->syncItemsAndExpenses($invoice, $request->items, $request->expenses ?? []);
+            $totals = $result['totals'];
+            $totalCost = $result['total_cost'];
 
-            foreach ($request->items as $itemData) {
-                $qty       = (float) $itemData['quantity'];
-                $price     = (float) $itemData['sale_price'];
-                $discPct   = (float) ($itemData['discount'] ?? 0);
-                $lineTotal = round(($price - ($price * $discPct / 100)) * $qty, 2);
-                $grossTotal += $lineTotal;
+            $netAmount = max(0, round($totals['net_amount'] - (float) ($request->discount ?? 0), 2));
+            $totals['net_amount'] = $netAmount;
 
-                $unitCost = $this->resolveUnitCost((int) $itemData['product_id'], $itemData['variation_id'] ?? null, $price);
-                $totalCost += $unitCost * $qty;
-
-                $invoice->items()->create([
-                    'product_id'   => $itemData['product_id'],
-                    'variation_id' => $itemData['variation_id'] ?? null,
-                    'sale_price'   => $price,
-                    'quantity'     => $qty,
-                    'discount'     => $discPct,
-                    'total'        => $lineTotal,
-                    'unit_cost'    => $unitCost,
-                ]);
-
-                // Deduct stock immediately — Sales has no in-transit workflow.
-                $this->adjustStock((int) $itemData['product_id'], $itemData['variation_id'] ?? null, -$qty);
-            }
-
-            $netAmount      = max(0, round($grossTotal - (float) ($request->discount ?? 0), 2));
+            $totalBillAmount = round($netAmount + $totals['total_other_expenses'], 2);
             $amountReceived = (float) ($request->amount_received ?? 0);
 
-            if ($amountReceived > $netAmount) {
-                throw new \Exception('Amount received cannot exceed the invoice total.');
+            if ($amountReceived > $totalBillAmount) {
+                throw new \Exception('Amount received cannot exceed the total bill amount.');
             }
             if ($amountReceived > 0 && !$request->payment_account_id) {
                 throw new \Exception('A payment account is required when an amount has been received.');
             }
 
-            $invoice->update([
-                'net_amount'      => $netAmount,
-                'amount_received' => $amountReceived,
-            ]);
+            $invoice->update(array_merge($totals, ['amount_received' => $amountReceived]));
 
-            // 1) Revenue — always booked in full against the customer's AR account.
+            // 1) Revenue — full item amount, against the customer's AR.
             if ($netAmount > 0) {
-                Voucher::create([
-                    'date'         => $request->date,
-                    'voucher_type' => 'journal',
-                    'ac_dr_sid'    => $request->account_id,
-                    'ac_cr_sid'    => $this->salesRevenueAccount()->id,
-                    'amount'       => $netAmount,
-                    'reference'    => "SI-{$invoice->id}-REVENUE",
-                    'remarks'      => "Sale Invoice #{$invoiceNo} — revenue recognized",
-                ]);
+                $this->postVoucher(
+                    $request->date, $invoice->account, $this->salesRevenueAccount(), $netAmount,
+                    "SI-{$invoice->id}-REVENUE", "Sale Invoice #{$invoiceNo} — revenue recognized"
+                );
             }
 
-            // 2) Receipt — only if something was actually received now.
+            // 2) Receipt — only if something was collected now.
             if ($amountReceived > 0) {
-                Voucher::create([
-                    'date'         => $request->date,
-                    'voucher_type' => 'journal',
-                    'ac_dr_sid'    => $request->payment_account_id,
-                    'ac_cr_sid'    => $request->account_id,
-                    'amount'       => $amountReceived,
-                    'reference'    => "SI-{$invoice->id}-RECEIPT-1",
-                    'remarks'      => "Sale Invoice #{$invoiceNo} — payment received",
-                ]);
+                $this->postVoucher(
+                    $request->date, ChartOfAccounts::findOrFail($request->payment_account_id), $invoice->account, $amountReceived,
+                    "SI-{$invoice->id}-RECEIPT-1", "Sale Invoice #{$invoiceNo} — payment received"
+                );
             }
 
             // 3) COGS
             if ($totalCost > 0) {
-                Voucher::create([
-                    'date'         => $request->date,
-                    'voucher_type' => 'journal',
-                    'ac_dr_sid'    => $this->cogsAccount()->id,
-                    'ac_cr_sid'    => $this->inventoryAccount()->id,
-                    'amount'       => round($totalCost, 2),
-                    'reference'    => "SI-{$invoice->id}-COGS",
-                    'remarks'      => "Sale Invoice #{$invoiceNo} — cost of goods sold",
-                ]);
+                $this->postVoucher(
+                    $request->date, $this->cogsAccount(), $this->inventoryAccount(), $totalCost,
+                    "SI-{$invoice->id}-COGS", "Sale Invoice #{$invoiceNo} — cost of goods sold"
+                );
+            }
+
+            // 4) Each expense — always increases what customer owes; credit side
+            // routes to Vendor or the chosen payee account.
+            foreach ($invoice->expenses as $i => $expense) {
+                $targetAccount = $expense->paid_by === SaleInvoiceExpense::PAID_BY_VENDOR
+                    ? $invoice->vendor
+                    : $expense->payeeAccount;
+
+                if (!$targetAccount) {
+                    throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
+                }
+
+                $this->postVoucher(
+                    $request->date, $invoice->account, $targetAccount, (float) $expense->amount,
+                    "SI-{$invoice->id}-EXPENSE-" . ($i + 1),
+                    "Sale Invoice #{$invoiceNo} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()}"
+                );
             }
 
             DB::commit();
@@ -308,12 +355,17 @@ class SaleInvoiceController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // EDIT FORM
-    // ─────────────────────────────────────────────────────────────
+    public function show($id)
+    {
+        $invoice = SaleInvoice::with(['account', 'vendor', 'items.product', 'items.variation', 'items.packingUnit', 'expenses.payeeAccount'])->findOrFail($id);
+        $vouchers = $invoice->vouchers();
+
+        return view('sales.show', compact('invoice', 'vouchers'));
+    }
+
     public function edit($id)
     {
-        $invoice = SaleInvoice::with(['items.product', 'items.variation'])->findOrFail($id);
+        $invoice = SaleInvoice::with(['items', 'expenses'])->findOrFail($id);
 
         $products = Product::with('variations')->orderBy('name')->get();
         $products->each(function ($p) {
@@ -322,157 +374,151 @@ class SaleInvoiceController extends Controller
 
         $customers = ChartOfAccounts::where('account_type', config('sale_accounts.customer_account_type'))
             ->orderBy('name')->get();
+        $vendors = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $paymentAccounts = ChartOfAccounts::whereIn('account_type', config('sale_accounts.payment_account_types'))
             ->orderBy('name')->get();
+        $payeeAccounts = ChartOfAccounts::orderBy('name')->get();
+        $units = MeasurementUnit::all();
+        $kgPerMaund = $this->kgPerMaund();
 
         $amountReceived = (float) $invoice->amount_received;
 
-        return view('sales.edit', [
-            'invoice'         => $invoice,
-            'products'        => $products,
-            'customers'       => $customers,
-            'paymentAccounts' => $paymentAccounts,
-            'amountReceived'  => $amountReceived,
-        ]);
+        return view('sales.edit', compact('invoice', 'products', 'customers', 'vendors', 'paymentAccounts', 'payeeAccounts', 'units', 'kgPerMaund', 'amountReceived'));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // UPDATE
-    //
-    // Re-syncs items/stock/revenue/COGS to whatever the form now says.
-    // 'amount_received' on THIS request is treated as a NEW incremental
-    // payment (matching the edit UI's "Add New Payment" section) — it is
-    // added on top of whatever was already received, never overwrites it.
-    // ─────────────────────────────────────────────────────────────
     public function update(Request $request, $id)
     {
         $request->validate([
-            'date'                     => 'required|date',
-            'account_id'               => 'required|exists:chart_of_accounts,id',
-            'type'                     => 'required|in:cash,credit',
-            'remarks'                  => 'nullable|string',
-            'discount'                 => 'nullable|numeric|min:0',
-            'payment_account_id'       => 'nullable|exists:chart_of_accounts,id',
-            'amount_received'          => 'nullable|numeric|min:0', // incremental new payment
-            'items'                    => 'required|array|min:1',
-            'items.*.product_id'       => 'required|exists:products,id',
-            'items.*.variation_id'     => 'nullable|exists:product_variations,id',
-            'items.*.sale_price'       => 'required|numeric|min:0',
-            'items.*.quantity'         => 'required|numeric|min:0.01',
-            'items.*.discount'         => 'nullable|numeric|min:0|max:100',
+            'date'                        => 'required|date',
+            'account_id'                  => 'required|exists:chart_of_accounts,id',
+            'vendor_id'                   => 'nullable|exists:chart_of_accounts,id',
+            'type'                        => 'required|in:cash,credit',
+            'credit_days'                 => 'required_if:type,credit|nullable|integer|min:1',
+            'remarks'                     => 'nullable|string',
+            'discount'                    => 'nullable|numeric|min:0',
+            'payment_account_id'          => 'nullable|exists:chart_of_accounts,id',
+            'amount_received'             => 'nullable|numeric|min:0', // incremental new payment
+            'items'                       => 'required|array|min:1',
+            'items.*.product_id'          => 'required|exists:products,id',
+            'items.*.variation_id'        => 'nullable|exists:product_variations,id',
+            'items.*.packing_unit_id'     => 'nullable|exists:measurement_units,id',
+            'items.*.wt_per_packing'      => 'required|numeric|min:0.001',
+            'items.*.quantity'            => 'required|numeric|min:0.01',
+            'items.*.net_weight'          => 'nullable|numeric|min:0',
+            'items.*.rate_per_40kg'       => 'required|numeric|min:0',
+            'items.*.discount'            => 'nullable|numeric|min:0|max:100',
+            'expenses'                    => 'nullable|array',
+            'expenses.*.expense_type'     => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
+            'expenses.*.description'      => 'nullable|string|max:255',
+            'expenses.*.amount'           => 'required_with:expenses|numeric|min:0',
+            'expenses.*.paid_by'          => 'required_with:expenses|in:vendor,company',
+            'expenses.*.payee_account_id' => 'nullable|exists:chart_of_accounts,id',
         ]);
+
+        foreach ($request->expenses ?? [] as $i => $exp) {
+            if (($exp['paid_by'] ?? null) === 'company' && empty($exp['payee_account_id'])) {
+                return back()->withInput()->withErrors(["expenses.$i.payee_account_id" => 'Select which account is being paid.']);
+            }
+            if (($exp['paid_by'] ?? null) === 'vendor' && empty($request->vendor_id)) {
+                return back()->withInput()->withErrors(["expenses.$i.paid_by" => 'This invoice has no Vendor selected.']);
+            }
+        }
 
         DB::beginTransaction();
 
         try {
-            $invoice = SaleInvoice::with('items')->lockForUpdate()->findOrFail($id);
+            $invoice = SaleInvoice::with(['items', 'expenses'])->lockForUpdate()->findOrFail($id);
 
-            // ── Reverse old stock first ──
+            // Reverse old stock (by net weight) before validating new amounts.
             foreach ($invoice->items as $oldItem) {
-                $this->adjustStock($oldItem->product_id, $oldItem->variation_id, +$oldItem->quantity);
+                $this->adjustStock($oldItem->variation_id, +(float) $oldItem->net_weight);
             }
 
-            // ── Validate new stock requirements against post-reversal availability ──
             foreach ($request->items as $itemData) {
-                $available = $this->resolveAvailableStock((int) $itemData['product_id'], $itemData['variation_id'] ?? null);
-                $requested = (float) $itemData['quantity'];
-                if ($requested > $available) {
-                    throw new \Exception("Insufficient stock for the selected item. Available: {$available}, Requested: {$requested}.");
+                $available = $this->resolveAvailableStock($itemData['variation_id'] ?? null);
+                $wtPerPacking = (float) $itemData['wt_per_packing'];
+                $qty = (float) $itemData['quantity'];
+                $netOverride = isset($itemData['net_weight']) && $itemData['net_weight'] !== '' ? (float) $itemData['net_weight'] : null;
+                $requestedWeight = $netOverride ?? ($wtPerPacking * $qty);
+
+                if ($requestedWeight > $available) {
+                    throw new \Exception("Insufficient stock. Available: {$available} kg, Requested: {$requestedWeight} kg.");
                 }
             }
 
             $invoice->update([
-                'date'       => $request->date,
-                'account_id' => $request->account_id,
-                'type'       => $request->type,
-                'remarks'    => $request->remarks,
-                'discount'   => (float) ($request->discount ?? 0),
+                'date'        => $request->date,
+                'account_id'  => $request->account_id,
+                'vendor_id'   => $request->vendor_id,
+                'type'        => $request->type,
+                'credit_days' => $request->type === 'credit' ? $request->credit_days : null,
+                'remarks'     => $request->remarks,
+                'discount'    => (float) ($request->discount ?? 0),
             ]);
 
-            $invoice->items()->delete();
+            $result = $this->syncItemsAndExpenses($invoice, $request->items, $request->expenses ?? []);
+            $totals = $result['totals'];
+            $totalCost = $result['total_cost'];
 
-            $grossTotal = 0;
-            $totalCost  = 0;
+            $netAmount = max(0, round($totals['net_amount'] - (float) ($request->discount ?? 0), 2));
+            $totals['net_amount'] = $netAmount;
 
-            foreach ($request->items as $itemData) {
-                $qty       = (float) $itemData['quantity'];
-                $price     = (float) $itemData['sale_price'];
-                $discPct   = (float) ($itemData['discount'] ?? 0);
-                $lineTotal = round(($price - ($price * $discPct / 100)) * $qty, 2);
-                $grossTotal += $lineTotal;
-
-                $unitCost = $this->resolveUnitCost((int) $itemData['product_id'], $itemData['variation_id'] ?? null, $price);
-                $totalCost += $unitCost * $qty;
-
-                $invoice->items()->create([
-                    'product_id'   => $itemData['product_id'],
-                    'variation_id' => $itemData['variation_id'] ?? null,
-                    'sale_price'   => $price,
-                    'quantity'     => $qty,
-                    'discount'     => $discPct,
-                    'total'        => $lineTotal,
-                    'unit_cost'    => $unitCost,
-                ]);
-
-                $this->adjustStock((int) $itemData['product_id'], $itemData['variation_id'] ?? null, -$qty);
-            }
-
-            $netAmount    = max(0, round($grossTotal - (float) ($request->discount ?? 0), 2));
+            $totalBillAmount = round($netAmount + $totals['total_other_expenses'], 2);
             $newPaymentNow = (float) ($request->amount_received ?? 0);
             $priorReceived = (float) $invoice->getOriginal('amount_received');
 
-            if (($priorReceived + $newPaymentNow) > $netAmount) {
-                throw new \Exception('Total amount received cannot exceed the revised invoice total.');
+            if (($priorReceived + $newPaymentNow) > $totalBillAmount) {
+                throw new \Exception('Total amount received cannot exceed the revised total bill amount.');
             }
             if ($newPaymentNow > 0 && !$request->payment_account_id) {
                 throw new \Exception('A payment account is required to record a new payment.');
             }
 
-            $invoice->update([
-                'net_amount'      => $netAmount,
-                'amount_received' => $priorReceived + $newPaymentNow,
-            ]);
+            $invoice->update(array_merge($totals, ['amount_received' => $priorReceived + $newPaymentNow]));
 
-            // Re-sync REVENUE voucher to the (possibly changed) invoice total.
+            // Re-sync REVENUE and COGS to the (possibly changed) totals.
             if ($netAmount > 0) {
                 Voucher::updateOrCreate(
                     ['reference' => "SI-{$invoice->id}-REVENUE", 'voucher_type' => 'journal'],
-                    [
-                        'date'      => $request->date,
-                        'ac_dr_sid' => $request->account_id,
-                        'ac_cr_sid' => $this->salesRevenueAccount()->id,
-                        'amount'    => $netAmount,
-                        'remarks'   => "Sale Invoice #{$invoice->invoice_no} — revenue (updated)",
-                    ]
+                    ['date' => $request->date, 'ac_dr_sid' => $request->account_id, 'ac_cr_sid' => $this->salesRevenueAccount()->id,
+                     'amount' => $netAmount, 'remarks' => "Sale Invoice #{$invoice->invoice_no} — revenue (updated)"]
                 );
             }
-
-            // Re-sync COGS voucher.
             if ($totalCost > 0) {
                 Voucher::updateOrCreate(
                     ['reference' => "SI-{$invoice->id}-COGS", 'voucher_type' => 'journal'],
-                    [
-                        'date'      => $request->date,
-                        'ac_dr_sid' => $this->cogsAccount()->id,
-                        'ac_cr_sid' => $this->inventoryAccount()->id,
-                        'amount'    => round($totalCost, 2),
-                        'remarks'   => "Sale Invoice #{$invoice->invoice_no} — COGS (updated)",
-                    ]
+                    ['date' => $request->date, 'ac_dr_sid' => $this->cogsAccount()->id, 'ac_cr_sid' => $this->inventoryAccount()->id,
+                     'amount' => round($totalCost, 2), 'remarks' => "Sale Invoice #{$invoice->invoice_no} — COGS (updated)"]
                 );
             }
 
-            // New payment now = its own settlement voucher (does NOT touch revenue).
+            // Re-sync expense vouchers — delete old ones, repost fresh (expenses
+            // themselves were fully replaced in syncItemsAndExpenses above).
+            Voucher::where('reference', 'like', "SI-{$invoice->id}-EXPENSE-%")->delete();
+            foreach ($invoice->expenses as $i => $expense) {
+                $targetAccount = $expense->paid_by === SaleInvoiceExpense::PAID_BY_VENDOR
+                    ? $invoice->vendor
+                    : $expense->payeeAccount;
+
+                if (!$targetAccount) {
+                    throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
+                }
+
+                $this->postVoucher(
+                    $request->date, ChartOfAccounts::findOrFail($request->account_id), $targetAccount, (float) $expense->amount,
+                    "SI-{$invoice->id}-EXPENSE-" . ($i + 1),
+                    "Sale Invoice #{$invoice->invoice_no} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()} (updated)"
+                );
+            }
+
+            // New payment now = its own settlement voucher.
             if ($newPaymentNow > 0) {
                 $receiptCount = Voucher::where('reference', 'like', "SI-{$invoice->id}-RECEIPT-%")->count();
-                Voucher::create([
-                    'date'         => $request->date,
-                    'voucher_type' => 'journal',
-                    'ac_dr_sid'    => $request->payment_account_id,
-                    'ac_cr_sid'    => $request->account_id,
-                    'amount'       => $newPaymentNow,
-                    'reference'    => "SI-{$invoice->id}-RECEIPT-" . ($receiptCount + 1),
-                    'remarks'      => "Sale Invoice #{$invoice->invoice_no} — additional payment received",
-                ]);
+                $this->postVoucher(
+                    $request->date, ChartOfAccounts::findOrFail($request->payment_account_id), ChartOfAccounts::findOrFail($request->account_id), $newPaymentNow,
+                    "SI-{$invoice->id}-RECEIPT-" . ($receiptCount + 1),
+                    "Sale Invoice #{$invoice->invoice_no} — additional payment received"
+                );
             }
 
             DB::commit();
@@ -486,7 +532,9 @@ class SaleInvoiceController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────
-    // DESTROY — full reversal (stock + all vouchers), hard delete.
+    // DESTROY — full reversal (stock + all vouchers). This IS the
+    // "undo" for Sale, since Sale has no intermediate status stages —
+    // one action either fully commits or fully unwinds.
     // ─────────────────────────────────────────────────────────────
     public function destroy($id)
     {
@@ -496,12 +544,13 @@ class SaleInvoiceController extends Controller
             $invoice = SaleInvoice::with('items')->lockForUpdate()->findOrFail($id);
 
             foreach ($invoice->items as $item) {
-                $this->adjustStock($item->product_id, $item->variation_id, +$item->quantity);
+                $this->adjustStock($item->variation_id, +(float) $item->net_weight);
             }
 
             Voucher::where('reference', 'like', "SI-{$invoice->id}-%")->delete();
 
             $invoice->items()->delete();
+            $invoice->expenses()->delete();
             $invoice->delete();
 
             DB::commit();
@@ -515,12 +564,9 @@ class SaleInvoiceController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // PRINT (PDF)
-    // ─────────────────────────────────────────────────────────────
     public function print($id)
     {
-        $invoice = SaleInvoice::with(['account', 'items.product', 'items.variation'])->findOrFail($id);
+        $invoice = SaleInvoice::with(['account', 'items.product', 'items.variation', 'expenses'])->findOrFail($id);
 
         $pdf = new \TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
         $pdf->SetCreator('BillTrix');
@@ -530,11 +576,6 @@ class SaleInvoiceController extends Controller
         $pdf->SetMargins(15, 15, 15);
         $pdf->SetAutoPageBreak(true, 20);
         $pdf->AddPage();
-
-        $logoPath = public_path('assets/img/logo.png');
-        if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 15, 12, 35);
-        }
 
         $pdf->SetFont('helvetica', 'B', 16);
         $pdf->SetXY(110, 12);
@@ -557,63 +598,58 @@ class SaleInvoiceController extends Controller
         $pdf->Ln(5);
 
         $html = '
-        <table border="1" cellpadding="5" style="font-size:10px;">
+        <table border="1" cellpadding="4" style="font-size:9px;">
             <thead>
                 <tr style="background-color:#f2f2f2;font-weight:bold;text-align:center;">
-                    <th width="5%">#</th>
-                    <th width="30%">Item</th>
-                    <th width="15%">Variation</th>
-                    <th width="10%">Qty</th>
-                    <th width="15%">Price</th>
-                    <th width="10%">Disc %</th>
-                    <th width="15%">Total</th>
+                    <th width="18%">Item</th><th width="8%">Qty</th><th width="10%">Net Wt</th>
+                    <th width="12%">Rate (40kg)</th><th width="10%">Rate (kg)</th>
+                    <th width="10%">Disc %</th><th width="15%">Total</th>
                 </tr>
             </thead>
             <tbody>';
 
         $gross = 0;
-        foreach ($invoice->items as $index => $item) {
-            $variationName = $item->variation->sku ?? '-';
-            $lineTotal = $item->total ?? $item->lineTotal();
+        foreach ($invoice->items as $item) {
+            $lineTotal = $item->total;
             $gross += $lineTotal;
 
             $html .= '
                 <tr>
-                    <td width="5%"  style="text-align:center;">' . ($index + 1) . '</td>
-                    <td width="30%">' . e($item->product->name ?? '-') . '</td>
-                    <td width="15%" style="text-align:center;">' . e($variationName) . '</td>
-                    <td width="10%" style="text-align:center;">' . number_format($item->quantity, 2) . '</td>
-                    <td width="15%" style="text-align:right;">'  . number_format($item->sale_price, 2) . '</td>
+                    <td width="18%">' . e($item->product->name ?? '-') . '</td>
+                    <td width="8%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
+                    <td width="10%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
+                    <td width="12%" style="text-align:right;">' . number_format($item->rate_per_40kg, 2) . '</td>
+                    <td width="10%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
                     <td width="10%" style="text-align:center;">' . number_format($item->discount, 2) . '</td>
-                    <td width="15%" style="text-align:right;">'  . number_format($lineTotal, 2) . '</td>
+                    <td width="15%" style="text-align:right;">' . number_format($lineTotal, 2) . '</td>
                 </tr>';
         }
 
-        $html .= '
-                <tr style="font-weight:bold;">
-                    <td colspan="6" style="text-align:right;">Gross Total</td>
-                    <td style="text-align:right;">' . number_format($gross, 2) . '</td>
-                </tr>
-                <tr>
-                    <td colspan="6" style="text-align:right;">Discount</td>
-                    <td style="text-align:right;">' . number_format($invoice->discount, 2) . '</td>
-                </tr>
-                <tr style="font-weight:bold;background-color:#fafafa;">
-                    <td colspan="6" style="text-align:right;">Net Amount</td>
-                    <td style="text-align:right;">' . number_format($invoice->net_amount, 2) . '</td>
-                </tr>
-                <tr>
-                    <td colspan="6" style="text-align:right;">Amount Received</td>
-                    <td style="text-align:right;">' . number_format($invoice->amount_received, 2) . '</td>
-                </tr>
-                <tr style="font-weight:bold;color:#b30000;">
-                    <td colspan="6" style="text-align:right;">Balance Due</td>
-                    <td style="text-align:right;">' . number_format($invoice->remainingBalance(), 2) . '</td>
-                </tr>
-            </tbody>
-        </table>';
-
+        $html .= '</tbody></table>';
         $pdf->writeHTML($html, true, false, false, false, '');
+        $pdf->Ln(3);
+
+        if ($invoice->expenses->count()) {
+            $expHtml = '<table border="1" cellpadding="4" style="font-size:9px;"><thead><tr style="background-color:#f2f2f2;font-weight:bold;"><th width="30%">Expense</th><th width="40%">Description</th><th width="30%">Amount</th></tr></thead><tbody>';
+            foreach ($invoice->expenses as $exp) {
+                $expHtml .= '<tr><td width="30%">' . $exp->typeLabel() . '</td><td width="40%">' . e($exp->description) . '</td><td width="30%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+            }
+            $expHtml .= '</tbody></table>';
+            $pdf->writeHTML($expHtml, true, false, false, false, '');
+            $pdf->Ln(3);
+        }
+
+        $summaryHtml = '
+        <table width="60%" border="1" cellpadding="4" style="font-size:10px;" align="right">
+            <tr><td><b>Gross Weight</b></td><td style="text-align:right;">' . number_format($invoice->total_gross_weight, 2) . ' kg</td></tr>
+            <tr><td><b>Net Weight</b></td><td style="text-align:right;">' . number_format($invoice->total_weight, 2) . ' kg</td></tr>
+            <tr><td><b>Total Item Amount</b></td><td style="text-align:right;">' . number_format($invoice->net_amount, 2) . '</td></tr>
+            <tr><td><b>Total Expense Amount</b></td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#fafafa;"><td>Total Bill Amount</td><td style="text-align:right;">' . number_format($invoice->totalBillAmount(), 2) . '</td></tr>
+            <tr><td>Amount Received</td><td style="text-align:right;">' . number_format($invoice->amount_received, 2) . '</td></tr>
+            <tr style="font-weight:bold;color:#b30000;"><td>Balance Due</td><td style="text-align:right;">' . number_format($invoice->remainingBalance(), 2) . '</td></tr>
+        </table>';
+        $pdf->writeHTML($summaryHtml, true, false, false, false, '');
 
         if ($invoice->remarks) {
             $pdf->Ln(2);

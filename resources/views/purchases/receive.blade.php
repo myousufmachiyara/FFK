@@ -76,23 +76,41 @@
             </table>
           </div>
 
-          <h5 class="mt-4">Other Expenses <small class="text-muted">(paid by FFK — added to inventory cost)</small></h5>
-          <div class="table-responsive mb-2">
-            <table class="table table-bordered table-sm" id="expenseTable">
+          @if($invoice->expenses->count())
+          <h5 class="mt-4">Other Expenses <small class="text-muted">(entered at creation — confirm, don't re-enter)</small></h5>
+          <div class="table-responsive mb-3">
+            <table class="table table-bordered table-sm">
               <thead>
-                <tr>
-                  <th width="25%">Type</th>
-                  <th width="50%">Description</th>
-                  <th width="20%">Amount</th>
-                  <th width="30px"></th>
-                </tr>
+                <tr><th>Type</th><th>Description</th><th>Amount</th><th>Paid By</th><th>Payee</th></tr>
               </thead>
-              <tbody id="expenseBody"></tbody>
+              <tbody>
+                @foreach($invoice->expenses as $exp)
+                <tr>
+                  <td>{{ $exp->typeLabel() }}</td>
+                  <td>{{ $exp->description }}</td>
+                  <td>{{ number_format($exp->amount, 2) }}</td>
+                  <td><span class="badge {{ $exp->paid_by === 'vendor' ? 'bg-secondary' : 'bg-info text-dark' }}">{{ $exp->paidByLabel() }}</span></td>
+                  <td>{{ $exp->paid_by === 'vendor' ? ($invoice->vendor->name ?? '-') : ($exp->payeeAccount->name ?? '—') }}</td>
+                </tr>
+                @endforeach
+                <tr class="fw-bold table-light">
+                  <td colspan="2" class="text-end">Total</td>
+                  <td>{{ number_format($invoice->total_other_expenses, 2) }}</td>
+                  <td colspan="2"></td>
+                </tr>
+              </tbody>
             </table>
           </div>
-          <button type="button" class="btn btn-outline-secondary btn-sm mb-3" onclick="addExpenseRow()"><i class="fas fa-plus"></i> Add Expense</button>
+          <p class="text-muted small">
+            <i class="fas fa-info-circle"></i> These are allocated across items proportional to dispatched net weight,
+            and added into inventory cost when you confirm below. Need to change an amount or payee? Edit is locked
+            after In Transit — contact an admin if a correction is needed before receiving.
+          </p>
+          @else
+          <p class="text-muted small mt-3">No Other Expenses were entered for this invoice.</p>
+          @endif
 
-          <div class="row mb-3">
+          <div class="row mb-3 mt-3">
             <div class="col-md-6">
               <label>Attachment</label>
               <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip">
@@ -102,11 +120,6 @@
               <textarea name="remarks" class="form-control" rows="1"></textarea>
             </div>
           </div>
-
-          <small class="text-muted">
-            Other Expenses are split across items proportional to each item's dispatched net weight (kg),
-            and added into each item's landed inventory cost.
-          </small>
         </div>
 
         <footer class="card-footer text-end">
@@ -127,27 +140,5 @@
       document.getElementById('short_' + row).value = short.toFixed(2);
     });
   });
-
-  let expenseIdx = 0;
-  function addExpenseRow() {
-      const idx = expenseIdx++;
-      const row = `
-      <tr data-erow="${idx}">
-          <td>
-              <select name="expenses[${idx}][expense_type]" class="form-control">
-                  <option value="bilty">Bilty</option>
-                  <option value="labor">Labor</option>
-                  <option value="weighing">Weighing</option>
-                  <option value="loading_unloading">Loading/Unloading</option>
-                  <option value="transport">Transport</option>
-                  <option value="misc">Miscellaneous</option>
-              </select>
-          </td>
-          <td><input type="text" name="expenses[${idx}][description]" class="form-control"></td>
-          <td><input type="number" step="any" min="0" name="expenses[${idx}][amount]" class="form-control"></td>
-          <td><button type="button" class="btn btn-danger btn-sm" onclick="$(this).closest('tr').remove()"><i class="fas fa-times"></i></button></td>
-      </tr>`;
-      $('#expenseBody').append(row);
-  }
 </script>
 @endsection

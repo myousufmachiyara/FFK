@@ -39,18 +39,41 @@
               <i class="fas fa-undo"></i> Revert Dispatch
             </button>
           @endif
+
+          @if($invoice->isReceived())
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#undoReceiveModal">
+              <i class="fas fa-undo"></i> Undo Receive
+            </button>
+          @endif
         </div>
       </header>
 
       <div class="card-body">
         <div class="row mb-3">
-          <div class="col-md-3"><strong>Invoice Date:</strong><br>{{ $invoice->invoice_date->format('d-M-Y') }}</div>
-          <div class="col-md-3"><strong>Vendor:</strong><br>{{ $invoice->vendor->name ?? 'N/A' }}</div>
+          <div class="col-md-2"><strong>Invoice Date:</strong><br>{{ $invoice->invoice_date->format('d-M-Y') }}</div>
+          <div class="col-md-2"><strong>Vendor:</strong><br>{{ $invoice->vendor->name ?? 'N/A' }}</div>
           <div class="col-md-2"><strong>Vendor Bill #:</strong><br>{{ $invoice->bill_no ?? '—' }}</div>
           <div class="col-md-2"><strong>Bilty #:</strong><br>{{ $invoice->bilty_no ?? '—' }}</div>
+          <div class="col-md-2"><strong>Transport:</strong><br>{{ $invoice->transport_name ?? '—' }}</div>
           <div class="col-md-2"><strong>Ref #:</strong><br>{{ $invoice->ref_no ?? '—' }}</div>
         </div>
+        <div class="row mb-3">
+          <div class="col-md-2">
+            <strong>Payment Terms:</strong><br>
+            {{ ucfirst($invoice->payment_terms ?? 'cash') }}
+            @if($invoice->isCredit() && $invoice->credit_days) ({{ $invoice->credit_days }} days) @endif
+          </div>
+          @if($invoice->isCredit() && $invoice->dueDate())
+          <div class="col-md-2">
+            <strong>Due Date:</strong><br>
+            <span class="{{ now()->greaterThan($invoice->dueDate()) ? 'text-danger fw-bold' : '' }}">
+              {{ $invoice->dueDate()->format('d-M-Y') }}
+            </span>
+          </div>
+          @endif
+        </div>
 
+        <h5>Items</h5>
         <div class="table-responsive mb-4">
           <table class="table table-bordered table-sm">
             <thead>
@@ -58,7 +81,7 @@
                 <th>#</th><th>Item</th><th>Variation</th><th>Packing</th>
                 <th>Wt/Packing</th><th>Qty</th><th>Gross Wt</th><th>Net Wt</th>
                 <th>Rec. Net Wt</th><th>Short Wt</th>
-                <th>Rate/40kg</th><th>Rate/kg</th><th>Amount</th><th>Landed/kg</th>
+                <th>Rate (40 kg)</th><th>Rate (kg)</th><th>Amount</th><th>Landed/kg</th>
               </tr>
             </thead>
             <tbody>
@@ -80,28 +103,57 @@
                 <td>{{ $item->received_net_weight ? number_format($item->landedUnitCost(), 4) : '—' }}</td>
               </tr>
               @endforeach
+              <tr class="fw-bold table-light">
+                <td colspan="6" class="text-end">Totals</td>
+                <td>{{ number_format($invoice->total_gross_weight, 2) }}</td>
+                <td>{{ number_format($invoice->total_weight, 2) }}</td>
+                <td colspan="4"></td>
+                <td>{{ number_format($invoice->total_amount, 2) }}</td>
+                <td></td>
+              </tr>
             </tbody>
           </table>
         </div>
 
-        @if($invoice->expenses->count())
-        <h5>Other Expenses <small class="text-muted">(paid by FFK)</small></h5>
+        <h5>Other Expenses</h5>
         <div class="table-responsive mb-4">
           <table class="table table-sm table-bordered">
-            <thead><tr><th>Type</th><th>Description</th><th>Amount</th></tr></thead>
+            <thead><tr><th>Type</th><th>Description</th><th>Amount</th><th>Paid By</th><th>Payee</th></tr></thead>
             <tbody>
-              @foreach($invoice->expenses as $exp)
-              <tr><td>{{ $exp->typeLabel() }}</td><td>{{ $exp->description }}</td><td>{{ number_format($exp->amount, 2) }}</td></tr>
-              @endforeach
-              <tr class="fw-bold table-light"><td colspan="2" class="text-end">Total Other Expenses</td><td>{{ number_format($invoice->total_other_expenses, 2) }}</td></tr>
+              @forelse($invoice->expenses as $exp)
+              <tr>
+                <td>{{ $exp->typeLabel() }}</td>
+                <td>{{ $exp->description }}</td>
+                <td>{{ number_format($exp->amount, 2) }}</td>
+                <td><span class="badge {{ $exp->paid_by === 'vendor' ? 'bg-secondary' : 'bg-info text-dark' }}">{{ $exp->paidByLabel() }}</span></td>
+                <td>{{ $exp->paid_by === 'vendor' ? ($invoice->vendor->name ?? '-') : ($exp->payeeAccount->name ?? '—') }}</td>
+              </tr>
+              @empty
+              <tr><td colspan="5" class="text-muted text-center">No Other Expenses.</td></tr>
+              @endforelse
+              @if($invoice->expenses->count())
+              <tr class="fw-bold table-light">
+                <td colspan="2" class="text-end">Total Expense Amount</td>
+                <td>{{ number_format($invoice->total_other_expenses, 2) }}</td>
+                <td colspan="2"></td>
+              </tr>
+              @endif
             </tbody>
           </table>
         </div>
-        @endif
+
+        <h5>Purchase Invoice Summary</h5>
+        <div class="row mb-4 text-center">
+          <div class="col"><small class="text-muted d-block">Total Item Amount</small><strong>{{ number_format($invoice->total_amount, 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Total Expense Amount</small><strong>{{ number_format($invoice->total_other_expenses, 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Gross Wt.</small><strong>{{ number_format($invoice->total_gross_weight, 2) }} kg</strong></div>
+          <div class="col"><small class="text-muted d-block">Net Wt.</small><strong>{{ number_format($invoice->total_weight, 2) }} kg</strong></div>
+          <div class="col"><small class="text-muted d-block">Total Bill Amount</small><strong class="text-danger">{{ number_format($invoice->totalBillAmount(), 2) }}</strong></div>
+        </div>
 
         @if($invoice->attachments->count())
         <h5>Attachments</h5>
-        <div class="mb-4">
+        <div class="mb-3">
           @foreach($invoice->attachments as $file)
             <a href="{{ asset('storage/' . $file->file_path) }}" target="_blank" class="badge bg-light text-dark border me-1 p-2">
               <i class="fas fa-file"></i> {{ ucfirst($file->stage) }}: {{ $file->original_name }}
@@ -126,6 +178,26 @@
               </tr>
               @empty
               <tr><td colspan="6" class="text-muted text-center">No vouchers generated yet.</td></tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+
+        <h5>Status History</h5>
+        <div class="table-responsive mb-2">
+          <table class="table table-sm table-bordered">
+            <thead><tr><th>From</th><th>To</th><th>Changed By</th><th>At</th><th>Remarks</th></tr></thead>
+            <tbody>
+              @forelse($invoice->statusHistories as $h)
+              <tr>
+                <td>{{ $h->from_status ?? '—' }}</td>
+                <td>{{ $h->to_status }}</td>
+                <td>{{ optional($h->changedBy)->name ?? '—' }}</td>
+                <td>{{ $h->created_at->format('d-M-Y H:i') }}</td>
+                <td>{{ $h->remarks }}</td>
+              </tr>
+              @empty
+              <tr><td colspan="5" class="text-muted text-center">No history yet.</td></tr>
               @endforelse
             </tbody>
           </table>
@@ -179,6 +251,7 @@
     </form>
   </div>
 </div>
+
 <!-- Revert Dispatch modal -->
 <div class="modal fade" id="revertModal" tabindex="-1">
   <div class="modal-dialog">
@@ -205,4 +278,33 @@
     </form>
   </div>
 </div>
+
+<!-- Undo Receive modal -->
+<div class="modal fade" id="undoReceiveModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form action="{{ route('purchase_invoices.revertToInTransit', $invoice->id) }}" method="POST">
+      @csrf
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Undo Receive</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>This will move the invoice back to <strong>In Transit</strong>, remove the received/shortage/expense
+             vouchers, and reverse the stock that was added. Use this only if the receipt was recorded by mistake.</p>
+          <div class="mb-3">
+            <label>Reason (optional)</label>
+            <textarea name="remarks" class="form-control" rows="2" placeholder="e.g. Entered wrong received weight"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Confirm Undo</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
 @endsection
+  </div>
+</div>

@@ -247,12 +247,17 @@ class DatabaseSeeder extends Seeder
         // no separate new account needed for that one.
 
         // 📏 Measurement Units
-        MeasurementUnit::insert([
-            ['id' => 1, 'name' => 'Kilogram', 'shortcode' => 'kg'],
-            ['id' => 2, 'name' => 'Meter',    'shortcode' => 'm'],
-            ['id' => 3, 'name' => 'Pieces',   'shortcode' => 'pcs'],
-            ['id' => 4, 'name' => 'Bag',      'shortcode' => 'bag'],
-            ['id' => 5, 'name' => 'Bundle',   'shortcode' => 'bundle'],
-        ]);
+        $units = [
+            ['name' => 'Kilogram',    'shortcode' => 'kg'],
+            ['name' => 'Meter',       'shortcode' => 'm'],
+            ['name' => 'Pieces',      'shortcode' => 'pcs'],
+            ['name' => 'Plastic Bag', 'shortcode' => 'p-bag'],
+            ['name' => 'Carton',      'shortcode' => 'ctn'],
+            ['name' => 'Jute Bag',    'shortcode' => 'j-bag'],
+        ];
+        
+        foreach ($units as $unit) {
+            MeasurementUnit::firstOrCreate(['name' => $unit['name']], $unit);
+        }
     }
 }

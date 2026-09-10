@@ -35,7 +35,6 @@ class PurchaseInvoiceController extends Controller
 
     private function inventoryAccount(): ChartOfAccounts             { return $this->resolveAccount('inventory', 'Inventory / Stock in Hand'); }
     private function inventoryInTransitAccount(): ChartOfAccounts    { return $this->resolveAccount('inventory_in_transit', 'Inventory In Transit'); }
-    private function purchaseExpensesPayableAccount(): ChartOfAccounts { return $this->resolveAccount('purchase_expenses_payable', 'Purchase Expenses Payable'); }
     private function shortageLossAccount(): ChartOfAccounts          { return $this->resolveAccount('shortage_loss', 'Shortage / Inventory Loss'); }
 
     private function kgPerMaund(): int
@@ -51,6 +50,28 @@ class PurchaseInvoiceController extends Controller
             'to_status'           => $to,
             'changed_by'          => Auth::id(),
             'remarks'             => $remarks,
+        ]);
+    }
+
+    /** Posts a simple DR/CR voucher, auto-flipping legs if the amount would be negative. */
+    private function postVoucher(string $date, ChartOfAccounts $dr, ChartOfAccounts $cr, float $amount, string $reference, string $remarks): void
+    {
+        if (abs($amount) < 0.01) return;
+
+        if ($amount < 0) {
+            [$dr, $cr] = [$cr, $dr];
+            $amount = abs($amount);
+            Log::warning('[PI] Negative amount voucher leg flipped', ['reference' => $reference, 'amount' => $amount]);
+        }
+
+        Voucher::create([
+            'date'         => $date,
+            'voucher_type' => 'journal',
+            'ac_dr_sid'    => $dr->id,
+            'ac_cr_sid'    => $cr->id,
+            'amount'       => round($amount, 2),
+            'reference'    => $reference,
+            'remarks'      => $remarks,
         ]);
     }
 
@@ -79,17 +100,23 @@ class PurchaseInvoiceController extends Controller
         $products = Product::with('variations')->orderBy('name')->get();
         $vendors  = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $units    = MeasurementUnit::all();
+        $payeeAccounts = ChartOfAccounts::orderBy('name')->get(); // any account can be an expense payee
         $kgPerMaund = $this->kgPerMaund();
 
-        return view('purchases.create', compact('products', 'vendors', 'units', 'kgPerMaund'));
+        return view('purchases.create', compact('products', 'vendors', 'units', 'payeeAccounts', 'kgPerMaund'));
     }
 
-    private function syncItems(PurchaseInvoice $invoice, array $items): array
+    /**
+     * Shared server-side item + expense computation for store()/update().
+     * NEVER trust client-submitted gross_weight/amount/totals.
+     */
+    private function syncItemsAndExpenses(PurchaseInvoice $invoice, array $items, array $expenses): array
     {
         $invoice->items()->delete();
+        $invoice->expenses()->delete();
 
-        $totalQty = $totalWeight = $totalAmount = 0;
         $kgPerMaund = $this->kgPerMaund();
+        $totalQty = $totalWeight = $totalGrossWeight = $totalAmount = 0;
 
         foreach ($items as $itemData) {
             $qty          = (float) $itemData['quantity'];
@@ -113,16 +140,34 @@ class PurchaseInvoiceController extends Controller
                 'amount'          => $calc['amount'],
             ]);
 
-            $totalQty    += $qty;
-            $totalWeight += $calc['netWeight'];
-            $totalAmount += $calc['amount'];
+            $totalQty         += $qty;
+            $totalWeight       += $calc['netWeight'];
+            $totalGrossWeight  += $calc['grossWeight'];
+            $totalAmount       += $calc['amount'];
+        }
+
+        $totalOtherExpenses = 0;
+        foreach ($expenses as $expenseData) {
+            if (empty($expenseData['amount'])) continue;
+            $amount = (float) $expenseData['amount'];
+            $totalOtherExpenses += $amount;
+
+            $invoice->expenses()->create([
+                'expense_type'      => $expenseData['expense_type'],
+                'description'       => $expenseData['description'] ?? null,
+                'amount'            => $amount,
+                'paid_by'           => $expenseData['paid_by'],
+                'payee_account_id'  => $expenseData['paid_by'] === 'company' ? ($expenseData['payee_account_id'] ?? null) : null,
+            ]);
         }
 
         return [
-            'total_quantity' => $totalQty,
-            'total_weight'   => round($totalWeight, 3),
-            'total_amount'   => round($totalAmount, 2),
-            'net_amount'     => round($totalAmount, 2),
+            'total_quantity'         => $totalQty,
+            'total_weight'           => round($totalWeight, 3),
+            'total_gross_weight'     => round($totalGrossWeight, 3),
+            'total_amount'           => round($totalAmount, 2),
+            'total_other_expenses'   => round($totalOtherExpenses, 2),
+            'net_amount'             => round($totalAmount, 2),
         ];
     }
 
@@ -147,7 +192,20 @@ class PurchaseInvoiceController extends Controller
             'items.*.quantity'             => 'required|numeric|min:0.01',
             'items.*.net_weight'           => 'nullable|numeric|min:0',
             'items.*.rate_per_40kg'        => 'required|numeric|min:0',
+            'expenses'                     => 'nullable|array',
+            'expenses.*.expense_type'      => 'required_with:expenses|in:bilty,labor,weighing,loading_unloading,transport,misc',
+            'expenses.*.description'       => 'nullable|string|max:255',
+            'expenses.*.amount'            => 'required_with:expenses|numeric|min:0',
+            'expenses.*.paid_by'           => 'required_with:expenses|in:vendor,company',
+            'expenses.*.payee_account_id'  => 'nullable|exists:chart_of_accounts,id',
         ]);
+
+        // Company-paid expenses must have a payee selected.
+        foreach ($request->expenses ?? [] as $i => $exp) {
+            if (($exp['paid_by'] ?? null) === 'company' && empty($exp['payee_account_id'])) {
+                return back()->withInput()->withErrors(["expenses.$i.payee_account_id" => 'Select which account is being paid.']);
+            }
+        }
 
         DB::beginTransaction();
 
@@ -168,7 +226,7 @@ class PurchaseInvoiceController extends Controller
                 'created_by'      => auth()->id(),
             ]);
 
-            $totals = $this->syncItems($invoice, $request->items);
+            $totals = $this->syncItemsAndExpenses($invoice, $request->items, $request->expenses ?? []);
             $invoice->update($totals);
 
             if ($request->hasFile('attachments')) {
@@ -202,7 +260,7 @@ class PurchaseInvoiceController extends Controller
     {
         $invoice = PurchaseInvoice::with([
             'vendor', 'items.product', 'items.variation', 'items.packingUnit',
-            'expenses', 'attachments', 'statusHistories.changedBy',
+            'expenses.payeeAccount', 'attachments', 'statusHistories.changedBy',
         ])->findOrFail($id);
 
         $vouchers = $invoice->vouchers();
@@ -212,7 +270,7 @@ class PurchaseInvoiceController extends Controller
 
     public function edit($id)
     {
-        $invoice = PurchaseInvoice::with(['items.product.variations', 'items.variation', 'items.packingUnit', 'attachments'])
+        $invoice = PurchaseInvoice::with(['items.product.variations', 'items.variation', 'items.packingUnit', 'expenses', 'attachments'])
                         ->findOrFail($id);
 
         if (!$invoice->isPending()) {
@@ -223,9 +281,10 @@ class PurchaseInvoiceController extends Controller
         $vendors  = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $products = Product::with('variations')->select('id', 'name', 'measurement_unit')->get();
         $units    = MeasurementUnit::all();
+        $payeeAccounts = ChartOfAccounts::orderBy('name')->get();
         $kgPerMaund = $this->kgPerMaund();
 
-        return view('purchases.edit', compact('invoice', 'vendors', 'products', 'units', 'kgPerMaund'));
+        return view('purchases.edit', compact('invoice', 'vendors', 'products', 'units', 'payeeAccounts', 'kgPerMaund'));
     }
 
     public function update(Request $request, $id)
@@ -247,7 +306,19 @@ class PurchaseInvoiceController extends Controller
             'items.*.quantity'             => 'required|numeric|min:0.01',
             'items.*.net_weight'           => 'nullable|numeric|min:0',
             'items.*.rate_per_40kg'        => 'required|numeric|min:0',
+            'expenses'                     => 'nullable|array',
+            'expenses.*.expense_type'      => 'required_with:expenses|in:bilty,labor,weighing,loading_unloading,transport,misc',
+            'expenses.*.description'       => 'nullable|string|max:255',
+            'expenses.*.amount'            => 'required_with:expenses|numeric|min:0',
+            'expenses.*.paid_by'           => 'required_with:expenses|in:vendor,company',
+            'expenses.*.payee_account_id'  => 'nullable|exists:chart_of_accounts,id',
         ]);
+
+        foreach ($request->expenses ?? [] as $i => $exp) {
+            if (($exp['paid_by'] ?? null) === 'company' && empty($exp['payee_account_id'])) {
+                return back()->withInput()->withErrors(["expenses.$i.payee_account_id" => 'Select which account is being paid.']);
+            }
+        }
 
         DB::beginTransaction();
 
@@ -269,7 +340,7 @@ class PurchaseInvoiceController extends Controller
                 'remarks'         => $request->remarks,
             ]);
 
-            $totals = $this->syncItems($invoice, $request->items);
+            $totals = $this->syncItemsAndExpenses($invoice, $request->items, $request->expenses ?? []);
             $invoice->update($totals);
 
             if ($request->hasFile('attachments')) {
@@ -294,12 +365,6 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // MOVE TO IN TRANSIT — bill_no/bilty_no/transport_name are shown
-    // as optional at creation; here they're always required, but the
-    // modal pre-fills whatever was already entered so nothing needs
-    // retyping if it was already provided (same pattern as Commission).
-    // ─────────────────────────────────────────────────────────────
     public function moveToInTransit(Request $request, $id)
     {
         $request->validate([
@@ -347,15 +412,14 @@ class PurchaseInvoiceController extends Controller
                 ]);
             }
 
-            Voucher::create([
-                'date'         => now()->toDateString(),
-                'voucher_type' => 'journal',
-                'ac_dr_sid'    => $this->inventoryInTransitAccount()->id,
-                'ac_cr_sid'    => $invoice->vendor_id,
-                'amount'       => (float) $invoice->total_amount,
-                'reference'    => "PI-{$invoice->id}-INTRANSIT",
-                'remarks'      => "Purchase Invoice #{$invoice->invoice_no} — goods in transit (vendor payable created)",
-            ]);
+            $this->postVoucher(
+                now()->toDateString(),
+                $this->inventoryInTransitAccount(),
+                $invoice->vendor,
+                (float) $invoice->total_amount,
+                "PI-{$invoice->id}-INTRANSIT",
+                "Purchase Invoice #{$invoice->invoice_no} — goods in transit (vendor payable created)"
+            );
 
             $this->logStatusChange($invoice, PurchaseInvoice::STATUS_PENDING, PurchaseInvoice::STATUS_IN_TRANSIT, $request->remarks);
 
@@ -372,19 +436,9 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // REVERT DISPATCH — In Transit -> Pending, undo of a mistaken
-    // "Move to In Transit" action. Deletes the INTRANSIT voucher
-    // (nothing else was posted at that stage — receiving hasn't
-    // happened yet, so there's nothing else to reverse). Bag-count
-    // snapshot and bill_no/bilty_no/transport_name are left as-is so
-    // the user doesn't have to retype them when re-dispatching.
-    // ─────────────────────────────────────────────────────────────
     public function revertToPending(Request $request, $id)
     {
-        $request->validate([
-            'remarks' => 'nullable|string',
-        ]);
+        $request->validate(['remarks' => 'nullable|string']);
 
         DB::beginTransaction();
 
@@ -397,19 +451,14 @@ class PurchaseInvoiceController extends Controller
             }
 
             Voucher::where('reference', "PI-{$invoice->id}-INTRANSIT")->delete();
-
             $invoice->update(['status' => PurchaseInvoice::STATUS_PENDING]);
 
             $this->logStatusChange(
-                $invoice,
-                PurchaseInvoice::STATUS_IN_TRANSIT,
-                PurchaseInvoice::STATUS_PENDING,
+                $invoice, PurchaseInvoice::STATUS_IN_TRANSIT, PurchaseInvoice::STATUS_PENDING,
                 'Reverted from In Transit (mistaken dispatch). ' . ($request->remarks ?? '')
             );
 
             DB::commit();
-            Log::info('[PI] Reverted to Pending', ['invoice_id' => $invoice->id]);
-
             return redirect()->route('purchase_invoices.show', $invoice->id)
                 ->with('success', 'Dispatch reverted. Invoice is back to Pending and the vendor payable voucher was removed.');
 
@@ -422,7 +471,7 @@ class PurchaseInvoiceController extends Controller
 
     public function receiveForm($id)
     {
-        $invoice = PurchaseInvoice::with(['items.product', 'items.variation', 'items.packingUnit', 'vendor'])->findOrFail($id);
+        $invoice = PurchaseInvoice::with(['items.product', 'items.variation', 'items.packingUnit', 'expenses.payeeAccount', 'vendor'])->findOrFail($id);
 
         if (!$invoice->isInTransit()) {
             return redirect()->route('purchase_invoices.show', $invoice->id)
@@ -432,48 +481,42 @@ class PurchaseInvoiceController extends Controller
         return view('purchases.receive', compact('invoice'));
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // RECEIVE  (In Transit -> Received)
+    //
+    // Other Expenses were already entered at creation — nothing new is
+    // collected here. This step just confirms received weight per item
+    // and posts the accounting:
+    //
+    //   DR Actual Inventory        CR Inventory In Transit   (received value, by weight)
+    //   DR Shortage/Loss Account   CR Inventory In Transit   (shortage value, if any)
+    //   DR Actual Inventory        CR (Vendor OR Payee)      (per expense — paid_by routed)
+    // ─────────────────────────────────────────────────────────────
     public function receive(Request $request, $id)
     {
         $request->validate([
             'received_date'                     => 'required|date',
             'remarks'                           => 'nullable|string',
             'attachment'                        => 'nullable|file|mimes:jpg,jpeg,png,pdf,zip|max:2048',
-            'items'                             => 'required|array|min:1',
-            'items.*.id'                        => 'required|exists:purchase_invoice_items,id',
-            'items.*.received_packing_qty'      => 'nullable|numeric|min:0',
-            'items.*.received_net_weight'       => 'required|numeric|min:0',
-            'items.*.shortage_reason'           => 'nullable|string',
-            'expenses'                          => 'nullable|array',
-            'expenses.*.expense_type'           => 'required_with:expenses|in:bilty,labor,weighing,loading_unloading,transport,misc',
-            'expenses.*.description'            => 'nullable|string|max:255',
-            'expenses.*.amount'                 => 'required_with:expenses|numeric|min:0',
+            'items'                              => 'required|array|min:1',
+            'items.*.id'                          => 'required|exists:purchase_invoice_items,id',
+            'items.*.received_packing_qty'         => 'nullable|numeric|min:0',
+            'items.*.received_net_weight'           => 'required|numeric|min:0',
+            'items.*.shortage_reason'                => 'nullable|string',
         ]);
 
         DB::beginTransaction();
 
         try {
-            $invoice = PurchaseInvoice::with('items')->lockForUpdate()->findOrFail($id);
+            $invoice = PurchaseInvoice::with(['items', 'expenses'])->lockForUpdate()->findOrFail($id);
 
             if (!$invoice->isInTransit()) {
                 DB::rollBack();
                 return back()->with('error', 'This invoice is not In Transit — no action taken.');
             }
 
-            $invoice->expenses()->delete();
-            $totalOtherExpenses = 0;
-            foreach ($request->expenses ?? [] as $expenseData) {
-                if (empty($expenseData['amount'])) continue;
-                $amount = (float) $expenseData['amount'];
-                $totalOtherExpenses += $amount;
-
-                $invoice->expenses()->create([
-                    'expense_type' => $expenseData['expense_type'],
-                    'description'  => $expenseData['description'] ?? null,
-                    'amount'       => $amount,
-                ]);
-            }
-
             $totalDispatchedWeight = $invoice->items->sum(fn ($i) => (float) $i->net_weight);
+            $totalOtherExpenses    = (float) $invoice->total_other_expenses;
             $perKgExtra = $totalDispatchedWeight > 0 ? ($totalOtherExpenses / $totalDispatchedWeight) : 0;
 
             $totalReceivedValue   = 0;
@@ -522,46 +565,43 @@ class PurchaseInvoiceController extends Controller
             $transitAccount   = $this->inventoryInTransitAccount();
 
             if ($totalReceivedValue > 0) {
-                Voucher::create([
-                    'date'         => $request->received_date,
-                    'voucher_type' => 'journal',
-                    'ac_dr_sid'    => $inventoryAccount->id,
-                    'ac_cr_sid'    => $transitAccount->id,
-                    'amount'       => $totalReceivedValue,
-                    'reference'    => "PI-{$invoice->id}-RECEIVE-BASE",
-                    'remarks'      => "Purchase Invoice #{$invoice->invoice_no} — goods received into actual inventory (by weight)",
-                ]);
+                $this->postVoucher(
+                    $request->received_date, $inventoryAccount, $transitAccount, $totalReceivedValue,
+                    "PI-{$invoice->id}-RECEIVE-BASE",
+                    "Purchase Invoice #{$invoice->invoice_no} — goods received into actual inventory (by weight)"
+                );
             }
 
             if ($shortageValue > 0) {
-                Voucher::create([
-                    'date'         => $request->received_date,
-                    'voucher_type' => 'journal',
-                    'ac_dr_sid'    => $this->shortageLossAccount()->id,
-                    'ac_cr_sid'    => $transitAccount->id,
-                    'amount'       => $shortageValue,
-                    'reference'    => "PI-{$invoice->id}-RECEIVE-SHORTAGE",
-                    'remarks'      => "Purchase Invoice #{$invoice->invoice_no} — weight shortage on receipt",
-                ]);
+                $this->postVoucher(
+                    $request->received_date, $this->shortageLossAccount(), $transitAccount, $shortageValue,
+                    "PI-{$invoice->id}-RECEIVE-SHORTAGE",
+                    "Purchase Invoice #{$invoice->invoice_no} — weight shortage on receipt"
+                );
             }
 
-            if ($totalOtherExpenses > 0) {
-                Voucher::create([
-                    'date'         => $request->received_date,
-                    'voucher_type' => 'journal',
-                    'ac_dr_sid'    => $inventoryAccount->id,
-                    'ac_cr_sid'    => $this->purchaseExpensesPayableAccount()->id,
-                    'amount'       => round($totalOtherExpenses, 2),
-                    'reference'    => "PI-{$invoice->id}-RECEIVE-CHARGES",
-                    'remarks'      => "Purchase Invoice #{$invoice->invoice_no} — Other Expenses (paid by FFK) added to inventory cost",
-                ]);
+            // Each expense: already stored at creation, routed to Vendor or
+            // the specific payee account chosen at that time.
+            foreach ($invoice->expenses as $i => $expense) {
+                $targetAccount = $expense->paid_by === PurchaseInvoiceExpense::PAID_BY_VENDOR
+                    ? $invoice->vendor
+                    : $expense->payeeAccount;
+
+                if (!$targetAccount) {
+                    throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
+                }
+
+                $this->postVoucher(
+                    $request->received_date, $inventoryAccount, $targetAccount, (float) $expense->amount,
+                    "PI-{$invoice->id}-RECEIVE-EXPENSE-" . ($i + 1),
+                    "Purchase Invoice #{$invoice->invoice_no} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()}"
+                );
             }
 
             $invoice->update([
-                'status'                => PurchaseInvoice::STATUS_RECEIVED,
-                'received_at'           => $request->received_date,
-                'received_by'           => auth()->id(),
-                'total_other_expenses'  => round($totalOtherExpenses, 2),
+                'status'       => PurchaseInvoice::STATUS_RECEIVED,
+                'received_at'  => $request->received_date,
+                'received_by'  => auth()->id(),
             ]);
 
             if ($request->hasFile('attachment')) {
@@ -605,6 +645,7 @@ class PurchaseInvoiceController extends Controller
         DB::beginTransaction();
         try {
             $invoice->items()->delete();
+            $invoice->expenses()->delete();
             $invoice->delete();
 
             DB::commit();
@@ -713,7 +754,7 @@ class PurchaseInvoiceController extends Controller
 
         $html .= '
                 <tr style="font-weight:bold;background-color:#fafafa;">
-                    <td colspan="8" style="text-align:right;">Total Amount</td>
+                    <td colspan="8" style="text-align:right;">Total Item Amount</td>
                     <td style="text-align:right;">' . number_format($invoice->total_amount, 2) . '</td>
                 </tr>
             </tbody>
@@ -723,13 +764,25 @@ class PurchaseInvoiceController extends Controller
 
         if ($invoice->expenses->count()) {
             $pdf->Ln(3);
-            $expHtml = '<table border="1" cellpadding="4" style="font-size:9px;"><thead><tr style="background-color:#f2f2f2;font-weight:bold;"><th width="30%">Other Expense (paid by FFK)</th><th width="50%">Description</th><th width="20%">Amount</th></tr></thead><tbody>';
+            $expHtml = '<table border="1" cellpadding="4" style="font-size:9px;"><thead><tr style="background-color:#f2f2f2;font-weight:bold;"><th width="25%">Expense</th><th width="35%">Description</th><th width="20%">Paid By</th><th width="20%">Amount</th></tr></thead><tbody>';
             foreach ($invoice->expenses as $exp) {
-                $expHtml .= '<tr><td width="30%">' . $exp->typeLabel() . '</td><td width="50%">' . e($exp->description) . '</td><td width="20%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+                $expHtml .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="35%">' . e($exp->description) . '</td><td width="20%">' . $exp->paidByLabel() . '</td><td width="20%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
             }
+            $expHtml .= '<tr style="font-weight:bold;"><td colspan="3" style="text-align:right;">Total Expense Amount</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>';
             $expHtml .= '</tbody></table>';
             $pdf->writeHTML($expHtml, true, false, false, false, '');
         }
+
+        $pdf->Ln(3);
+        $summaryHtml = '
+        <table width="60%" border="1" cellpadding="4" style="font-size:10px;" align="right">
+            <tr><td><b>Gross Weight</b></td><td style="text-align:right;">' . number_format($invoice->total_gross_weight, 2) . ' kg</td></tr>
+            <tr><td><b>Net Weight</b></td><td style="text-align:right;">' . number_format($invoice->total_weight, 2) . ' kg</td></tr>
+            <tr><td><b>Total Item Amount</b></td><td style="text-align:right;">' . number_format($invoice->total_amount, 2) . '</td></tr>
+            <tr><td><b>Total Expense Amount</b></td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#fafafa;"><td>Total Bill Amount</td><td style="text-align:right;">' . number_format($invoice->totalBillAmount(), 2) . '</td></tr>
+        </table>';
+        $pdf->writeHTML($summaryHtml, true, false, false, false, '');
 
         if ($invoice->remarks) {
             $pdf->Ln(2);

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * MERGE this into your existing PurchaseInvoice model — preserve
- * anything else already added since the original purchase_module.zip.
+ * anything else already added.
  */
 class PurchaseInvoice extends Model
 {
@@ -27,6 +27,8 @@ class PurchaseInvoice extends Model
         'status',
         'bilty_no',
         'transport_name',
+        'payment_terms',
+        'credit_days',
         'received_at',
         'received_by',
         'bilty_charges',      // legacy, unused going forward
@@ -35,6 +37,7 @@ class PurchaseInvoice extends Model
         'total_amount',
         'total_quantity',
         'total_weight',
+        'total_gross_weight',
         'total_other_expenses',
         'net_amount',
         'created_by',
@@ -46,6 +49,7 @@ class PurchaseInvoice extends Model
         'total_amount'          => 'decimal:2',
         'total_quantity'        => 'decimal:2',
         'total_weight'          => 'decimal:3',
+        'total_gross_weight'    => 'decimal:3',
         'total_other_expenses'  => 'decimal:2',
         'net_amount'            => 'decimal:2',
     ];
@@ -100,10 +104,30 @@ class PurchaseInvoice extends Model
         return $this->status === self::STATUS_RECEIVED;
     }
 
-    /** Paid by FFK — total Other Expenses (Bilty/Labor/Weighing/etc), from the dynamic expense list. */
+    /** Total Other Expenses (Bilty/Labor/Weighing/etc), from the dynamic expense list. */
     public function totalAdditionalCharges(): float
     {
         return (float) $this->total_other_expenses;
+    }
+
+    /** Purchase Invoice Summary: Total Item Amount + Total Expense Amount. */
+    public function totalBillAmount(): float
+    {
+        return round((float) $this->total_amount + (float) $this->total_other_expenses, 2);
+    }
+
+    public function isCredit(): bool
+    {
+        return $this->payment_terms === 'credit';
+    }
+
+    /** Due date for the vendor payable, based on when it was actually received. */
+    public function dueDate(): ?\Carbon\Carbon
+    {
+        if (!$this->isCredit() || !$this->credit_days || !$this->received_at) {
+            return null;
+        }
+        return \Carbon\Carbon::parse($this->received_at)->addDays((int) $this->credit_days);
     }
 
     public function statusLabel(): string

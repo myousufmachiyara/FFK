@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class PurchaseInvoiceExpense extends Model
+class SaleInvoiceExpense extends Model
 {
     const TYPE_LOCAL_CARTAGE = 'local_cartage';
     const TYPE_PACKAGING     = 'packaging';
@@ -18,21 +18,21 @@ class PurchaseInvoiceExpense extends Model
     const PAID_BY_COMPANY = 'company';
 
     protected $fillable = [
-        'purchase_invoice_id',
+        'sale_invoice_id',
         'expense_type',
         'description',
         'amount',
         'paid_by',
-        'payee_account_id', // only used when paid_by = company
+        'payee_account_id',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
     ];
 
-    public function purchaseInvoice()
+    public function saleInvoice()
     {
-        return $this->belongsTo(PurchaseInvoice::class);
+        return $this->belongsTo(SaleInvoice::class);
     }
 
     public function payeeAccount()

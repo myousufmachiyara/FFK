@@ -164,6 +164,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/get-location-stock', [ProductController::class, 'getLocationStock']);
     Route::get('/products/variations/{variation}/barcode', [ProductController::class, 'variationBarcode'])->name('products.variation.barcode');
+    Route::post('purchase_invoices/{id}/revert-to-in-transit', [PurchaseInvoiceController::class, 'revertToInTransit'])->middleware('check.permission:purchase_invoices.revert_to_in_transit')->name('purchase_invoices.revertToInTransit');
     // DISABLED: StockTransferController is referenced here but was never
     // imported above (and its existence hasn't been confirmed) — same class
     // of bug as PermissionController. Re-enable once that controller exists
