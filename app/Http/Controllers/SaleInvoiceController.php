@@ -87,7 +87,7 @@ class SaleInvoiceController extends Controller
         }
     }
 
-    /** Cost per KG — reuses Purchase's landed cost, same as before. Now multiplied by net_weight, not quantity. */
+    /** Cost per KG — reuses Purchase's landed cost. Multiplied by net_weight, not quantity. */
     private function resolveUnitCost(int $productId, ?int $variationId, float $fallback): float
     {
         $query = PurchaseInvoiceItem::whereNotNull('received_net_weight')
@@ -131,14 +131,15 @@ class SaleInvoiceController extends Controller
 
         $customers = ChartOfAccounts::where('account_type', config('sale_accounts.customer_account_type'))
             ->orderBy('name')->get();
-        $vendors = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $paymentAccounts = ChartOfAccounts::whereIn('account_type', config('sale_accounts.payment_account_types'))
             ->orderBy('name')->get();
-        $payeeAccounts = ChartOfAccounts::orderBy('name')->get();
+        // Expense payees are Vendor-type accounts only (e.g. a transporter
+        // like "Suzuki wala") — not arbitrary chart-of-accounts entries.
+        $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $units = MeasurementUnit::all();
         $kgPerMaund = $this->kgPerMaund();
 
-        return view('sales.create', compact('products', 'customers', 'vendors', 'paymentAccounts', 'payeeAccounts', 'units', 'kgPerMaund'));
+        return view('sales.create', compact('products', 'customers', 'paymentAccounts', 'payeeAccounts', 'units', 'kgPerMaund'));
     }
 
     /** Shared server-side item + expense computation. Never trust client math. */
@@ -196,8 +197,7 @@ class SaleInvoiceController extends Controller
                 'expense_type'      => $expenseData['expense_type'],
                 'description'       => $expenseData['description'] ?? null,
                 'amount'            => $amount,
-                'paid_by'           => $expenseData['paid_by'],
-                'payee_account_id'  => $expenseData['paid_by'] === 'company' ? ($expenseData['payee_account_id'] ?? null) : null,
+                'payee_account_id'  => $expenseData['payee_account_id'],
             ]);
         }
 
@@ -218,7 +218,6 @@ class SaleInvoiceController extends Controller
         $request->validate([
             'date'                        => 'required|date',
             'account_id'                  => 'required|exists:chart_of_accounts,id',
-            'vendor_id'                   => 'nullable|exists:chart_of_accounts,id',
             'type'                        => 'required|in:cash,credit',
             'credit_days'                 => 'required_if:type,credit|nullable|integer|min:1',
             'remarks'                     => 'nullable|string',
@@ -238,19 +237,8 @@ class SaleInvoiceController extends Controller
             'expenses.*.expense_type'     => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'      => 'nullable|string|max:255',
             'expenses.*.amount'           => 'required_with:expenses|numeric|min:0',
-            'expenses.*.paid_by'          => 'required_with:expenses|in:vendor,company',
-            'expenses.*.payee_account_id' => 'nullable|exists:chart_of_accounts,id',
+            'expenses.*.payee_account_id' => 'required_with:expenses|exists:chart_of_accounts,id',
         ]);
-
-        // Company-paid expenses need a payee; vendor-paid expenses need a vendor on the invoice.
-        foreach ($request->expenses ?? [] as $i => $exp) {
-            if (($exp['paid_by'] ?? null) === 'company' && empty($exp['payee_account_id'])) {
-                return back()->withInput()->withErrors(["expenses.$i.payee_account_id" => 'Select which account is being paid.']);
-            }
-            if (($exp['paid_by'] ?? null) === 'vendor' && empty($request->vendor_id)) {
-                return back()->withInput()->withErrors(["expenses.$i.paid_by" => 'This invoice has no Vendor selected — pick a Vendor above, or set this expense to Company.']);
-            }
-        }
 
         DB::beginTransaction();
 
@@ -274,7 +262,6 @@ class SaleInvoiceController extends Controller
                 'invoice_no' => $invoiceNo,
                 'date'       => $request->date,
                 'account_id' => $request->account_id,
-                'vendor_id'  => $request->vendor_id,
                 'type'       => $request->type,
                 'credit_days'=> $request->type === 'credit' ? $request->credit_days : null,
                 'remarks'    => $request->remarks,
@@ -325,21 +312,13 @@ class SaleInvoiceController extends Controller
                 );
             }
 
-            // 4) Each expense — always increases what customer owes; credit side
-            // routes to Vendor or the chosen payee account.
+            // 4) Each expense — always increases what customer owes; Company
+            // pays the chosen payee account (no Vendor concept on Sale).
             foreach ($invoice->expenses as $i => $expense) {
-                $targetAccount = $expense->paid_by === SaleInvoiceExpense::PAID_BY_VENDOR
-                    ? $invoice->vendor
-                    : $expense->payeeAccount;
-
-                if (!$targetAccount) {
-                    throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
-                }
-
                 $this->postVoucher(
-                    $request->date, $invoice->account, $targetAccount, (float) $expense->amount,
+                    $request->date, $invoice->account, $expense->payeeAccount, (float) $expense->amount,
                     "SI-{$invoice->id}-EXPENSE-" . ($i + 1),
-                    "Sale Invoice #{$invoiceNo} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()}"
+                    "Sale Invoice #{$invoiceNo} — {$expense->typeLabel()}, payable to {$expense->payeeAccount->name}"
                 );
             }
 
@@ -357,7 +336,7 @@ class SaleInvoiceController extends Controller
 
     public function show($id)
     {
-        $invoice = SaleInvoice::with(['account', 'vendor', 'items.product', 'items.variation', 'items.packingUnit', 'expenses.payeeAccount'])->findOrFail($id);
+        $invoice = SaleInvoice::with(['account', 'items.product', 'items.variation', 'items.packingUnit', 'expenses.payeeAccount'])->findOrFail($id);
         $vouchers = $invoice->vouchers();
 
         return view('sales.show', compact('invoice', 'vouchers'));
@@ -374,16 +353,15 @@ class SaleInvoiceController extends Controller
 
         $customers = ChartOfAccounts::where('account_type', config('sale_accounts.customer_account_type'))
             ->orderBy('name')->get();
-        $vendors = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $paymentAccounts = ChartOfAccounts::whereIn('account_type', config('sale_accounts.payment_account_types'))
             ->orderBy('name')->get();
-        $payeeAccounts = ChartOfAccounts::orderBy('name')->get();
+        $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $units = MeasurementUnit::all();
         $kgPerMaund = $this->kgPerMaund();
 
         $amountReceived = (float) $invoice->amount_received;
 
-        return view('sales.edit', compact('invoice', 'products', 'customers', 'vendors', 'paymentAccounts', 'payeeAccounts', 'units', 'kgPerMaund', 'amountReceived'));
+        return view('sales.edit', compact('invoice', 'products', 'customers', 'paymentAccounts', 'payeeAccounts', 'units', 'kgPerMaund', 'amountReceived'));
     }
 
     public function update(Request $request, $id)
@@ -391,7 +369,6 @@ class SaleInvoiceController extends Controller
         $request->validate([
             'date'                        => 'required|date',
             'account_id'                  => 'required|exists:chart_of_accounts,id',
-            'vendor_id'                   => 'nullable|exists:chart_of_accounts,id',
             'type'                        => 'required|in:cash,credit',
             'credit_days'                 => 'required_if:type,credit|nullable|integer|min:1',
             'remarks'                     => 'nullable|string',
@@ -411,18 +388,8 @@ class SaleInvoiceController extends Controller
             'expenses.*.expense_type'     => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'      => 'nullable|string|max:255',
             'expenses.*.amount'           => 'required_with:expenses|numeric|min:0',
-            'expenses.*.paid_by'          => 'required_with:expenses|in:vendor,company',
-            'expenses.*.payee_account_id' => 'nullable|exists:chart_of_accounts,id',
+            'expenses.*.payee_account_id' => 'required_with:expenses|exists:chart_of_accounts,id',
         ]);
-
-        foreach ($request->expenses ?? [] as $i => $exp) {
-            if (($exp['paid_by'] ?? null) === 'company' && empty($exp['payee_account_id'])) {
-                return back()->withInput()->withErrors(["expenses.$i.payee_account_id" => 'Select which account is being paid.']);
-            }
-            if (($exp['paid_by'] ?? null) === 'vendor' && empty($request->vendor_id)) {
-                return back()->withInput()->withErrors(["expenses.$i.paid_by" => 'This invoice has no Vendor selected.']);
-            }
-        }
 
         DB::beginTransaction();
 
@@ -449,7 +416,6 @@ class SaleInvoiceController extends Controller
             $invoice->update([
                 'date'        => $request->date,
                 'account_id'  => $request->account_id,
-                'vendor_id'   => $request->vendor_id,
                 'type'        => $request->type,
                 'credit_days' => $request->type === 'credit' ? $request->credit_days : null,
                 'remarks'     => $request->remarks,
@@ -476,7 +442,6 @@ class SaleInvoiceController extends Controller
 
             $invoice->update(array_merge($totals, ['amount_received' => $priorReceived + $newPaymentNow]));
 
-            // Re-sync REVENUE and COGS to the (possibly changed) totals.
             if ($netAmount > 0) {
                 Voucher::updateOrCreate(
                     ['reference' => "SI-{$invoice->id}-REVENUE", 'voucher_type' => 'journal'],
@@ -492,26 +457,15 @@ class SaleInvoiceController extends Controller
                 );
             }
 
-            // Re-sync expense vouchers — delete old ones, repost fresh (expenses
-            // themselves were fully replaced in syncItemsAndExpenses above).
             Voucher::where('reference', 'like', "SI-{$invoice->id}-EXPENSE-%")->delete();
             foreach ($invoice->expenses as $i => $expense) {
-                $targetAccount = $expense->paid_by === SaleInvoiceExpense::PAID_BY_VENDOR
-                    ? $invoice->vendor
-                    : $expense->payeeAccount;
-
-                if (!$targetAccount) {
-                    throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
-                }
-
                 $this->postVoucher(
-                    $request->date, ChartOfAccounts::findOrFail($request->account_id), $targetAccount, (float) $expense->amount,
+                    $request->date, ChartOfAccounts::findOrFail($request->account_id), $expense->payeeAccount, (float) $expense->amount,
                     "SI-{$invoice->id}-EXPENSE-" . ($i + 1),
-                    "Sale Invoice #{$invoice->invoice_no} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()} (updated)"
+                    "Sale Invoice #{$invoice->invoice_no} — {$expense->typeLabel()}, payable to {$expense->payeeAccount->name} (updated)"
                 );
             }
 
-            // New payment now = its own settlement voucher.
             if ($newPaymentNow > 0) {
                 $receiptCount = Voucher::where('reference', 'like', "SI-{$invoice->id}-RECEIPT-%")->count();
                 $this->postVoucher(
@@ -531,11 +485,8 @@ class SaleInvoiceController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // DESTROY — full reversal (stock + all vouchers). This IS the
-    // "undo" for Sale, since Sale has no intermediate status stages —
-    // one action either fully commits or fully unwinds.
-    // ─────────────────────────────────────────────────────────────
+    // Full reversal (stock + all vouchers) — this IS Sale's "undo", since
+    // Sale has no intermediate status stages.
     public function destroy($id)
     {
         DB::beginTransaction();
@@ -566,7 +517,7 @@ class SaleInvoiceController extends Controller
 
     public function print($id)
     {
-        $invoice = SaleInvoice::with(['account', 'items.product', 'items.variation', 'expenses'])->findOrFail($id);
+        $invoice = SaleInvoice::with(['account', 'items.product', 'items.variation', 'expenses.payeeAccount'])->findOrFail($id);
 
         $pdf = new \TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
         $pdf->SetCreator('BillTrix');
@@ -608,11 +559,7 @@ class SaleInvoiceController extends Controller
             </thead>
             <tbody>';
 
-        $gross = 0;
         foreach ($invoice->items as $item) {
-            $lineTotal = $item->total;
-            $gross += $lineTotal;
-
             $html .= '
                 <tr>
                     <td width="18%">' . e($item->product->name ?? '-') . '</td>
@@ -621,7 +568,7 @@ class SaleInvoiceController extends Controller
                     <td width="12%" style="text-align:right;">' . number_format($item->rate_per_40kg, 2) . '</td>
                     <td width="10%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
                     <td width="10%" style="text-align:center;">' . number_format($item->discount, 2) . '</td>
-                    <td width="15%" style="text-align:right;">' . number_format($lineTotal, 2) . '</td>
+                    <td width="15%" style="text-align:right;">' . number_format($item->total, 2) . '</td>
                 </tr>';
         }
 
@@ -630,9 +577,9 @@ class SaleInvoiceController extends Controller
         $pdf->Ln(3);
 
         if ($invoice->expenses->count()) {
-            $expHtml = '<table border="1" cellpadding="4" style="font-size:9px;"><thead><tr style="background-color:#f2f2f2;font-weight:bold;"><th width="30%">Expense</th><th width="40%">Description</th><th width="30%">Amount</th></tr></thead><tbody>';
+            $expHtml = '<table border="1" cellpadding="4" style="font-size:9px;"><thead><tr style="background-color:#f2f2f2;font-weight:bold;"><th width="25%">Expense</th><th width="35%">Description</th><th width="20%">Payable To</th><th width="20%">Amount</th></tr></thead><tbody>';
             foreach ($invoice->expenses as $exp) {
-                $expHtml .= '<tr><td width="30%">' . $exp->typeLabel() . '</td><td width="40%">' . e($exp->description) . '</td><td width="30%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+                $expHtml .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="35%">' . e($exp->description) . '</td><td width="20%">' . ($exp->payeeAccount->name ?? '-') . '</td><td width="20%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
             }
             $expHtml .= '</tbody></table>';
             $pdf->writeHTML($expHtml, true, false, false, false, '');

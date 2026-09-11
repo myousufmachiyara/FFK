@@ -170,4 +170,11 @@ Route::middleware(['auth'])->group(function () {
     // of bug as PermissionController. Re-enable once that controller exists
     // and add it to the use {...} import block above.
     // Route::get('/stock-lots/available', [StockTransferController::class, 'getAvailableLots'])->name('stock.lots.available');
+    Route::post('commission_invoices/{id}/revert-to-pending', [CommissionInvoiceController::class, 'revertToPending'])
+    ->middleware('check.permission:commission_invoices.revert_to_pending')
+    ->name('commission_invoices.revertToPending');
+ 
+Route::post('commission_invoices/{id}/revert-to-in-transit', [CommissionInvoiceController::class, 'revertToInTransit'])
+    ->middleware('check.permission:commission_invoices.revert_to_in_transit')
+    ->name('commission_invoices.revertToInTransit');
 });

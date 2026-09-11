@@ -87,9 +87,10 @@
             @php
                 $grandTotal = $purchaseRegister->sum('total');
                 $grandQty   = $purchaseRegister->sum('quantity');
+                $grandNetWt = $purchaseRegister->sum('net_weight');
             @endphp
             <div class="mb-3 text-end no-print">
-                <h5>Total Qty: <span class="text-primary">{{ $grandQty }}</span></h5>
+                <h5>Total Qty (bags): <span class="text-primary">{{ $grandQty }}</span> &nbsp; | &nbsp; Total Net Weight: <span class="text-primary">{{ number_format($grandNetWt, 2) }} kg</span></h5>
                 <h3>Total Purchase: <span class="text-danger">{{ number_format($grandTotal, 2) }}</span></h3>
             </div>
 
@@ -99,8 +100,8 @@
                         <tr>
                             <th>Date</th><th>Invoice #</th><th>Vendor Bill #</th><th>Vendor</th><th>Status</th>
                             <th>Item</th><th>Variation</th>
-                            <th class="text-end">Ordered Qty</th><th class="text-end">Received Qty</th>
-                            <th class="text-end">Rate</th>
+                            <th class="text-end">Bags</th><th class="text-end">Net Wt (kg)</th><th class="text-end">Received Wt (kg)</th>
+                            <th class="text-end">Rate/kg</th>
                             <th class="text-end">Total</th>
                             <th class="no-print text-center">Actions</th>
                         </tr>
@@ -121,8 +122,9 @@
                             <td>{{ $pur->item_name }}</td>
                             <td>{{ $pur->variation }}</td>
                             <td class="text-end">{{ number_format($pur->quantity, 2) }}</td>
+                            <td class="text-end">{{ number_format($pur->net_weight, 2) }}</td>
                             <td class="text-end">{{ $pur->received_quantity !== null ? number_format($pur->received_quantity, 2) : '—' }}</td>
-                            <td class="text-end">{{ number_format($pur->rate, 2) }}</td>
+                            <td class="text-end">{{ number_format($pur->rate_per_kg, 2) }}</td>
                             <td class="text-end fw-bold">{{ number_format($pur->total, 2) }}</td>
                             <td class="text-center no-print">
                                 <a href="{{ route('purchase_invoices.print', $pur->invoice_id) }}"
@@ -146,6 +148,7 @@
                         <tr>
                             <td colspan="7" class="text-end">Grand Total</td>
                             <td class="text-end">{{ number_format($grandQty, 2) }}</td>
+                            <td class="text-end">{{ number_format($grandNetWt, 2) }}</td>
                             <td class="text-end">—</td>
                             <td class="text-end">—</td>
                             <td class="text-end">{{ number_format($grandTotal, 2) }}</td>
@@ -282,7 +285,7 @@
             </form>
 
             <div class="mb-3 text-end no-print">
-                <h5>Total Qty: <span class="text-primary">{{ $vendorWisePurchase->sum('total_qty') }}</span></h5>
+                <h5>Total Net Weight: <span class="text-primary">{{ number_format($vendorWisePurchase->sum('total_net_weight'), 2) }} kg</span></h5>
                 <h3>Total Purchases: <span class="text-success">{{ number_format($vendorWisePurchase->sum('total_amount'), 2) }}</span></h3>
             </div>
 
@@ -292,7 +295,7 @@
                         <tr>
                             <th>Vendor</th><th>Invoice Date</th><th>Invoice #</th><th>Status</th>
                             <th>Item</th><th>Variation</th>
-                            <th class="text-end">Qty</th><th class="text-end">Rate</th>
+                            <th class="text-end">Net Wt (kg)</th><th class="text-end">Rate/kg</th>
                             <th class="text-end">Total</th>
                             <th class="no-print text-center">Actions</th>
                         </tr>
@@ -315,8 +318,8 @@
                             <td><span class="{{ $statusBadge($item->status) }}">{{ $statusLabel($item->status) }}</span></td>
                             <td>{{ $item->item_name }}</td>
                             <td>{{ $item->variation }}</td>
-                            <td class="text-end">{{ number_format($item->quantity, 2) }}</td>
-                            <td class="text-end">{{ number_format($item->rate, 2) }}</td>
+                            <td class="text-end">{{ number_format($item->net_weight, 2) }}</td>
+                            <td class="text-end">{{ number_format($item->rate_per_kg, 2) }}</td>
                             <td class="text-end fw-bold">{{ number_format($item->total, 2) }}</td>
                             <td class="text-center no-print">
                                 @if(isset($item->invoice_id))
@@ -330,7 +333,7 @@
                         @endforeach
                         <tr class="fw-bold table-light">
                             <td colspan="6" class="text-end">Vendor Total</td>
-                            <td class="text-end">{{ number_format($vendorData->total_qty, 2) }}</td>
+                            <td class="text-end">{{ number_format($vendorData->total_net_weight, 2) }}</td>
                             <td class="text-end">—</td>
                             <td class="text-end">{{ number_format($vendorData->total_amount, 2) }}</td>
                             <td class="no-print"></td>
@@ -343,7 +346,7 @@
                     <tfoot class="table-dark fw-bold">
                         <tr>
                             <td colspan="6" class="text-end">Grand Total</td>
-                            <td class="text-end">{{ number_format($vendorWisePurchase->sum('total_qty'), 2) }}</td>
+                            <td class="text-end">{{ number_format($vendorWisePurchase->sum('total_net_weight'), 2) }}</td>
                             <td class="text-end">—</td>
                             <td class="text-end">{{ number_format($vendorWisePurchase->sum('total_amount'), 2) }}</td>
                             <td class="no-print"></td>
@@ -354,7 +357,14 @@
             </div>
         </div>
 
-        {{-- ── STATUS OVERVIEW (NEW) ─────────────────────────────── --}}
+        {{-- ── STATUS OVERVIEW ───────────────────────────────────
+             FIX: the old 3-way Bilty/Labor/Other split no longer exists
+             (Purchase now uses a dynamic Other Expenses list) — replaced
+             with a single, accurate "Other Expenses" total and Gross/Net
+             Weight columns, and "Landed Total" now uses the invoice's own
+             totalBillAmount() instead of manually re-adding three
+             non-existent columns together.
+        --}}
         <div id="STA" class="tab-pane fade {{ $tab=='STA' ? 'show active' : '' }}">
             <form method="GET" action="{{ route('reports.purchase') }}" class="no-print">
                 <input type="hidden" name="tab" value="STA">
@@ -397,11 +407,11 @@
                     <thead class="table-dark">
                         <tr>
                             <th>Status</th><th class="text-end">Invoice Count</th>
-                            <th class="text-end">Total Value</th>
-                            <th class="text-end">Bilty Charges</th>
-                            <th class="text-end">Labor Charges</th>
-                            <th class="text-end">Other Charges</th>
-                            <th class="text-end">Landed Total</th>
+                            <th class="text-end">Gross Wt (kg)</th>
+                            <th class="text-end">Net Wt (kg)</th>
+                            <th class="text-end">Item Total</th>
+                            <th class="text-end">Other Expenses</th>
+                            <th class="text-end">Total Bill Amount</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -409,13 +419,11 @@
                         <tr>
                             <td><span class="{{ $statusBadge($row->status) }}">{{ $row->label }}</span></td>
                             <td class="text-end">{{ $row->count }}</td>
+                            <td class="text-end">{{ number_format($row->total_gross_weight, 2) }}</td>
+                            <td class="text-end">{{ number_format($row->total_net_weight, 2) }}</td>
                             <td class="text-end">{{ number_format($row->total_amount, 2) }}</td>
-                            <td class="text-end">{{ number_format($row->bilty_charges, 2) }}</td>
-                            <td class="text-end">{{ number_format($row->labor_charges, 2) }}</td>
-                            <td class="text-end">{{ number_format($row->other_charges, 2) }}</td>
-                            <td class="text-end fw-bold">
-                                {{ number_format($row->total_amount + $row->bilty_charges + $row->labor_charges + $row->other_charges, 2) }}
-                            </td>
+                            <td class="text-end">{{ number_format($row->total_other_expenses, 2) }}</td>
+                            <td class="text-end fw-bold">{{ number_format($row->total_bill_amount, 2) }}</td>
                         </tr>
                     @empty
                         <tr><td colspan="7" class="text-center text-muted">No data for this period.</td></tr>
@@ -425,7 +433,14 @@
             </div>
         </div>
 
-        {{-- ── SHORTAGES & ADDITIONAL COSTS (NEW) ────────────────── --}}
+        {{-- ── SHORTAGES & ADDITIONAL COSTS ──────────────────────
+             FIX: dispatched/received/short quantity columns now show
+             actual weight in kg (the old bag-count comparison against a
+             per-kg price was meaningless). The Bilty/Labor/Other 3-way
+             split is replaced by the real dynamic expense list per
+             invoice (type + amount + who it's payable to), shown inline
+             instead of pretending three fixed categories still exist.
+        --}}
         <div id="SAC" class="tab-pane fade {{ $tab=='SAC' ? 'show active' : '' }}">
             <form method="GET" action="{{ route('reports.purchase') }}" class="no-print">
                 <input type="hidden" name="tab" value="SAC">
@@ -460,17 +475,16 @@
             </form>
 
             <p class="text-muted small no-print">
-                <i class="fas fa-info-circle"></i> Only Received invoices with a recorded shortage or additional
-                receiving cost (Bilty/Labor/Other) appear here.
+                <i class="fas fa-info-circle"></i> Only Received invoices with a recorded shortage or Other Expense appear here.
             </p>
 
             @php
                 $totalShortageValue = $shortagesAndCosts->sum('shortage_value');
-                $totalAdditional    = $shortagesAndCosts->sum('total_additional');
+                $totalAdditional    = $shortagesAndCosts->sum('total_other_expenses');
             @endphp
             <div class="mb-3 text-end no-print">
                 <h5>Total Shortage Value: <span class="text-danger">{{ number_format($totalShortageValue, 2) }}</span></h5>
-                <h5>Total Additional Costs: <span class="text-warning">{{ number_format($totalAdditional, 2) }}</span></h5>
+                <h5>Total Other Expenses: <span class="text-warning">{{ number_format($totalAdditional, 2) }}</span></h5>
             </div>
 
             <div id="sac-table">
@@ -478,14 +492,12 @@
                     <thead class="table-dark">
                         <tr>
                             <th>Received Date</th><th>Invoice #</th><th>Vendor</th>
-                            <th class="text-end">Dispatched Qty</th>
-                            <th class="text-end">Received Qty</th>
-                            <th class="text-end">Short Qty</th>
+                            <th class="text-end">Dispatched Wt (kg)</th>
+                            <th class="text-end">Received Wt (kg)</th>
+                            <th class="text-end">Short Wt (kg)</th>
                             <th class="text-end">Shortage Value</th>
-                            <th class="text-end">Bilty</th>
-                            <th class="text-end">Labor</th>
-                            <th class="text-end">Other</th>
-                            <th class="text-end">Total Additional</th>
+                            <th>Other Expenses (Type — Payable To — Amount)</th>
+                            <th class="text-end">Total Other Expenses</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -498,17 +510,25 @@
                                 </a>
                             </td>
                             <td>{{ $row->vendor_name }}</td>
-                            <td class="text-end">{{ number_format($row->dispatched_qty, 2) }}</td>
-                            <td class="text-end">{{ number_format($row->received_qty, 2) }}</td>
-                            <td class="text-end {{ $row->short_qty > 0 ? 'text-danger fw-bold' : '' }}">{{ number_format($row->short_qty, 2) }}</td>
+                            <td class="text-end">{{ number_format($row->dispatched_weight, 2) }}</td>
+                            <td class="text-end">{{ number_format($row->received_weight, 2) }}</td>
+                            <td class="text-end {{ $row->short_weight > 0 ? 'text-danger fw-bold' : '' }}">{{ number_format($row->short_weight, 2) }}</td>
                             <td class="text-end {{ $row->shortage_value > 0 ? 'text-danger' : '' }}">{{ number_format($row->shortage_value, 2) }}</td>
-                            <td class="text-end">{{ number_format($row->bilty_charges, 2) }}</td>
-                            <td class="text-end">{{ number_format($row->labor_charges, 2) }}</td>
-                            <td class="text-end">{{ number_format($row->other_charges, 2) }}</td>
-                            <td class="text-end fw-bold">{{ number_format($row->total_additional, 2) }}</td>
+                            <td>
+                                @forelse($row->expenses as $exp)
+                                    <div class="small">
+                                        {{ $exp->typeLabel() }} —
+                                        {{ $exp->paid_by === 'vendor' ? ($row->vendor_name . ' (Vendor)') : ($exp->payeeAccount->name ?? '—') }}
+                                        — {{ number_format($exp->amount, 2) }}
+                                    </div>
+                                @empty
+                                    <span class="text-muted">—</span>
+                                @endforelse
+                            </td>
+                            <td class="text-end fw-bold">{{ number_format($row->total_other_expenses, 2) }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="11" class="text-center text-muted">No shortages or additional costs in this period.</td></tr>
+                        <tr><td colspan="9" class="text-center text-muted">No shortages or additional costs in this period.</td></tr>
                     @endforelse
                     </tbody>
                     @if(count($shortagesAndCosts))
@@ -516,7 +536,7 @@
                         <tr>
                             <td colspan="6" class="text-end">Totals</td>
                             <td class="text-end">{{ number_format($totalShortageValue, 2) }}</td>
-                            <td colspan="3" class="text-end"></td>
+                            <td></td>
                             <td class="text-end">{{ number_format($totalAdditional, 2) }}</td>
                         </tr>
                     </tfoot>

@@ -23,9 +23,12 @@ class CommissionInvoice extends Model
         'vendor_bill_no',
         'ref_no',
         'remarks',
+        'payment_terms',
+        'credit_days',
         'status',
         'total_quantity',
         'total_weight',
+        'total_gross_weight',
         'total_purchase_amount',
         'total_sale_amount',
         'total_commission_amount',          // combined (vendor + customer)
@@ -44,6 +47,7 @@ class CommissionInvoice extends Model
         'delivered_at'                       => 'datetime',
         'total_quantity'                     => 'decimal:2',
         'total_weight'                        => 'decimal:3',
+        'total_gross_weight'                  => 'decimal:3',
         'total_purchase_amount'              => 'decimal:2',
         'total_sale_amount'                  => 'decimal:2',
         'total_commission_amount'            => 'decimal:2',
@@ -110,6 +114,20 @@ class CommissionInvoice extends Model
     public function totalCustomerReceivable(): float
     {
         return round((float) $this->total_sale_amount + (float) $this->total_other_expenses, 2);
+    }
+
+    public function isCredit(): bool
+    {
+        return $this->payment_terms === 'credit';
+    }
+
+    /** Due date for the customer receivable, based on when goods were actually delivered. */
+    public function dueDate(): ?\Carbon\Carbon
+    {
+        if (!$this->isCredit() || !$this->credit_days || !$this->delivered_at) {
+            return null;
+        }
+        return \Carbon\Carbon::parse($this->delivered_at)->addDays((int) $this->credit_days);
     }
 
     public function statusLabel(): string

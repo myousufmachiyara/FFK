@@ -10,7 +10,6 @@ class SaleInvoice extends Model
         'invoice_no',
         'date',
         'account_id',        // Customer (ChartOfAccounts)
-        'vendor_id',         // optional — only for expense routing
         'type',              // cash | credit
         'credit_days',
         'remarks',
@@ -41,11 +40,6 @@ class SaleInvoice extends Model
     public function customer()
     {
         return $this->belongsTo(ChartOfAccounts::class, 'account_id');
-    }
-
-    public function vendor()
-    {
-        return $this->belongsTo(ChartOfAccounts::class, 'vendor_id');
     }
 
     public function items()

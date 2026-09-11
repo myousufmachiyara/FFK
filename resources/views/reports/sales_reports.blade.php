@@ -50,6 +50,12 @@
                Payment Account Wise
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link {{ $tab==='EXP'  ? 'active' : '' }}"
+               href="{{ route('reports.sale', ['tab'=>'EXP', 'from_date'=>$from,'to_date'=>$to]) }}">
+               Other Expenses
+            </a>
+        </li>
     </ul>
 
     <div class="tab-content mt-3">
@@ -97,14 +103,19 @@
             </form>
 
             @php
-                $grandNet    = $sales->sum('net_amount');
-                $grandCogs   = $sales->sum('cogs');
-                $grandProfit = $sales->sum('profit');
+                $grandNet      = $sales->sum('net_amount');
+                $grandExpenses = $sales->sum('total_expenses');
+                $grandBill     = $sales->sum('bill_amount');
+                $grandCogs     = $sales->sum('cogs');
+                $grandProfit   = $sales->sum('profit');
+                $grandNetWt    = $sales->sum('net_weight');
             @endphp
             <div class="mb-3 text-end no-print">
+                <h6>Total Net Weight: <span class="text-secondary">{{ number_format($grandNetWt, 2) }} kg</span></h6>
+                <h5>Total Other Expenses: <span class="text-secondary">{{ number_format($grandExpenses, 2) }}</span></h5>
                 <h5>Total COGS: <span class="text-secondary">{{ number_format($grandCogs, 2) }}</span></h5>
                 <h5>Total Profit: <span class="{{ $grandProfit >= 0 ? 'text-success' : 'text-danger' }}">{{ number_format($grandProfit, 2) }}</span></h5>
-                <h3>Total Revenue: <span class="text-primary">{{ number_format($grandNet, 2) }}</span></h3>
+                <h3>Total Bill Amount: <span class="text-primary">{{ number_format($grandBill, 2) }}</span></h3>
             </div>
 
             <div id="sr-table">
@@ -112,7 +123,10 @@
                     <thead class="table-dark">
                         <tr>
                             <th>Date</th><th>Invoice</th><th>Customer</th><th>Type</th>
-                            <th class="text-end">Net Amount</th>
+                            <th class="text-end">Net Wt (kg)</th>
+                            <th class="text-end">Item Amount</th>
+                            <th class="text-end">Expenses</th>
+                            <th class="text-end">Bill Amount</th>
                             <th class="text-end">Received</th>
                             <th class="text-end">Balance</th>
                             <th class="text-end">COGS</th>
@@ -133,7 +147,10 @@
                             </td>
                             <td>{{ $row->customer }}</td>
                             <td><span class="{{ $typeBadge($row->type) }}">{{ ucfirst($row->type) }}</span></td>
+                            <td class="text-end">{{ number_format($row->net_weight, 2) }}</td>
                             <td class="text-end">{{ number_format($row->net_amount, 2) }}</td>
+                            <td class="text-end">{{ number_format($row->total_expenses, 2) }}</td>
+                            <td class="text-end fw-bold">{{ number_format($row->bill_amount, 2) }}</td>
                             <td class="text-end">{{ number_format($row->amount_received, 2) }}</td>
                             <td class="text-end {{ $row->balance > 0 ? 'text-danger fw-bold' : '' }}">{{ number_format($row->balance, 2) }}</td>
                             <td class="text-end">{{ number_format($row->cogs, 2) }}</td>
@@ -151,14 +168,17 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="11" class="text-center text-muted">No sales found.</td></tr>
+                        <tr><td colspan="14" class="text-center text-muted">No sales found.</td></tr>
                     @endforelse
                     </tbody>
                     @if($sales->count() > 0)
                     <tfoot class="table-light fw-bold">
                         <tr>
                             <td colspan="4" class="text-end">Grand Total:</td>
+                            <td class="text-end">{{ number_format($grandNetWt, 2) }}</td>
                             <td class="text-end">{{ number_format($grandNet, 2) }}</td>
+                            <td class="text-end">{{ number_format($grandExpenses, 2) }}</td>
+                            <td class="text-end">{{ number_format($grandBill, 2) }}</td>
                             <td class="text-end">{{ number_format($sales->sum('amount_received'), 2) }}</td>
                             <td class="text-end">{{ number_format($sales->sum('balance'), 2) }}</td>
                             <td class="text-end">{{ number_format($grandCogs, 2) }}</td>
@@ -268,6 +288,8 @@
                             <th>Customer Name</th>
                             <th class="text-center">No. of Invoices</th>
                             <th class="text-end">Total Revenue</th>
+                            <th class="text-end">Expenses</th>
+                            <th class="text-end">Bill Amount</th>
                             <th class="text-end">Received</th>
                             <th class="text-end">Outstanding</th>
                             <th class="text-end">COGS</th>
@@ -280,13 +302,15 @@
                             <td>{{ $row->customer }}</td>
                             <td class="text-center">{{ $row->count }}</td>
                             <td class="text-end fw-bold">{{ number_format($row->total, 2) }}</td>
+                            <td class="text-end">{{ number_format($row->total_expenses, 2) }}</td>
+                            <td class="text-end">{{ number_format($row->total_bill_amount, 2) }}</td>
                             <td class="text-end">{{ number_format($row->total_received, 2) }}</td>
                             <td class="text-end {{ $row->total_outstanding > 0 ? 'text-danger fw-bold' : '' }}">{{ number_format($row->total_outstanding, 2) }}</td>
                             <td class="text-end">{{ number_format($row->total_cogs, 2) }}</td>
                             <td class="text-end {{ $row->total_profit >= 0 ? 'text-success' : 'text-danger' }}">{{ number_format($row->total_profit, 2) }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-center text-muted">No sales data found.</td></tr>
+                        <tr><td colspan="9" class="text-center text-muted">No sales data found.</td></tr>
                     @endforelse
                     </tbody>
                     @if($customerWise->count() > 0)
@@ -294,6 +318,8 @@
                         <tr>
                             <td colspan="2" class="text-end">Grand Total:</td>
                             <td class="text-end text-primary">{{ number_format($customerWise->sum('total'), 2) }}</td>
+                            <td class="text-end">{{ number_format($customerWise->sum('total_expenses'), 2) }}</td>
+                            <td class="text-end">{{ number_format($customerWise->sum('total_bill_amount'), 2) }}</td>
                             <td class="text-end">{{ number_format($customerWise->sum('total_received'), 2) }}</td>
                             <td class="text-end">{{ number_format($customerWise->sum('total_outstanding'), 2) }}</td>
                             <td class="text-end">{{ number_format($customerWise->sum('total_cogs'), 2) }}</td>
@@ -305,7 +331,7 @@
             </div>
         </div>
 
-        {{-- ── PRODUCT WISE (NEW) ───────────────────────────────── --}}
+        {{-- ── PRODUCT WISE ─────────────────────────────────────── --}}
         <div id="PW" class="tab-pane fade {{ $tab==='PW' ? 'show active' : '' }}">
             <form method="GET" action="{{ route('reports.sale') }}" class="no-print">
                 <input type="hidden" name="tab" value="PW">
@@ -344,7 +370,7 @@
                     <thead class="table-dark">
                         <tr>
                             <th>Product</th>
-                            <th class="text-end">Qty Sold</th>
+                            <th class="text-end">Qty Sold (kg)</th>
                             <th class="text-end">Revenue</th>
                             <th class="text-end">COGS</th>
                             <th class="text-end">Profit</th>
@@ -381,7 +407,7 @@
             </div>
         </div>
 
-        {{-- ── OUTSTANDING RECEIVABLES (NEW) ────────────────────── --}}
+        {{-- ── OUTSTANDING RECEIVABLES ──────────────────────────── --}}
         <div id="OUT" class="tab-pane fade {{ $tab==='OUT' ? 'show active' : '' }}">
             <form method="GET" action="{{ route('reports.sale') }}" class="no-print">
                 <input type="hidden" name="tab" value="OUT">
@@ -416,8 +442,9 @@
             </form>
 
             <p class="text-muted small no-print">
-                <i class="fas fa-info-circle"></i> Shows every invoice with an unpaid balance, regardless of sale
-                date, unless you set a date range above.
+                <i class="fas fa-info-circle"></i> Shows every invoice with an unpaid balance (items + expenses),
+                regardless of sale date, unless you set a date range above. "Net Amount" below is the full bill
+                amount owed, including Other Expenses.
             </p>
 
             <div id="out-table">
@@ -428,6 +455,7 @@
                             <th class="text-end">Net Amount</th>
                             <th class="text-end">Received</th>
                             <th class="text-end">Balance Due</th>
+                            <th>Due Date</th>
                             <th class="text-end">Days Outstanding</th>
                         </tr>
                     </thead>
@@ -445,10 +473,13 @@
                             <td class="text-end">{{ number_format($row->net_amount, 2) }}</td>
                             <td class="text-end">{{ number_format($row->received, 2) }}</td>
                             <td class="text-end text-danger fw-bold">{{ number_format($row->balance, 2) }}</td>
+                            <td class="{{ $row->due_date && now()->greaterThan($row->due_date) ? 'text-danger fw-bold' : '' }}">
+                                {{ $row->due_date ? $row->due_date->format('d-M-Y') : '—' }}
+                            </td>
                             <td class="text-end {{ $row->days_outstanding > 30 ? 'text-danger fw-bold' : '' }}">{{ $row->days_outstanding }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="text-center text-muted">No outstanding receivables. 🎉</td></tr>
+                        <tr><td colspan="9" class="text-center text-muted">No outstanding receivables. 🎉</td></tr>
                     @endforelse
                     </tbody>
                     @if($outstanding->count() > 0)
@@ -458,7 +489,7 @@
                             <td class="text-end">{{ number_format($outstanding->sum('net_amount'), 2) }}</td>
                             <td class="text-end">{{ number_format($outstanding->sum('received'), 2) }}</td>
                             <td class="text-end text-danger">{{ number_format($outstanding->sum('balance'), 2) }}</td>
-                            <td></td>
+                            <td colspan="2"></td>
                         </tr>
                     </tfoot>
                     @endif
@@ -466,7 +497,7 @@
             </div>
         </div>
 
-        {{-- ── PAYMENT ACCOUNT WISE (NEW) ───────────────────────── --}}
+        {{-- ── PAYMENT ACCOUNT WISE ─────────────────────────────── --}}
         <div id="PAY" class="tab-pane fade {{ $tab==='PAY' ? 'show active' : '' }}">
             <form method="GET" action="{{ route('reports.sale') }}" class="no-print">
                 <input type="hidden" name="tab" value="PAY">
@@ -520,6 +551,75 @@
                             <td class="text-end">Grand Total:</td>
                             <td class="text-center">{{ $paymentAccountWise->sum('count') }}</td>
                             <td class="text-end text-primary">{{ number_format($paymentAccountWise->sum('total'), 2) }}</td>
+                        </tr>
+                    </tfoot>
+                    @endif
+                </table>
+            </div>
+        </div>
+
+        {{-- ── OTHER EXPENSES (NEW) ─────────────────────────────── --}}
+        <div id="EXP" class="tab-pane fade {{ $tab==='EXP' ? 'show active' : '' }}">
+            <form method="GET" action="{{ route('reports.sale') }}" class="no-print">
+                <input type="hidden" name="tab" value="EXP">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3">
+                        <label>From Date</label>
+                        <input type="date" class="form-control" name="from_date" value="{{ $from }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label>To Date</label>
+                        <input type="date" class="form-control" name="to_date" value="{{ $to }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label>Customer</label>
+                        <select name="customer_id" class="form-control">
+                            <option value="">All Customers</option>
+                            @foreach($customers as $cust)
+                                <option value="{{ $cust->id }}" {{ $customerId == $cust->id ? 'selected' : '' }}>
+                                    {{ $cust->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end gap-2">
+                        <button type="submit" class="btn btn-primary w-100">Filter</button>
+                        <button type="button" class="btn btn-danger"
+                                onclick="exportPDF('exp-table', 'Sale Other Expenses', '{{ $from }} to {{ $to }}')">
+                            <i class="fas fa-file-pdf"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <div id="exp-table">
+                <table class="table table-bordered table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Date</th><th>Invoice</th><th>Type</th><th>Description</th>
+                            <th class="text-end">Amount</th><th>Payable To</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @forelse($expenseReport as $row)
+                        <tr>
+                            <td>{{ $row->date ? \Carbon\Carbon::parse($row->date)->format('d-M-Y') : '—' }}</td>
+                            <td>SI-{{ $row->invoice_no }}</td>
+                            <td>{{ $row->type }}</td>
+                            <td>{{ $row->description }}</td>
+                            <td class="text-end">{{ number_format($row->amount, 2) }}</td>
+                            <td>{{ $row->payee }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="6" class="text-center text-muted">No expenses in this period.</td></tr>
+                    @endforelse
+                    </tbody>
+                    @if($expenseReport->count() > 0)
+                    <tfoot class="table-light fw-bold">
+                        <tr>
+                            <td colspan="4" class="text-end">Grand Total:</td>
+                            <td class="text-end">{{ number_format($expenseReport->sum('amount'), 2) }}</td>
+                            <td></td>
                         </tr>
                     </tfoot>
                     @endif

@@ -7,6 +7,7 @@ use App\Models\SaleInvoice;
 use App\Models\SaleReturn;
 use App\Models\ChartOfAccounts;
 use App\Models\Voucher;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
 class SalesReportController extends Controller
@@ -27,16 +28,20 @@ class SalesReportController extends Controller
         $productWise     = collect();
         $outstanding     = collect();
         $paymentAccountWise = collect();
+        $expenseReport   = collect();
+
+        $hasSaleReturns = Schema::hasTable('sale_returns') && Schema::hasTable('sale_return_items');
 
         /* ================= SALES REGISTER =================
-         * Now uses the invoice's own stored net_amount, amount_received,
-         * and each item's stored unit_cost (snapshotted at time of sale)
-         * instead of recomputing revenue from scratch — the old version's
-         * recompute silently ignored per-item discount % and never had
-         * real cost/profit data (they were hardcoded placeholders).
+         * FIX: COGS now multiplies unit_cost by net_weight (kg), not
+         * quantity (which is packing-unit count since the weight-based
+         * rebuild — multiplying cost-per-kg by bag count silently produced
+         * near-zero, meaningless COGS). Balance now compares against
+         * totalBillAmount() (items + expenses), not net_amount alone —
+         * an invoice can be "paid off" on items but still owe expenses.
          */
         if ($tab === 'SR') {
-            $query = SaleInvoice::with(['account', 'items'])
+            $query = SaleInvoice::with(['account', 'items', 'expenses'])
                 ->whereBetween('date', [$from, $to]);
 
             if ($customerId) {
@@ -47,9 +52,10 @@ class SalesReportController extends Controller
             }
 
             $sales = $query->get()->map(function ($sale) {
-                $cogs   = $sale->items->sum(fn ($item) => (float) $item->unit_cost * (float) $item->quantity);
+                $cogs   = $sale->items->sum(fn ($item) => (float) $item->unit_cost * (float) $item->net_weight);
                 $net    = (float) $sale->net_amount;
                 $profit = $net - $cogs;
+                $billAmount = $sale->totalBillAmount();
 
                 return (object)[
                     'id'              => $sale->id,
@@ -58,8 +64,12 @@ class SalesReportController extends Controller
                     'customer'        => $sale->account->name ?? '',
                     'type'            => $sale->type,
                     'net_amount'      => $net,
+                    'total_expenses'  => (float) $sale->total_other_expenses,
+                    'bill_amount'     => $billAmount,
                     'amount_received' => (float) $sale->amount_received,
-                    'balance'         => round($net - (float) $sale->amount_received, 2),
+                    'balance'         => round($billAmount - (float) $sale->amount_received, 2),
+                    'net_weight'      => (float) $sale->total_weight,
+                    'gross_weight'    => (float) $sale->total_gross_weight,
                     'cogs'            => $cogs,
                     'profit'          => $profit,
                     'margin'          => $net > 0 ? round(($profit / $net) * 100, 1) : 0,
@@ -68,7 +78,7 @@ class SalesReportController extends Controller
         }
 
         /* ================= SALES RETURN ================= */
-        if ($tab === 'SRET') {
+        if ($tab === 'SRET' && $hasSaleReturns) {
             $returns = SaleReturn::with(['customer', 'items'])
                 ->whereBetween('return_date', [$from, $to])
                 ->get()
@@ -88,11 +98,13 @@ class SalesReportController extends Controller
         }
 
         /* ================= CUSTOMER WISE =================
-         * Now also breaks out amount received vs outstanding, and total
-         * COGS/profit per customer — not just a revenue total.
+         * FIX: same COGS fix (net_weight, not quantity). Outstanding now
+         * measured against totalBillAmount() (items + expenses) per
+         * invoice, then summed — not (sum of net_amount) - (sum received),
+         * which ignored expenses entirely.
          */
         if ($tab === 'CW') {
-            $query = SaleInvoice::with(['account', 'items'])
+            $query = SaleInvoice::with(['account', 'items', 'expenses'])
                 ->whereBetween('date', [$from, $to]);
 
             if ($customerId) {
@@ -104,24 +116,32 @@ class SalesReportController extends Controller
                 ->map(function ($sales) {
                     $customerName = $sales->first()->account->name ?? 'Unknown Customer';
 
-                    $totalNet      = $sales->sum(fn ($s) => (float) $s->net_amount);
-                    $totalReceived = $sales->sum(fn ($s) => (float) $s->amount_received);
-                    $totalCogs     = $sales->sum(fn ($s) => $s->items->sum(fn ($i) => (float) $i->unit_cost * (float) $i->quantity));
+                    $totalNet         = $sales->sum(fn ($s) => (float) $s->net_amount);
+                    $totalExpenses    = $sales->sum(fn ($s) => (float) $s->total_other_expenses);
+                    $totalBillAmount  = $sales->sum(fn ($s) => $s->totalBillAmount());
+                    $totalReceived    = $sales->sum(fn ($s) => (float) $s->amount_received);
+                    $totalCogs        = $sales->sum(fn ($s) => $s->items->sum(fn ($i) => (float) $i->unit_cost * (float) $i->net_weight));
 
                     return (object)[
-                        'customer'         => $customerName,
-                        'count'            => $sales->count(),
-                        'total'            => $totalNet,
-                        'total_received'   => $totalReceived,
-                        'total_outstanding'=> round($totalNet - $totalReceived, 2),
-                        'total_cogs'       => $totalCogs,
-                        'total_profit'     => round($totalNet - $totalCogs, 2),
+                        'customer'          => $customerName,
+                        'count'             => $sales->count(),
+                        'total'             => $totalNet,
+                        'total_expenses'    => $totalExpenses,
+                        'total_bill_amount' => $totalBillAmount,
+                        'total_received'    => $totalReceived,
+                        'total_outstanding' => round($totalBillAmount - $totalReceived, 2),
+                        'total_cogs'        => $totalCogs,
+                        'total_profit'      => round($totalNet - $totalCogs, 2),
                     ];
                 })
                 ->values();
         }
 
-        /* ================= PRODUCT WISE (NEW) ================= */
+        /* ================= PRODUCT WISE =================
+         * FIX: "quantity" now reports net_weight (kg) — the meaningful
+         * figure for a weight-based commodity business — instead of
+         * packing-unit (bag) count. COGS fixed to use net_weight too.
+         */
         if ($tab === 'PW') {
             $query = SaleInvoice::with('items.product')
                 ->whereBetween('date', [$from, $to]);
@@ -136,33 +156,37 @@ class SalesReportController extends Controller
                 ->groupBy('product_id')
                 ->map(function ($items) {
                     $productName = $items->first()->product->name ?? 'Unknown Product';
-                    $qty      = $items->sum('quantity');
-                    $revenue  = $items->sum('total');
-                    $cogs     = $items->sum(fn ($i) => (float) $i->unit_cost * (float) $i->quantity);
-                    $profit   = $revenue - $cogs;
+                    $packingUnits = $items->sum('quantity');
+                    $netWeight    = $items->sum('net_weight');
+                    $revenue      = $items->sum('total');
+                    $cogs         = $items->sum(fn ($i) => (float) $i->unit_cost * (float) $i->net_weight);
+                    $profit       = $revenue - $cogs;
 
                     return (object)[
-                        'product'  => $productName,
-                        'quantity' => $qty,
-                        'revenue'  => $revenue,
-                        'cogs'     => $cogs,
-                        'profit'   => $profit,
-                        'margin'   => $revenue > 0 ? round(($profit / $revenue) * 100, 1) : 0,
+                        'product'       => $productName,
+                        'quantity'      => $netWeight,      // kg — the meaningful figure now; kept this key name for blade compatibility
+                        'packing_units' => $packingUnits,   // bag/carton count, available if the view wants it
+                        'net_weight'    => $netWeight,
+                        'revenue'       => $revenue,
+                        'cogs'          => $cogs,
+                        'profit'        => $profit,
+                        'margin'        => $revenue > 0 ? round(($profit / $revenue) * 100, 1) : 0,
                     ];
                 })
                 ->sortByDesc('revenue')
                 ->values();
         }
 
-        /* ================= OUTSTANDING RECEIVABLES (NEW) =================
-         * Deliberately NOT date-filtered by default — an old unpaid
-         * invoice from last month is still outstanding today. Date
-         * filters here apply to the invoice date only if explicitly set
-         * via the form; customer filter still applies.
+        /* ================= OUTSTANDING RECEIVABLES =================
+         * FIX: was comparing net_amount vs amount_received directly in
+         * SQL, missing every invoice whose items were fully paid but
+         * still owes expense charges. Now pulled in PHP against
+         * totalBillAmount() so expenses are included. Still not
+         * date-filtered by default — an old unpaid invoice stays
+         * outstanding regardless of when it was raised.
          */
         if ($tab === 'OUT') {
-            $query = SaleInvoice::with('account')
-                ->whereColumn('net_amount', '>', 'amount_received');
+            $query = SaleInvoice::with(['account', 'expenses']);
 
             if ($request->filled('from_date') && $request->filled('to_date')) {
                 $query->whereBetween('date', [$from, $to]);
@@ -171,25 +195,30 @@ class SalesReportController extends Controller
                 $query->where('account_id', $customerId);
             }
 
-            $outstanding = $query->orderBy('date')->get()->map(function ($sale) {
-                $balance = round((float) $sale->net_amount - (float) $sale->amount_received, 2);
-                return (object)[
-                    'id'          => $sale->id,
-                    'date'        => $sale->date,
-                    'invoice_no'  => $sale->invoice_no,
-                    'customer'    => $sale->account->name ?? '',
-                    'type'        => $sale->type,
-                    'net_amount'  => (float) $sale->net_amount,
-                    'received'    => (float) $sale->amount_received,
-                    'balance'     => $balance,
-                    'days_outstanding' => Carbon::parse($sale->date)->diffInDays(Carbon::now()),
-                ];
-            });
+            $outstanding = $query->orderBy('date')->get()
+                ->filter(fn ($sale) => $sale->totalBillAmount() > (float) $sale->amount_received)
+                ->map(function ($sale) {
+                    $billAmount = $sale->totalBillAmount();
+                    $balance    = round($billAmount - (float) $sale->amount_received, 2);
+                    return (object)[
+                        'id'          => $sale->id,
+                        'date'        => $sale->date,
+                        'invoice_no'  => $sale->invoice_no,
+                        'customer'    => $sale->account->name ?? '',
+                        'type'        => $sale->type,
+                        'net_amount'  => $billAmount, // kept this key name for blade compatibility — value is now the full bill (items + expenses), not items alone
+                        'received'    => (float) $sale->amount_received,
+                        'balance'     => $balance,
+                        'due_date'    => $sale->dueDate(),
+                        'days_outstanding' => Carbon::parse($sale->date)->diffInDays(Carbon::now()),
+                    ];
+                })
+                ->values();
         }
 
-        /* ================= PAYMENT ACCOUNT WISE (NEW) =================
-         * Groups every Sale receipt voucher (SI-*-RECEIPT-*) by the
-         * account money was actually received into (Cash, Bank, etc).
+        /* ================= PAYMENT ACCOUNT WISE =================
+         * Unaffected by the rebuild — voucher reference pattern
+         * (SI-*-RECEIPT-*) didn't change.
          */
         if ($tab === 'PAY') {
             $query = Voucher::where('reference', 'like', 'SI-%-RECEIPT-%')
@@ -209,6 +238,30 @@ class SalesReportController extends Controller
                 ->values();
         }
 
+        /* ================= OTHER EXPENSES (NEW) =================
+         * Sale's new Other Expenses table — grouped by expense type and
+         * by payee account, so it's visible which transporters/accounts
+         * are getting paid via customer-billed pass-through expenses.
+         */
+        if ($tab === 'EXP') {
+            $query = \App\Models\SaleInvoiceExpense::with(['saleInvoice', 'payeeAccount'])
+                ->whereHas('saleInvoice', function ($q) use ($from, $to, $customerId) {
+                    $q->whereBetween('date', [$from, $to]);
+                    if ($customerId) $q->where('account_id', $customerId);
+                });
+
+            $expenseReport = $query->get()->map(function ($exp) {
+                return (object)[
+                    'date'        => $exp->saleInvoice->date ?? null,
+                    'invoice_no'  => $exp->saleInvoice->invoice_no ?? '',
+                    'type'        => $exp->typeLabel(),
+                    'description' => $exp->description,
+                    'amount'      => (float) $exp->amount,
+                    'payee'       => $exp->payeeAccount->name ?? '—',
+                ];
+            })->sortByDesc('date')->values();
+        }
+
         $customers = ChartOfAccounts::where('account_type', 'customer')->get();
 
         return view('reports.sales_reports', compact(
@@ -221,6 +274,7 @@ class SalesReportController extends Controller
             'productWise',
             'outstanding',
             'paymentAccountWise',
+            'expenseReport',
             'customers',
             'customerId',
             'type'

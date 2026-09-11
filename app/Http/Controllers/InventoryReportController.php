@@ -54,7 +54,7 @@ class InventoryReportController extends Controller
                 ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
                 ->where('sale_invoice_items.product_id', $itemId)
                 ->where('sale_invoices.date', '<', $from)
-                ->sum('sale_invoice_items.quantity');
+                ->sum('sale_invoice_items.net_weight');
 
             $opPurchaseReturned = $hasPurchaseReturns
                 ? DB::table('purchase_return_items')
@@ -114,7 +114,7 @@ class InventoryReportController extends Controller
                     DB::raw("'Sale' as type"),
                     DB::raw("CONCAT('SI-', sale_invoices.invoice_no) as description"),
                     DB::raw('0 as qty_in'),
-                    'sale_invoice_items.quantity as qty_out'
+                    'sale_invoice_items.net_weight as qty_out'
                 )
                 ->where('sale_invoice_items.product_id', $itemId)
                 ->whereBetween('sale_invoices.date', [$from, $to]);
@@ -209,7 +209,7 @@ class InventoryReportController extends Controller
                     $sold = (float) DB::table('sale_invoice_items')
                         ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
                         ->where('sale_invoice_items.product_id', $product->id)
-                        ->sum('sale_invoice_items.quantity');
+                        ->sum('sale_invoice_items.net_weight');
 
                     $purchaseReturned = $hasPurchaseReturns
                         ? (float) DB::table('purchase_return_items')->where('item_id', $product->id)->sum('quantity')

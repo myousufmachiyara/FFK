@@ -33,20 +33,11 @@
               <label>Date</label>
               <input type="date" name="date" class="form-control" value="{{ $invoice->date }}" required />
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
               <label>Customer</label>
               <select name="account_id" class="form-control select2-js" required>
                 @foreach($customers as $acc)
                   <option value="{{ $acc->id }}" {{ $invoice->account_id == $acc->id ? 'selected' : '' }}>{{ $acc->name }}</option>
-                @endforeach
-              </select>
-            </div>
-            <div class="col-md-2">
-              <label>Vendor <small class="text-muted">(optional)</small></label>
-              <select name="vendor_id" class="form-control select2-js">
-                <option value="">— None —</option>
-                @foreach($vendors as $v)
-                  <option value="{{ $v->id }}" {{ $invoice->vendor_id == $v->id ? 'selected' : '' }}>{{ $v->name }}</option>
                 @endforeach
               </select>
             </div>
@@ -100,8 +91,8 @@
           <table class="table table-bordered table-sm" id="expenseTable">
             <thead>
               <tr>
-                <th width="15%">Type</th><th width="27%">Description</th><th width="13%">Amount</th>
-                <th width="15%">Paid By</th><th width="22%">Payee Account</th><th width="30px"></th>
+                <th width="20%">Type</th><th width="32%">Description</th><th width="16%">Amount</th>
+                <th width="27%">Payable To (Vendor Account)</th><th width="30px"></th>
               </tr>
             </thead>
             <tbody id="expenseBody"></tbody>
@@ -266,7 +257,6 @@ function addExpenseRow(existing = null) {
     const type = existing ? existing.expense_type : 'local_cartage';
     const desc = existing ? existing.description : '';
     const amount = existing ? existing.amount : '';
-    const paidBy = existing ? existing.paid_by : 'company';
     const payeeId = existing ? existing.payee_account_id : null;
 
     const row = `
@@ -282,25 +272,13 @@ function addExpenseRow(existing = null) {
         </select></td>
         <td><input type="text" name="expenses[${idx}][description]" class="form-control" value="${desc ?? ''}"></td>
         <td><input type="number" step="any" min="0" name="expenses[${idx}][amount]" class="form-control exp-amount" value="${amount}" oninput="calcSummary()"></td>
-        <td><select name="expenses[${idx}][paid_by]" class="form-control paid-by" onchange="togglePayee(${idx})">
-            <option value="company" ${paidBy==='company'?'selected':''}>Company (FFK)</option>
-            <option value="vendor" ${paidBy==='vendor'?'selected':''}>Vendor</option>
-        </select></td>
-        <td><select name="expenses[${idx}][payee_account_id]" class="form-control select2-js payee-select" id="payee${idx}" ${paidBy==='company'?'':'disabled'}>
-            <option value="">—</option>${payeeOptions(payeeId)}
+        <td><select name="expenses[${idx}][payee_account_id]" class="form-control select2-js" required>
+            <option value="">Select Vendor Account</option>${payeeOptions(payeeId)}
         </select></td>
         <td><button type="button" class="btn btn-danger btn-sm" onclick="$(this).closest('tr').remove(); calcSummary();"><i class="fas fa-times"></i></button></td>
     </tr>`;
     $('#expenseBody').append(row);
     $(`#expenseBody tr[data-erow="${idx}"] .select2-js`).select2({ width: '100%' });
-}
-
-function togglePayee(idx) {
-    const $row = $(`#expenseBody tr[data-erow="${idx}"]`);
-    const paidBy = $row.find('.paid-by').val();
-    const $payee = $(`#payee${idx}`);
-    if (paidBy === 'company') { $payee.prop('disabled', false); }
-    else { $payee.prop('disabled', true).val('').trigger('change.select2'); }
 }
 
 function calcSummary() {

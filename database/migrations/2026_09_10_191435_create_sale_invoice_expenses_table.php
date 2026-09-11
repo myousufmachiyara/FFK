@@ -16,15 +16,14 @@ return new class extends Migration
             $table->string('description', 255)->nullable();
             $table->decimal('amount', 15, 2)->default(0);
 
-            // 'vendor' = only valid if this Sale Invoice has a vendor_id set —
-            // increases what we owe that vendor. 'company' = FFK owes the
-            // selected payee_account_id instead.
-            $table->string('paid_by', 20)->default('company');
-            $table->unsignedBigInteger('payee_account_id')->nullable();
+            // Sale has no Vendor concept — every expense is paid by the
+            // Company (FFK) to a chosen Vendor-type payee account (e.g. a
+            // transporter like "Suzuki wala"). Required, not nullable.
+            $table->unsignedBigInteger('payee_account_id');
 
             $table->timestamps();
 
-            $table->foreign('payee_account_id')->references('id')->on('chart_of_accounts')->nullOnDelete();
+            $table->foreign('payee_account_id')->references('id')->on('chart_of_accounts')->restrictOnDelete();
         });
     }
 

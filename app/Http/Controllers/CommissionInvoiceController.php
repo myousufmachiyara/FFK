@@ -96,7 +96,7 @@ class CommissionInvoiceController extends Controller
         $vendors   = ChartOfAccounts::where('account_type', config('commission_accounts.vendor_account_type'))->orderBy('name')->get();
         $customers = ChartOfAccounts::where('account_type', config('commission_accounts.customer_account_type'))->orderBy('name')->get();
         $units     = MeasurementUnit::all();
-        $payeeAccounts = ChartOfAccounts::orderBy('name')->get(); // any account can be an expense payee
+        $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get(); // e.g. a specific transporter
         $kgPerMaund = $this->kgPerMaund();
 
         return view('commissions.create', compact('products', 'vendors', 'customers', 'units', 'payeeAccounts', 'kgPerMaund'));
@@ -109,7 +109,7 @@ class CommissionInvoiceController extends Controller
         $invoice->expenses()->delete();
 
         $kgPerMaund = $this->kgPerMaund();
-        $totalQty = $totalWeight = $totalPurchase = $totalSale = 0;
+        $totalQty = $totalWeight = $totalGrossWeight = $totalPurchase = $totalSale = 0;
         $totalVendorCommission = $totalCustomerCommission = 0;
 
         foreach ($items as $itemData) {
@@ -137,6 +137,7 @@ class CommissionInvoiceController extends Controller
 
             $totalQty               += (float) $itemData['quantity'];
             $totalWeight            += $calc['netWeight'];
+            $totalGrossWeight       += $calc['grossWeight'];
             $totalPurchase          += $calc['purchaseTotal'];
             $totalSale              += $calc['saleTotal'];
             $totalVendorCommission  += $calc['vendorCommissionAmount'];
@@ -161,6 +162,7 @@ class CommissionInvoiceController extends Controller
         return [
             'total_quantity'                    => $totalQty,
             'total_weight'                       => round($totalWeight, 3),
+            'total_gross_weight'                 => round($totalGrossWeight, 3),
             'total_purchase_amount'              => round($totalPurchase, 2),
             'total_sale_amount'                  => round($totalSale, 2),
             'total_vendor_commission_amount'     => round($totalVendorCommission, 2),
@@ -181,6 +183,8 @@ class CommissionInvoiceController extends Controller
             'vendor_bill_no'                            => 'nullable|string|max:100',
             'ref_no'                                    => 'nullable|string|max:100',
             'remarks'                                   => 'nullable|string',
+            'payment_terms'                              => 'required|in:cash,credit',
+            'credit_days'                                => 'required_if:payment_terms,credit|nullable|integer|min:1',
             'items'                                      => 'required|array|min:1',
             'items.*.product_id'                          => 'required|exists:products,id',
             'items.*.variation_id'                         => 'nullable|exists:product_variations,id',
@@ -193,7 +197,7 @@ class CommissionInvoiceController extends Controller
             'items.*.vendor_commission_percentage'                => 'nullable|numeric|min:0|max:100',
             'items.*.customer_commission_percentage'               => 'nullable|numeric|min:0|max:100',
             'expenses'                                                => 'nullable|array',
-            'expenses.*.expense_type'                                  => 'required_with:expenses|in:packing,local_cartage,misc',
+            'expenses.*.expense_type'                                  => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'                                    => 'nullable|string|max:255',
             'expenses.*.amount'                                          => 'required_with:expenses|numeric|min:0',
             'expenses.*.paid_by'                                          => 'required_with:expenses|in:vendor,company',
@@ -216,6 +220,8 @@ class CommissionInvoiceController extends Controller
                 'vendor_bill_no'  => $request->vendor_bill_no,
                 'ref_no'          => $request->ref_no,
                 'remarks'         => $request->remarks,
+                'payment_terms'   => $request->payment_terms,
+                'credit_days'     => $request->payment_terms === 'credit' ? $request->credit_days : null,
                 'status'          => CommissionInvoice::STATUS_PENDING,
                 'created_by'      => auth()->id(),
             ]);
@@ -259,7 +265,7 @@ class CommissionInvoiceController extends Controller
         $vendors   = ChartOfAccounts::where('account_type', config('commission_accounts.vendor_account_type'))->orderBy('name')->get();
         $customers = ChartOfAccounts::where('account_type', config('commission_accounts.customer_account_type'))->orderBy('name')->get();
         $units     = MeasurementUnit::all();
-        $payeeAccounts = ChartOfAccounts::orderBy('name')->get();
+        $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $kgPerMaund = $this->kgPerMaund();
 
         return view('commissions.edit', compact('invoice', 'products', 'vendors', 'customers', 'units', 'payeeAccounts', 'kgPerMaund'));
@@ -276,6 +282,8 @@ class CommissionInvoiceController extends Controller
             'vendor_bill_no'                            => 'nullable|string|max:100',
             'ref_no'                                    => 'nullable|string|max:100',
             'remarks'                                   => 'nullable|string',
+            'payment_terms'                              => 'required|in:cash,credit',
+            'credit_days'                                => 'required_if:payment_terms,credit|nullable|integer|min:1',
             'items'                                      => 'required|array|min:1',
             'items.*.product_id'                          => 'required|exists:products,id',
             'items.*.variation_id'                         => 'nullable|exists:product_variations,id',
@@ -288,7 +296,7 @@ class CommissionInvoiceController extends Controller
             'items.*.vendor_commission_percentage'                => 'nullable|numeric|min:0|max:100',
             'items.*.customer_commission_percentage'               => 'nullable|numeric|min:0|max:100',
             'expenses'                                                => 'nullable|array',
-            'expenses.*.expense_type'                                  => 'required_with:expenses|in:packing,local_cartage,misc',
+            'expenses.*.expense_type'                                  => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'                                    => 'nullable|string|max:255',
             'expenses.*.amount'                                          => 'required_with:expenses|numeric|min:0',
             'expenses.*.paid_by'                                          => 'required_with:expenses|in:vendor,company',
@@ -314,6 +322,8 @@ class CommissionInvoiceController extends Controller
                 'vendor_bill_no'  => $request->vendor_bill_no,
                 'ref_no'          => $request->ref_no,
                 'remarks'         => $request->remarks,
+                'payment_terms'   => $request->payment_terms,
+                'credit_days'     => $request->payment_terms === 'credit' ? $request->credit_days : null,
             ]);
 
             $totals = $this->syncItemsAndExpenses($invoice, $request->items, $request->expenses ?? []);
@@ -397,6 +407,90 @@ class CommissionInvoiceController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('[CI] MoveToInTransit error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // REVERT DISPATCH — In Transit -> Pending. Deletes the INTRANSIT
+    // voucher (nothing else was posted at that stage). Use for a
+    // mistaken dispatch.
+    // ─────────────────────────────────────────────────────────────
+    public function revertToPending(Request $request, $id)
+    {
+        $request->validate(['remarks' => 'nullable|string']);
+
+        DB::beginTransaction();
+
+        try {
+            $invoice = CommissionInvoice::lockForUpdate()->findOrFail($id);
+
+            if (!$invoice->isInTransit()) {
+                DB::rollBack();
+                return back()->with('error', 'This invoice is not In Transit — nothing to revert.');
+            }
+
+            Voucher::where('reference', "CI-{$invoice->id}-INTRANSIT")->delete();
+            $invoice->update(['status' => CommissionInvoice::STATUS_PENDING]);
+
+            $this->logStatusChange(
+                $invoice, CommissionInvoice::STATUS_IN_TRANSIT, CommissionInvoice::STATUS_PENDING,
+                'Reverted from In Transit (mistaken dispatch). ' . ($request->remarks ?? '')
+            );
+
+            DB::commit();
+            return redirect()->route('commission_invoices.show', $invoice->id)
+                ->with('success', 'Dispatch reverted. Invoice is back to Pending and the vendor payable voucher was removed.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('[CI] RevertToPending error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // UNDO DELIVERY — Delivered -> In Transit. Reverses every voucher
+    // Deliver() posted (close-transit, vendor commission, customer
+    // commission, all per-expense vouchers, and the residual). Use for
+    // a mistaken delivery confirmation.
+    // ─────────────────────────────────────────────────────────────
+    public function revertToInTransit(Request $request, $id)
+    {
+        $request->validate(['remarks' => 'nullable|string']);
+
+        DB::beginTransaction();
+
+        try {
+            $invoice = CommissionInvoice::lockForUpdate()->findOrFail($id);
+
+            if (!$invoice->isDelivered()) {
+                DB::rollBack();
+                return back()->with('error', 'This invoice is not Delivered — nothing to undo.');
+            }
+
+            Voucher::where('reference', 'like', "CI-{$invoice->id}-DELIVERED-%")->delete();
+
+            $invoice->update([
+                'status'                     => CommissionInvoice::STATUS_IN_TRANSIT,
+                'delivered_at'               => null,
+                'delivered_by'               => null,
+                'delivery_received_by_name'  => null,
+                'delivery_remarks'           => null,
+            ]);
+
+            $this->logStatusChange(
+                $invoice, CommissionInvoice::STATUS_DELIVERED, CommissionInvoice::STATUS_IN_TRANSIT,
+                'Reverted from Delivered (mistaken confirmation). ' . ($request->remarks ?? '')
+            );
+
+            DB::commit();
+            return redirect()->route('commission_invoices.show', $invoice->id)
+                ->with('success', 'Delivery reverted. Invoice is back to In Transit, all Delivered vouchers removed.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('[CI] RevertToInTransit error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
             return back()->withErrors(['error' => $e->getMessage()]);
         }
     }

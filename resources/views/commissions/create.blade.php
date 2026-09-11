@@ -43,8 +43,17 @@
               </select>
             </div>
             <div class="col-md-2"><label>Transport <small class="text-muted">(optional now)</small></label><input type="text" name="transport_name" class="form-control"></div>
-            <div class="col-md-2"><label>Bilti # <small class="text-muted">(optional now)</small></label><input type="text" name="bilty_no" class="form-control"></div>
+            <div class="col-md-2"><label>Bilty # <small class="text-muted">(optional now)</small></label><input type="text" name="bilty_no" class="form-control"></div>
             <div class="col-md-2"><label>Vendor Bill # <small class="text-muted">(optional now)</small></label><input type="text" name="vendor_bill_no" class="form-control"></div>
+            <div class="col-md-2"><label>Payment Terms</label>
+              <select name="payment_terms" id="paymentTerms" class="form-control" required>
+                <option value="cash">Cash</option>
+                <option value="credit">Credit</option>
+              </select>
+            </div>
+            <div class="col-md-2" id="creditDaysWrap" style="display:none;"><label>Credit Days</label>
+              <input type="number" min="1" name="credit_days" id="creditDays" class="form-control" placeholder="e.g. 30">
+            </div>
           </div>
           <div class="row mb-2">
             <div class="col-md-3"><label>Reference #</label><input type="text" name="ref_no" class="form-control"></div>
@@ -62,12 +71,12 @@
             <table class="table table-bordered table-sm" id="itemTable">
               <thead>
                 <tr>
-                  <th width="10%">Product</th><th width="7%">Variation</th><th width="6%">Packing</th>
-                  <th width="6%">Wt/Pack</th><th width="5%">Qty</th><th width="6%">Net Wt</th>
-                  <th width="7%">Pur Rate/{{ $kgPerMaund }}kg</th><th width="6%">Pur Rate/kg</th><th width="7%">Pur Total</th>
-                  <th width="7%">Sale Rate/{{ $kgPerMaund }}kg</th><th width="6%">Sale Rate/kg</th><th width="7%">Sale Total</th>
-                  <th width="6%">Vendor Comm %</th><th width="6%">Vendor Comm Amt</th>
-                  <th width="6%">Cust Comm %</th><th width="6%">Cust Comm Amt</th>
+                  <th width="9%">Product</th><th width="6%">Variation</th><th width="5%">Packing</th>
+                  <th width="6%">Wt/Pack</th><th width="4%">Qty</th><th width="5%">Gross Wt</th><th width="5%">Net Wt</th>
+                  <th width="7%">Pur Rate (40 kg)</th><th width="5%">Pur Rate (kg)</th><th width="7%">Pur Total</th>
+                  <th width="7%">Sale Rate (40 kg)</th><th width="5%">Sale Rate (kg)</th><th width="7%">Sale Total</th>
+                  <th width="5%">Vendor Comm %</th><th width="6%">Vendor Comm Amt</th>
+                  <th width="5%">Cust Comm %</th><th width="6%">Cust Comm Amt</th>
                   <th width="25px"></th>
                 </tr>
               </thead>
@@ -106,14 +115,18 @@
 
     <div class="col-12">
       <section class="card">
-        <header class="card-header"><h2 class="card-title">Summary</h2></header>
+        <header class="card-header"><h2 class="card-title">Commission Invoice Summary</h2></header>
         <div class="card-body">
           <div class="row text-center">
-            <div class="col"><small class="text-muted d-block">Total Weight</small><strong id="sumWeight">0</strong></div>
-            <div class="col"><small class="text-muted d-block">Purchase Total</small><strong id="sumPurchase">0.00</strong></div>
-            <div class="col"><small class="text-muted d-block">Sale Total</small><strong id="sumSale">0.00</strong></div>
-            <div class="col"><small class="text-muted d-block">Vendor Commission</small><strong id="sumVendorComm">0.00</strong></div>
-            <div class="col"><small class="text-muted d-block">Customer Commission</small><strong id="sumCustComm">0.00</strong></div>
+            <div class="col"><small class="text-muted d-block">Gross Wt.</small><strong id="sumGrossWeight">0.00</strong></div>
+            <div class="col"><small class="text-muted d-block">Net Wt.</small><strong id="sumWeight">0.00</strong></div>
+            <div class="col"><small class="text-muted d-block">Purchase Amount Total</small><strong id="sumPurchase">0.00</strong></div>
+            <div class="col"><small class="text-muted d-block">Sale Amount Total</small><strong id="sumSale">0.00</strong></div>
+            <div class="col"><small class="text-muted d-block">Total Vendor Commission</small><strong id="sumVendorComm">0.00</strong></div>
+          </div>
+          <hr>
+          <div class="row text-center">
+            <div class="col"><small class="text-muted d-block">Total Customer Commission</small><strong id="sumCustComm">0.00</strong></div>
             <div class="col"><small class="text-muted d-block">Other Expenses</small><strong id="sumExpenses">0.00</strong></div>
             <div class="col"><small class="text-muted d-block">Vendor Payable</small><strong class="text-danger" id="sumVendorPayable">0.00</strong></div>
             <div class="col"><small class="text-muted d-block">Customer Receivable</small><strong class="text-primary" id="sumCustomerReceivable">0.00</strong></div>
@@ -149,6 +162,7 @@ function addItemRow() {
         <td><select name="items[${idx}][packing_unit_id]" class="form-control select2-js"><option value="">—</option>${unitOptions()}</select></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][wt_per_packing]" class="form-control wt-packing" oninput="calcRow(${idx})" required></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][quantity]" class="form-control qty" oninput="calcRow(${idx})" required></td>
+        <td><input type="text" class="form-control readonly-calc gross-weight" readonly value="0.00"></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][net_weight]" class="form-control net-weight" placeholder="auto" oninput="calcRow(${idx})"></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][purchase_rate_per_40kg]" class="form-control pur-rate40" oninput="calcRow(${idx})" required></td>
         <td><input type="text" class="form-control readonly-calc pur-rate-kg" readonly value="0.0000"></td>
@@ -198,6 +212,7 @@ function calcRow(idx) {
     const vendorCommAmt = purTotal * vendorPct / 100;
     const custCommAmt = saleTotal * custPct / 100;
 
+    $row.find('.gross-weight').val(grossWeight.toFixed(2));
     $row.find('.pur-rate-kg').val(purRateKg.toFixed(4));
     $row.find('.pur-total').val(purTotal.toFixed(2));
     $row.find('.sale-rate-kg').val(saleRateKg.toFixed(4));
@@ -215,7 +230,7 @@ function addExpenseRow() {
     const row = `
     <tr data-erow="${idx}">
         <td><select name="expenses[${idx}][expense_type]" class="form-control">
-            <option value="packing">Packing</option><option value="local_cartage">Local Cartage</option><option value="misc">Miscellaneous</option>
+            <option value="local_cartage">Local Cartage</option><option value="packaging">Packaging</option><option value="plastic_bags">Plastic Bags</option><option value="bardana">Bardana</option><option value="misc">Miscellaneous</option><option value="tulai">Tulai</option><option value="others">Others</option>
         </select></td>
         <td><input type="text" name="expenses[${idx}][description]" class="form-control"></td>
         <td><input type="number" step="any" min="0" name="expenses[${idx}][amount]" class="form-control exp-amount" oninput="calcSummary()"></td>
@@ -248,8 +263,9 @@ function togglePayee(idx) {
 }
 
 function calcSummary() {
-    let weight = 0, purchase = 0, sale = 0, vendorComm = 0, custComm = 0, expenses = 0;
+    let grossWeight = 0, weight = 0, purchase = 0, sale = 0, vendorComm = 0, custComm = 0, expenses = 0;
     $('#itemBody tr').each(function () {
+        grossWeight += parseFloat($(this).find('.gross-weight').val()) || 0;
         weight += parseFloat($(this).find('.net-weight').val()) || (parseFloat($(this).find('.wt-packing').val()) || 0) * (parseFloat($(this).find('.qty').val()) || 0);
         purchase += parseFloat($(this).find('.pur-total').val()) || 0;
         sale += parseFloat($(this).find('.sale-total').val()) || 0;
@@ -260,6 +276,7 @@ function calcSummary() {
         expenses += parseFloat($(this).find('.exp-amount').val()) || 0;
     });
 
+    $('#sumGrossWeight').text(grossWeight.toFixed(2));
     $('#sumWeight').text(weight.toFixed(2));
     $('#sumPurchase').text(purchase.toFixed(2));
     $('#sumSale').text(sale.toFixed(2));
@@ -273,6 +290,18 @@ function calcSummary() {
 $(document).ready(function () {
     $('.select2-js').select2({ width: '100%' });
     addItemRow();
+
+    function togglePaymentTermDays() {
+        if ($('#paymentTerms').val() === 'credit') {
+            $('#creditDaysWrap').show();
+            $('#creditDays').prop('required', true);
+        } else {
+            $('#creditDaysWrap').hide();
+            $('#creditDays').prop('required', false).val('');
+        }
+    }
+    $('#paymentTerms').on('change', togglePaymentTermDays);
+    togglePaymentTermDays();
 
     $('#commissionForm').on('submit', function () {
         $('#saveBtn').prop('disabled', true).text('Saving...');

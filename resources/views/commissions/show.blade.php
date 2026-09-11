@@ -28,6 +28,10 @@
           @endif
           @if($invoice->isInTransit())
             <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#deliverModal"><i class="fas fa-box-open"></i> Mark as Delivered</button>
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#revertModal"><i class="fas fa-undo"></i> Revert Dispatch</button>
+          @endif
+          @if($invoice->isDelivered())
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#undoDeliveryModal"><i class="fas fa-undo"></i> Undo Delivery</button>
           @endif
         </div>
       </header>
@@ -41,14 +45,29 @@
           <div class="col-md-2"><strong>Bilty #:</strong><br>{{ $invoice->bilty_no ?? '—' }}</div>
           <div class="col-md-2"><strong>Vendor Bill #:</strong><br>{{ $invoice->vendor_bill_no ?? '—' }}</div>
         </div>
+        <div class="row mb-3">
+          <div class="col-md-2">
+            <strong>Payment Terms:</strong><br>
+            {{ ucfirst($invoice->payment_terms ?? 'cash') }}
+            @if($invoice->isCredit() && $invoice->credit_days) ({{ $invoice->credit_days }} days) @endif
+          </div>
+          @if($invoice->isCredit() && $invoice->dueDate())
+          <div class="col-md-2">
+            <strong>Due Date:</strong><br>
+            <span class="{{ now()->greaterThan($invoice->dueDate()) ? 'text-danger fw-bold' : '' }}">
+              {{ $invoice->dueDate()->format('d-M-Y') }}
+            </span>
+          </div>
+          @endif
+        </div>
 
         <div class="table-responsive mb-3">
           <table class="table table-bordered table-sm">
             <thead>
               <tr>
-                <th>#</th><th>Item</th><th>Qty</th><th>Net Wt</th>
-                <th>Pur Rate/kg</th><th>Pur Total</th>
-                <th>Sale Rate/kg</th><th>Sale Total</th>
+                <th>#</th><th>Item</th><th>Qty</th><th>Gross Wt</th><th>Net Wt</th>
+                <th>Pur Rate (kg)</th><th>Pur Total</th>
+                <th>Sale Rate (kg)</th><th>Sale Total</th>
                 <th>Vendor Comm %</th><th>Vendor Comm</th>
                 <th>Cust Comm %</th><th>Cust Comm</th>
               </tr>
@@ -59,6 +78,7 @@
                 <td>{{ $i + 1 }}</td>
                 <td>{{ $item->product->name ?? '-' }}</td>
                 <td>{{ number_format($item->quantity, 0) }}</td>
+                <td>{{ number_format($item->gross_weight, 2) }}</td>
                 <td>{{ number_format($item->net_weight, 2) }}</td>
                 <td>{{ number_format($item->purchase_price, 4) }}</td>
                 <td>{{ number_format($item->purchase_total, 2) }}</td>
@@ -94,11 +114,16 @@
         </div>
         @endif
 
+        <h5>Commission Invoice Summary</h5>
+        <div class="row mb-2 text-center">
+          <div class="col"><small class="text-muted d-block">Gross Wt.</small><strong>{{ number_format($invoice->total_gross_weight, 2) }} kg</strong></div>
+          <div class="col"><small class="text-muted d-block">Net Wt.</small><strong>{{ number_format($invoice->total_weight, 2) }} kg</strong></div>
+          <div class="col"><small class="text-muted d-block">Purchase Amount Total</small><strong>{{ number_format($invoice->total_purchase_amount, 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Sale Amount Total</small><strong>{{ number_format($invoice->total_sale_amount, 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Total Vendor Commission</small><strong>{{ number_format($invoice->total_vendor_commission_amount, 2) }}</strong></div>
+        </div>
         <div class="row mb-4 text-center">
-          <div class="col"><small class="text-muted d-block">Total Purchase</small><strong>{{ number_format($invoice->total_purchase_amount, 2) }}</strong></div>
-          <div class="col"><small class="text-muted d-block">Total Sale</small><strong>{{ number_format($invoice->total_sale_amount, 2) }}</strong></div>
-          <div class="col"><small class="text-muted d-block">Vendor Commission</small><strong>{{ number_format($invoice->total_vendor_commission_amount, 2) }}</strong></div>
-          <div class="col"><small class="text-muted d-block">Customer Commission</small><strong>{{ number_format($invoice->total_customer_commission_amount, 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Total Customer Commission</small><strong>{{ number_format($invoice->total_customer_commission_amount, 2) }}</strong></div>
           <div class="col"><small class="text-muted d-block">Other Expenses</small><strong>{{ number_format($invoice->total_other_expenses, 2) }}</strong></div>
           <div class="col"><small class="text-muted d-block">Vendor Payable</small><strong class="text-danger">{{ number_format($invoice->totalVendorPayable(), 2) }}</strong></div>
           <div class="col"><small class="text-muted d-block">Customer Receivable</small><strong class="text-primary">{{ number_format($invoice->totalCustomerReceivable(), 2) }}</strong></div>
@@ -220,4 +245,59 @@
     </form>
   </div>
 </div>
-@endsection
+
+<!-- Revert Dispatch modal -->
+<div class="modal fade" id="revertModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form action="{{ route('commission_invoices.revertToPending', $invoice->id) }}" method="POST">
+      @csrf
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Revert Dispatch</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>This will move the invoice back to <strong>Pending</strong> and remove the vendor payable
+             voucher created when it was dispatched. Use this only if the dispatch was done by mistake.</p>
+          <div class="mb-3">
+            <label>Reason (optional)</label>
+            <textarea name="remarks" class="form-control" rows="2" placeholder="e.g. Wrong invoice dispatched by mistake"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Confirm Revert</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Undo Delivery modal -->
+<div class="modal fade" id="undoDeliveryModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form action="{{ route('commission_invoices.revertToInTransit', $invoice->id) }}" method="POST">
+      @csrf
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Undo Delivery</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>This will move the invoice back to <strong>In Transit</strong> and remove every voucher posted at
+             Delivery — close-transit, Vendor Commission, Customer Commission, all Other Expenses, and the
+             residual. Use this only if the delivery confirmation was recorded by mistake.</p>
+          <div class="mb-3">
+            <label>Reason (optional)</label>
+            <textarea name="remarks" class="form-control" rows="2" placeholder="e.g. Marked delivered before goods actually arrived"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Confirm Undo</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+@endsections

@@ -68,7 +68,7 @@
             </div>
 
             <div class="col-md-2">
-              <label>Selling Price / Unit</label>
+              <label>Selling Price / Unit <small class="text-muted">(default/fallback)</small></label>
               <input type="number" step="any" name="selling_price" class="form-control" value="{{ old('selling_price', $product->selling_price) }}">
             </div>
 
@@ -95,20 +95,37 @@
           <div class="row mt-4">
             <div class="col-md-12">
               <h2 class="card-title">Existing Variations</h2>
+              <p class="text-muted small">
+                <i class="fas fa-info-circle"></i> Leave Barcode blank to keep using the SKU as its scannable code.
+              </p>
               <div id="variation-section">
                 @foreach($product->variations as $i => $variation)
                   <div class="variation-block border p-2 mb-3 existing-variation">
                     <input type="hidden" name="variations[{{ $i }}][id]" value="{{ $variation->id }}">
                     <div class="row">
-                      <div class="col-md-4">
+                      <div class="col-md-3">
                         <label>SKU</label>
                         <input type="text" name="variations[{{ $i }}][sku]" class="form-control sku-field" value="{{ $variation->sku }}">
+                      </div>
+                      <div class="col-md-2">
+                        <label>Barcode</label>
+                        <input type="text" name="variations[{{ $i }}][barcode]" class="form-control" value="{{ $variation->barcode }}" placeholder="= SKU if blank">
+                      </div>
+                      <div class="col-md-2">
+                        <label>Selling Price</label>
+                        <input type="number" step="any" name="variations[{{ $i }}][selling_price]" class="form-control" value="{{ $variation->selling_price }}">
                       </div>
                       <div class="col-md-2">
                         <label>Stock</label>
                         <input type="number" step="any" name="variations[{{ $i }}][stock_quantity]" class="form-control" value="{{ $variation->stock_quantity }}">
                       </div>
-                      <div class="col-md-4">
+                      <div class="col-md-2">
+                        <label>&nbsp;</label>
+                        <button type="button" class="btn btn-sm btn-danger remove-existing-variation d-block" data-id="{{ $variation->id }}">Remove</button>
+                      </div>
+                    </div>
+                    <div class="row mt-2">
+                      <div class="col-md-12">
                         <label>Attributes</label>
                         <select name="variations[{{ $i }}][attributes][]" multiple class="form-control select2-js variation-attributes">
                           @foreach($attributes as $attribute)
@@ -119,9 +136,6 @@
                             @endforeach
                           @endforeach
                         </select>
-                      </div>
-                      <div class="col-md-2 d-flex align-items-end">
-                        <button type="button" class="btn btn-sm btn-danger remove-existing-variation" data-id="{{ $variation->id }}">X</button>
                       </div>
                     </div>
                   </div>
@@ -170,15 +184,29 @@
       const html = `
         <div class="variation-block border p-2 mb-3">
           <div class="row">
-            <div class="col-md-4">
+            <div class="col-md-3">
               <label>SKU</label>
               <input type="text" name="new_variations[${newVariationIndex}][sku]" class="form-control sku-field">
+            </div>
+            <div class="col-md-2">
+              <label>Barcode</label>
+              <input type="text" name="new_variations[${newVariationIndex}][barcode]" class="form-control" placeholder="= SKU if blank">
+            </div>
+            <div class="col-md-2">
+              <label>Selling Price</label>
+              <input type="number" step="any" name="new_variations[${newVariationIndex}][selling_price]" value="0.00" class="form-control">
             </div>
             <div class="col-md-2">
               <label>Stock</label>
               <input type="number" step="any" name="new_variations[${newVariationIndex}][stock_quantity]" value="0.00" class="form-control">
             </div>
-            <div class="col-md-4">
+            <div class="col-md-2">
+              <label>&nbsp;</label>
+              <button type="button" class="btn btn-sm btn-danger remove-new-variation d-block">Remove</button>
+            </div>
+          </div>
+          <div class="row mt-2">
+            <div class="col-md-12">
               <label>Attributes</label>
               <select name="new_variations[${newVariationIndex}][attributes][]" multiple class="form-control select2-js variation-attributes">
                 @foreach($attributes as $attribute)
@@ -187,9 +215,6 @@
                   @endforeach
                 @endforeach
               </select>
-            </div>
-            <div class="col-md-2 d-flex align-items-end">
-              <button type="button" class="btn btn-sm btn-danger remove-new-variation">X</button>
             </div>
           </div>
         </div>

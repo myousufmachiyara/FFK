@@ -100,7 +100,7 @@ class PurchaseInvoiceController extends Controller
         $products = Product::with('variations')->orderBy('name')->get();
         $vendors  = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $units    = MeasurementUnit::all();
-        $payeeAccounts = ChartOfAccounts::orderBy('name')->get(); // any account can be an expense payee
+        $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get(); // e.g. a specific transporter
         $kgPerMaund = $this->kgPerMaund();
 
         return view('purchases.create', compact('products', 'vendors', 'units', 'payeeAccounts', 'kgPerMaund'));
@@ -183,6 +183,8 @@ class PurchaseInvoiceController extends Controller
             'transport_name'               => 'nullable|string|max:150',
             'ref_no'                       => 'nullable|string|max:100',
             'remarks'                      => 'nullable|string',
+            'payment_terms'                => 'required|in:cash,credit',
+            'credit_days'                  => 'required_if:payment_terms,credit|nullable|integer|min:1',
             'attachments.*'                => 'nullable|file|mimes:jpg,jpeg,png,pdf,zip|max:2048',
             'items'                        => 'required|array|min:1',
             'items.*.item_id'              => 'required|exists:products,id',
@@ -193,7 +195,7 @@ class PurchaseInvoiceController extends Controller
             'items.*.net_weight'           => 'nullable|numeric|min:0',
             'items.*.rate_per_40kg'        => 'required|numeric|min:0',
             'expenses'                     => 'nullable|array',
-            'expenses.*.expense_type'      => 'required_with:expenses|in:bilty,labor,weighing,loading_unloading,transport,misc',
+            'expenses.*.expense_type'      => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'       => 'nullable|string|max:255',
             'expenses.*.amount'            => 'required_with:expenses|numeric|min:0',
             'expenses.*.paid_by'           => 'required_with:expenses|in:vendor,company',
@@ -222,6 +224,8 @@ class PurchaseInvoiceController extends Controller
                 'transport_name'  => $request->transport_name,
                 'ref_no'          => $request->ref_no,
                 'remarks'         => $request->remarks,
+                'payment_terms'   => $request->payment_terms,
+                'credit_days'     => $request->payment_terms === 'credit' ? $request->credit_days : null,
                 'status'          => PurchaseInvoice::STATUS_PENDING,
                 'created_by'      => auth()->id(),
             ]);
@@ -281,7 +285,7 @@ class PurchaseInvoiceController extends Controller
         $vendors  = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $products = Product::with('variations')->select('id', 'name', 'measurement_unit')->get();
         $units    = MeasurementUnit::all();
-        $payeeAccounts = ChartOfAccounts::orderBy('name')->get();
+        $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $kgPerMaund = $this->kgPerMaund();
 
         return view('purchases.edit', compact('invoice', 'vendors', 'products', 'units', 'payeeAccounts', 'kgPerMaund'));
@@ -297,6 +301,8 @@ class PurchaseInvoiceController extends Controller
             'transport_name'               => 'nullable|string|max:150',
             'ref_no'                       => 'nullable|string|max:100',
             'remarks'                      => 'nullable|string',
+            'payment_terms'                => 'required|in:cash,credit',
+            'credit_days'                  => 'required_if:payment_terms,credit|nullable|integer|min:1',
             'attachments.*'                => 'nullable|file|mimes:jpg,jpeg,png,pdf,zip|max:2048',
             'items'                        => 'required|array|min:1',
             'items.*.item_id'              => 'required|exists:products,id',
@@ -307,7 +313,7 @@ class PurchaseInvoiceController extends Controller
             'items.*.net_weight'           => 'nullable|numeric|min:0',
             'items.*.rate_per_40kg'        => 'required|numeric|min:0',
             'expenses'                     => 'nullable|array',
-            'expenses.*.expense_type'      => 'required_with:expenses|in:bilty,labor,weighing,loading_unloading,transport,misc',
+            'expenses.*.expense_type'      => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'       => 'nullable|string|max:255',
             'expenses.*.amount'            => 'required_with:expenses|numeric|min:0',
             'expenses.*.paid_by'           => 'required_with:expenses|in:vendor,company',
@@ -338,6 +344,8 @@ class PurchaseInvoiceController extends Controller
                 'transport_name'  => $request->transport_name,
                 'ref_no'          => $request->ref_no,
                 'remarks'         => $request->remarks,
+                'payment_terms'   => $request->payment_terms,
+                'credit_days'     => $request->payment_terms === 'credit' ? $request->credit_days : null,
             ]);
 
             $totals = $this->syncItemsAndExpenses($invoice, $request->items, $request->expenses ?? []);
@@ -631,6 +639,71 @@ class PurchaseInvoiceController extends Controller
             DB::rollBack();
             Log::error('[PI] Receive error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
             return back()->withInput()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // UNDO RECEIVE — Received -> In Transit. Reverses everything
+    // receive() posted: the base transfer, shortage, and per-expense
+    // vouchers; decrements stock back by whatever was added; clears
+    // each item's received/short fields so receive() can be redone
+    // cleanly. Use this for a mistaken receipt, not for correcting a
+    // typo — re-run Receive Goods afterward with the right figures.
+    // ─────────────────────────────────────────────────────────────
+    public function revertToInTransit(Request $request, $id)
+    {
+        $request->validate(['remarks' => 'nullable|string']);
+
+        DB::beginTransaction();
+
+        try {
+            $invoice = PurchaseInvoice::with('items')->lockForUpdate()->findOrFail($id);
+
+            if (!$invoice->isReceived()) {
+                DB::rollBack();
+                return back()->with('error', 'This invoice is not Received — nothing to undo.');
+            }
+
+            foreach ($invoice->items as $item) {
+                if ($item->variation_id && $item->received_net_weight) {
+                    $variation = ProductVariation::find($item->variation_id);
+                    if ($variation) {
+                        $variation->decrement('stock_quantity', (float) $item->received_net_weight);
+                    }
+                }
+
+                $item->update([
+                    'received_packing_qty'      => null,
+                    'received_net_weight'       => null,
+                    'short_weight'               => 0,
+                    'shortage_reason'            => null,
+                    'allocated_additional_cost'  => 0,
+                ]);
+            }
+
+            Voucher::where('reference', 'like', "PI-{$invoice->id}-RECEIVE-%")->delete();
+
+            $invoice->update([
+                'status'       => PurchaseInvoice::STATUS_IN_TRANSIT,
+                'received_at'  => null,
+                'received_by'  => null,
+            ]);
+
+            $this->logStatusChange(
+                $invoice, PurchaseInvoice::STATUS_RECEIVED, PurchaseInvoice::STATUS_IN_TRANSIT,
+                'Reverted from Received (mistaken receipt). ' . ($request->remarks ?? '')
+            );
+
+            DB::commit();
+            Log::info('[PI] Reverted to In Transit', ['invoice_id' => $invoice->id]);
+
+            return redirect()->route('purchase_invoices.show', $invoice->id)
+                ->with('success', 'Receipt reverted. Invoice is back to In Transit, stock and vouchers reversed.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('[PI] RevertToInTransit error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
+            return back()->withErrors(['error' => $e->getMessage()]);
         }
     }
 

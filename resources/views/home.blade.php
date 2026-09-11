@@ -402,6 +402,98 @@
             </div>
         </section>
     </div>
+
+    {{--
+    OVERDUE INVOICES WIDGET
+    ───────────────────────
+    Drop this block into home.blade.php wherever you want it to appear
+    (e.g. near the top, right after the Financial Snapshot section).
+    Uses $overduePurchases, $overdueSales, $overdueCommissions,
+    $overdueTotalCount — all provided by DashboardController::overdueInvoices().
+--}}
+
+@if($overdueTotalCount > 0)
+<div class="row mb-3">
+  <div class="col-12">
+    <section class="card border-danger">
+      <header class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+        <h2 class="card-title mb-0"><i class="fas fa-exclamation-triangle"></i> Overdue Invoices ({{ $overdueTotalCount }})</h2>
+      </header>
+      <div class="card-body">
+
+        @if($overduePurchases->count() || $overdueCommissions->count())
+        <p class="text-muted small mb-3">
+          <i class="fas fa-info-circle"></i> Purchase and Commission don't track partial payments here —
+          "overdue" means the due date passed on the full invoice amount, settled separately via your
+          Payment Voucher system. Sale figures below reflect the actual outstanding balance.
+        </p>
+        @endif
+
+        @if($overduePurchases->count())
+        <h6 class="text-danger">Purchase — Vendor Payables</h6>
+        <div class="table-responsive mb-3">
+          <table class="table table-sm table-bordered">
+            <thead><tr><th>Invoice</th><th>Vendor</th><th class="text-end">Amount</th><th>Due Date</th><th class="text-center">Days Overdue</th></tr></thead>
+            <tbody>
+              @foreach($overduePurchases as $row)
+              <tr>
+                <td><a href="{{ $row->route }}" class="text-primary">PI-{{ $row->invoice_no }}</a></td>
+                <td>{{ $row->party }}</td>
+                <td class="text-end">{{ number_format($row->amount, 2) }}</td>
+                <td>{{ $row->due_date->format('d-M-Y') }}</td>
+                <td class="text-center text-danger fw-bold">{{ $row->days_overdue }}</td>
+              </tr>
+              @endforeach
+            </tbody>
+          </table>
+        </div>
+        @endif
+
+        @if($overdueSales->count())
+        <h6 class="text-danger">Sale — Customer Receivables</h6>
+        <div class="table-responsive mb-3">
+          <table class="table table-sm table-bordered">
+            <thead><tr><th>Invoice</th><th>Customer</th><th class="text-end">Balance Due</th><th>Due Date</th><th class="text-center">Days Overdue</th></tr></thead>
+            <tbody>
+              @foreach($overdueSales as $row)
+              <tr>
+                <td><a href="{{ $row->route }}" class="text-primary">SI-{{ $row->invoice_no }}</a></td>
+                <td>{{ $row->party }}</td>
+                <td class="text-end">{{ number_format($row->amount, 2) }}</td>
+                <td>{{ $row->due_date->format('d-M-Y') }}</td>
+                <td class="text-center text-danger fw-bold">{{ $row->days_overdue }}</td>
+              </tr>
+              @endforeach
+            </tbody>
+          </table>
+        </div>
+        @endif
+
+        @if($overdueCommissions->count())
+        <h6 class="text-danger">Commission — Customer Receivables</h6>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered">
+            <thead><tr><th>Invoice</th><th>Customer</th><th class="text-end">Amount</th><th>Due Date</th><th class="text-center">Days Overdue</th></tr></thead>
+            <tbody>
+              @foreach($overdueCommissions as $row)
+              <tr>
+                <td><a href="{{ $row->route }}" class="text-primary">CI-{{ $row->invoice_no }}</a></td>
+                <td>{{ $row->party }}</td>
+                <td class="text-end">{{ number_format($row->amount, 2) }}</td>
+                <td>{{ $row->due_date->format('d-M-Y') }}</td>
+                <td class="text-center text-danger fw-bold">{{ $row->days_overdue }}</td>
+              </tr>
+              @endforeach
+            </tbody>
+          </table>
+        </div>
+        @endif
+
+      </div>
+    </section>
+  </div>
+</div>
+@endif
 </div>
 
 <script>
