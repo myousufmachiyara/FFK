@@ -191,11 +191,13 @@ function addItemRow() {
             <option value="">—</option>${unitOptions()}
         </select></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][wt_per_packing]" class="form-control wt-packing" oninput="calcRow(${idx})" required></td>
-        <td><input type="number" step="any" min="0" name="items[${idx}][quantity]" class="form-control qty" oninput="calcRow(${idx})" required></td>
+        <td>
+          <input type="number" step="any" min="0" name="items[${idx}][quantity]" class="form-control qty" oninput="calcRow(${idx})" required>
+          <small class="text-muted stock-hint" id="stockHint${idx}"></small>
+        </td>
         <td><input type="text" class="form-control readonly-calc gross-weight" readonly value="0.00"></td>
         <td>
           <input type="number" step="any" min="0" name="items[${idx}][net_weight]" class="form-control net-weight" placeholder="= gross wt" oninput="calcRow(${idx})">
-          <small class="text-muted stock-hint" id="stockHint${idx}"></small>
         </td>
         <td><input type="number" step="any" min="0" name="items[${idx}][rate_per_40kg]" class="form-control rate-40kg" oninput="calcRow(${idx})" required></td>
         <td><input type="text" class="form-control readonly-calc rate-kg" readonly value="0.0000"></td>
@@ -222,7 +224,8 @@ function onProductChange(sel, idx) {
             let html = '<option value="">—</option>';
             variations.forEach(v => {
                 const stock = v.stock_quantity ?? 0;
-                html += `<option value="${v.id}" data-stock="${stock}">${v.sku} (Stock: ${stock} kg)</option>`;
+                const stockWt = v.stock_weight ?? 0;
+                html += `<option value="${v.id}" data-stock="${stock}">${v.sku} (Stock: ${stock} bags / ${stockWt} kg)</option>`;
             });
             variationSelect.html(html).trigger('change.select2');
             calcRow(idx);
@@ -253,14 +256,14 @@ function calcRow(idx) {
     const variationStock = parseFloat($selectedVariation.data('stock'));
     const stock = (!isNaN(variationStock) && $selectedVariation.val()) ? variationStock : 0;
     const $hint = $(`#stockHint${idx}`);
-    const netWeightInput = $row.find('.net-weight');
+    const qtyInput = $row.find('.qty');
 
-    if (netWeight > stock) {
-        netWeightInput.addClass('stock-exceeded').removeClass('stock-ok');
-        $hint.text('⚠ Only ' + stock + ' kg available').css('color', 'red');
+    if (qty > stock) {
+        qtyInput.addClass('stock-exceeded').removeClass('stock-ok');
+        $hint.text('⚠ Only ' + stock + ' bags available').css('color', 'red');
     } else {
-        netWeightInput.addClass('stock-ok').removeClass('stock-exceeded');
-        $hint.text('In stock: ' + stock + ' kg').css('color', '#28a745');
+        qtyInput.addClass('stock-ok').removeClass('stock-exceeded');
+        $hint.text('In stock: ' + stock + ' bags').css('color', '#28a745');
     }
 
     calcSummary();

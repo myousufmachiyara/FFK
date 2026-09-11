@@ -263,6 +263,7 @@ class ProductController extends Controller
                 'barcode'        => $v->barcode,
                 'unit'           => $unitId,
                 'stock_quantity' => (float) $v->stock_quantity,
+                'stock_weight'   => (float) $v->stock_weight,
                 'selling_price'  => $v->selling_price !== null ? (float) $v->selling_price : null,
             ];
         });

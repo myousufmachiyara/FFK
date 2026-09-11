@@ -33,12 +33,13 @@ class InventoryReportController extends Controller
         // ================================================================
         // TAB 1 — ITEM LEDGER
         //
-        // IMPORTANT: only RECEIVED purchase quantities count as stock
-        // movement now that Purchase has a Pending -> In Transit -> Received
-        // workflow. Ordered quantity (the old 'quantity' column) is no
-        // longer what enters inventory — 'received_quantity' is, and only
-        // once status = 'received'. Dated by received_at (when stock
-        // actually moved), not invoice_date (when the order was placed).
+        // IMPORTANT: stock is tracked by QUANTITY (bags/packing units) —
+        // that's what actually credits/debits ProductVariation.stock_quantity.
+        // Net weight is shown alongside as a secondary, informational
+        // figure (the weight represented by that bag movement), not the
+        // tracked unit itself. Only RECEIVED purchase quantities count as
+        // stock movement, dated by received_at (when stock actually
+        // moved), not invoice_date (when the order was placed).
         // ================================================================
         if ($tab === 'IL' && $itemId) {
 
@@ -48,13 +49,13 @@ class InventoryReportController extends Controller
                 ->where('purchase_invoices.status', 'received')
                 ->whereNull('purchase_invoices.deleted_at')
                 ->where('purchase_invoices.received_at', '<', $from)
-                ->sum('purchase_invoice_items.received_net_weight');
+                ->sum('purchase_invoice_items.received_packing_qty');
 
             $opSold = DB::table('sale_invoice_items')
                 ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
                 ->where('sale_invoice_items.product_id', $itemId)
                 ->where('sale_invoices.date', '<', $from)
-                ->sum('sale_invoice_items.net_weight');
+                ->sum('sale_invoice_items.quantity');
 
             $opPurchaseReturned = $hasPurchaseReturns
                 ? DB::table('purchase_return_items')
@@ -81,8 +82,10 @@ class InventoryReportController extends Controller
                     'purchase_invoices.received_at as date',
                     DB::raw("'Purchase' as type"),
                     DB::raw("CONCAT('PI-', purchase_invoices.invoice_no) as description"),
-                    'purchase_invoice_items.received_net_weight as qty_in',
-                    DB::raw('0 as qty_out')
+                    'purchase_invoice_items.received_packing_qty as qty_in',
+                    DB::raw('0 as qty_out'),
+                    'purchase_invoice_items.received_net_weight as weight_in',
+                    DB::raw('0 as weight_out')
                 )
                 ->where('purchase_invoice_items.item_id', $itemId)
                 ->where('purchase_invoices.status', 'received')
@@ -90,8 +93,10 @@ class InventoryReportController extends Controller
                 ->whereBetween('purchase_invoices.received_at', [$from, $to]);
 
             // Shortage recorded at receiving time is its own traceable
-            // ledger line — the stock that was dispatched but never
-            // actually arrived.
+            // ledger line — bags dispatched but never actually arrived.
+            // Net weight shortage is shown alongside for context even
+            // when bag count matched (e.g. moisture/spillage loss within
+            // bags that did arrive).
             $shortages = DB::table('purchase_invoice_items')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                 ->select(
@@ -99,11 +104,16 @@ class InventoryReportController extends Controller
                     DB::raw("'Shortage' as type"),
                     DB::raw("CONCAT('PI-', purchase_invoices.invoice_no, ' (Shortage)') as description"),
                     DB::raw('0 as qty_in'),
-                    'purchase_invoice_items.short_weight as qty_out'
+                    DB::raw('(purchase_invoice_items.quantity - purchase_invoice_items.received_packing_qty) as qty_out'),
+                    DB::raw('0 as weight_in'),
+                    'purchase_invoice_items.short_weight as weight_out'
                 )
                 ->where('purchase_invoice_items.item_id', $itemId)
                 ->where('purchase_invoices.status', 'received')
-                ->where('purchase_invoice_items.short_weight', '>', 0)
+                ->where(function ($q) {
+                    $q->where('purchase_invoice_items.short_weight', '>', 0)
+                      ->orWhereColumn('purchase_invoice_items.received_packing_qty', '<', 'purchase_invoice_items.quantity');
+                })
                 ->whereNull('purchase_invoices.deleted_at')
                 ->whereBetween('purchase_invoices.received_at', [$from, $to]);
 
@@ -114,7 +124,9 @@ class InventoryReportController extends Controller
                     DB::raw("'Sale' as type"),
                     DB::raw("CONCAT('SI-', sale_invoices.invoice_no) as description"),
                     DB::raw('0 as qty_in'),
-                    'sale_invoice_items.net_weight as qty_out'
+                    'sale_invoice_items.quantity as qty_out',
+                    DB::raw('0 as weight_in'),
+                    'sale_invoice_items.net_weight as weight_out'
                 )
                 ->where('sale_invoice_items.product_id', $itemId)
                 ->whereBetween('sale_invoices.date', [$from, $to]);
@@ -129,7 +141,9 @@ class InventoryReportController extends Controller
                         DB::raw("'Purchase Return' as type"),
                         DB::raw("CONCAT('PR-', purchase_returns.id) as description"),
                         DB::raw('0 as qty_in'),
-                        'purchase_return_items.quantity as qty_out'
+                        'purchase_return_items.quantity as qty_out',
+                        DB::raw('0 as weight_in'),
+                        DB::raw('0 as weight_out')
                     )
                     ->where('purchase_return_items.item_id', $itemId)
                     ->whereBetween('purchase_returns.return_date', [$from, $to]);
@@ -145,7 +159,9 @@ class InventoryReportController extends Controller
                         DB::raw("'Sale Return' as type"),
                         DB::raw("CONCAT('SR-', sale_returns.id) as description"),
                         'sale_return_items.qty as qty_in',
-                        DB::raw('0 as qty_out')
+                        DB::raw('0 as qty_out'),
+                        DB::raw('0 as weight_in'),
+                        DB::raw('0 as weight_out')
                     )
                     ->where('sale_return_items.product_id', $itemId)
                     ->whereBetween('sale_returns.return_date', [$from, $to]);
@@ -204,9 +220,21 @@ class InventoryReportController extends Controller
                         ->where('purchase_invoice_items.item_id', $product->id)
                         ->where('purchase_invoices.status', 'received')
                         ->whereNull('purchase_invoices.deleted_at')
+                        ->sum('purchase_invoice_items.received_packing_qty');
+
+                    $purchasedWeight = (float) DB::table('purchase_invoice_items')
+                        ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
+                        ->where('purchase_invoice_items.item_id', $product->id)
+                        ->where('purchase_invoices.status', 'received')
+                        ->whereNull('purchase_invoices.deleted_at')
                         ->sum('purchase_invoice_items.received_net_weight');
 
                     $sold = (float) DB::table('sale_invoice_items')
+                        ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
+                        ->where('sale_invoice_items.product_id', $product->id)
+                        ->sum('sale_invoice_items.quantity');
+
+                    $soldWeight = (float) DB::table('sale_invoice_items')
                         ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
                         ->where('sale_invoice_items.product_id', $product->id)
                         ->sum('sale_invoice_items.net_weight');
@@ -219,20 +247,24 @@ class InventoryReportController extends Controller
                         ? (float) DB::table('sale_return_items')->where('product_id', $product->id)->sum('qty')
                         : 0.0;
 
-                    $qty = ($purchased + $saleReturned) - ($sold + $purchaseReturned);
+                    $qty    = ($purchased + $saleReturned) - ($sold + $purchaseReturned);
+                    $weight = $purchasedWeight - $soldWeight; // returns have no weight tracking, approximate is fine here
 
                     if ($qty > 0) {
                         $stockInHand->push([
                             'product'   => $product->name,
                             'variation' => '—',
                             'quantity'  => $qty,
+                            'weight'    => round($weight, 3),
                             'unit'      => $product->unit_shortcode ?? '',
                         ]);
                     }
 
                 } else {
 
-                    // Variation-level stock — read the live column directly.
+                    // Variation-level stock — read the live columns directly.
+                    // 'quantity' (bags) is the tracked/authoritative figure;
+                    // 'weight' (kg) is shown alongside for reference.
                     foreach ($product->variations as $v) {
                         $qty = (float) $v->stock_quantity;
 
@@ -241,6 +273,7 @@ class InventoryReportController extends Controller
                                 'product'   => $product->name,
                                 'variation' => $v->sku ?? $v->name ?? '—',
                                 'quantity'  => $qty,
+                                'weight'    => (float) $v->stock_weight,
                                 'unit'      => $product->unit_shortcode ?? '',
                             ]);
                         }
@@ -275,6 +308,7 @@ class InventoryReportController extends Controller
                     'v.name as vendor_name',
                     'p.name as product_name',
                     'pv.sku as variation_sku',
+                    'pii.quantity as dispatched_qty',
                     'pii.net_weight as dispatched_net_weight',
                     'pii.price'
                 )
@@ -286,6 +320,8 @@ class InventoryReportController extends Controller
             }
 
             $stockInTransit = $query->orderBy('pi.invoice_date', 'desc')->get()->map(function ($row) {
+                // Value is still weight-based (rate is per kg) — only the
+                // "how much stock" figure switches to bags.
                 $row->dispatched_value = (float) $row->dispatched_net_weight * (float) $row->price;
                 return $row;
             });

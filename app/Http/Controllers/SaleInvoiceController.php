@@ -62,6 +62,7 @@ class SaleInvoiceController extends Controller
         ]);
     }
 
+    /** Bags available — the tracked stock unit. */
     private function resolveAvailableStock(?int $variationId): float
     {
         if (!$variationId) return 0;
@@ -69,7 +70,12 @@ class SaleInvoiceController extends Controller
         return $variation ? (float) $variation->stock_quantity : 0;
     }
 
-    private function adjustStock(?int $variationId, float $delta): void
+    /**
+     * Adjusts both tracked stock figures together: stock_quantity (bags —
+     * the authoritative figure stock is checked/deducted against) and
+     * stock_weight (kg — maintained in parallel purely for display).
+     */
+    private function adjustStock(?int $variationId, float $qtyDelta, float $weightDelta): void
     {
         if (!$variationId) {
             Log::warning('[SI] No variation_id on item — stock not adjusted.');
@@ -80,10 +86,15 @@ class SaleInvoiceController extends Controller
             Log::warning('[SI] Variation not found for stock adjustment', ['variation_id' => $variationId]);
             return;
         }
-        if ($delta >= 0) {
-            $variation->increment('stock_quantity', $delta);
+        if ($qtyDelta >= 0) {
+            $variation->increment('stock_quantity', $qtyDelta);
         } else {
-            $variation->decrement('stock_quantity', abs($delta));
+            $variation->decrement('stock_quantity', abs($qtyDelta));
+        }
+        if ($weightDelta >= 0) {
+            $variation->increment('stock_weight', $weightDelta);
+        } else {
+            $variation->decrement('stock_weight', abs($weightDelta));
         }
     }
 
@@ -184,7 +195,7 @@ class SaleInvoiceController extends Controller
             $totalAmount      += $calc['total'];
             $totalCost        += $unitCost * $calc['netWeight'];
 
-            $this->adjustStock($itemData['variation_id'] ?? null, -$calc['netWeight']);
+            $this->adjustStock($itemData['variation_id'] ?? null, -$qty, -$calc['netWeight']);
         }
 
         $totalOtherExpenses = 0;
@@ -245,13 +256,10 @@ class SaleInvoiceController extends Controller
         try {
             foreach ($request->items as $itemData) {
                 $available = $this->resolveAvailableStock($itemData['variation_id'] ?? null);
-                $wtPerPacking = (float) $itemData['wt_per_packing'];
                 $qty = (float) $itemData['quantity'];
-                $netOverride = isset($itemData['net_weight']) && $itemData['net_weight'] !== '' ? (float) $itemData['net_weight'] : null;
-                $requestedWeight = $netOverride ?? ($wtPerPacking * $qty);
 
-                if ($requestedWeight > $available) {
-                    throw new \Exception("Insufficient stock. Available: {$available} kg, Requested: {$requestedWeight} kg.");
+                if ($qty > $available) {
+                    throw new \Exception("Insufficient stock. Available: {$available} bags, Requested: {$qty} bags.");
                 }
             }
 
@@ -396,20 +404,17 @@ class SaleInvoiceController extends Controller
         try {
             $invoice = SaleInvoice::with(['items', 'expenses'])->lockForUpdate()->findOrFail($id);
 
-            // Reverse old stock (by net weight) before validating new amounts.
+            // Reverse old stock (by bags and weight) before validating new amounts.
             foreach ($invoice->items as $oldItem) {
-                $this->adjustStock($oldItem->variation_id, +(float) $oldItem->net_weight);
+                $this->adjustStock($oldItem->variation_id, +(float) $oldItem->quantity, +(float) $oldItem->net_weight);
             }
 
             foreach ($request->items as $itemData) {
                 $available = $this->resolveAvailableStock($itemData['variation_id'] ?? null);
-                $wtPerPacking = (float) $itemData['wt_per_packing'];
                 $qty = (float) $itemData['quantity'];
-                $netOverride = isset($itemData['net_weight']) && $itemData['net_weight'] !== '' ? (float) $itemData['net_weight'] : null;
-                $requestedWeight = $netOverride ?? ($wtPerPacking * $qty);
 
-                if ($requestedWeight > $available) {
-                    throw new \Exception("Insufficient stock. Available: {$available} kg, Requested: {$requestedWeight} kg.");
+                if ($qty > $available) {
+                    throw new \Exception("Insufficient stock. Available: {$available} bags, Requested: {$qty} bags.");
                 }
             }
 
@@ -495,7 +500,7 @@ class SaleInvoiceController extends Controller
             $invoice = SaleInvoice::with('items')->lockForUpdate()->findOrFail($id);
 
             foreach ($invoice->items as $item) {
-                $this->adjustStock($item->variation_id, +(float) $item->net_weight);
+                $this->adjustStock($item->variation_id, +(float) $item->quantity, +(float) $item->net_weight);
             }
 
             Voucher::where('reference', 'like', "SI-{$invoice->id}-%")->delete();

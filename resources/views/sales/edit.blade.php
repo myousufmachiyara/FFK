@@ -222,7 +222,8 @@ function loadVariationsForRow(productId, idx, selectedId) {
             variations.forEach(v => {
                 const sel = (selectedId == v.id) ? 'selected' : '';
                 const stock = v.stock_quantity ?? 0;
-                html += `<option value="${v.id}" data-stock="${stock}" ${sel}>${v.sku} (Stock: ${stock} kg)</option>`;
+                const stockWt = v.stock_weight ?? 0;
+                html += `<option value="${v.id}" data-stock="${stock}" ${sel}>${v.sku} (Stock: ${stock} bags / ${stockWt} kg)</option>`;
             });
             variationSelect.html(html).trigger('change.select2');
         })

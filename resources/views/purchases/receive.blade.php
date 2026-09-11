@@ -36,8 +36,9 @@
                 <tr>
                   <th>#</th>
                   <th>Item</th>
+                  <th>Dispatched Qty (bags)</th>
                   <th>Dispatched Net Wt (kg)</th>
-                  <th>Received Bags <small class="text-muted">(optional)</small></th>
+                  <th>Received Bags *</th>
                   <th>Received Net Wt (kg) *</th>
                   <th>Short Wt (kg)</th>
                   <th>Shortage Reason</th>
@@ -51,10 +52,11 @@
                     {{ $item->product->name ?? '-' }} @if($item->variation) ({{ $item->variation->sku }}) @endif
                     <input type="hidden" name="items[{{ $i }}][id]" value="{{ $item->id }}">
                   </td>
+                  <td>{{ number_format($item->quantity, 2) }}</td>
                   <td>{{ number_format($item->net_weight, 2) }}</td>
                   <td>
-                    <input type="number" step="any" min="0" name="items[{{ $i }}][received_packing_qty]"
-                           class="form-control" value="{{ $item->quantity }}">
+                    <input type="number" step="any" min="0" max="{{ $item->quantity }}" name="items[{{ $i }}][received_packing_qty]"
+                           class="form-control" value="{{ $item->quantity }}" required>
                   </td>
                   <td>
                     <input type="number" step="any" min="0" max="{{ $item->net_weight }}"

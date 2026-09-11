@@ -516,7 +516,7 @@ class PurchaseInvoiceController extends Controller
             'amount_paid'                       => 'nullable|numeric|min:0',
             'items'                              => 'required|array|min:1',
             'items.*.id'                          => 'required|exists:purchase_invoice_items,id',
-            'items.*.received_packing_qty'         => 'nullable|numeric|min:0',
+            'items.*.received_packing_qty'         => 'required|numeric|min:0',
             'items.*.received_net_weight'           => 'required|numeric|min:0',
             'items.*.shortage_reason'                => 'nullable|string',
         ]);
@@ -545,18 +545,23 @@ class PurchaseInvoiceController extends Controller
                 $input = $itemsInput->get($item->id);
                 if (!$input) continue;
 
-                $dispatchedWeight = (float) $item->net_weight;
-                $receivedWeight   = (float) $input['received_net_weight'];
+                $dispatchedWeight   = (float) $item->net_weight;
+                $receivedWeight     = (float) $input['received_net_weight'];
+                $dispatchedQty      = (float) $item->quantity;
+                $receivedQty        = (float) $input['received_packing_qty'];
 
                 if ($receivedWeight > $dispatchedWeight) {
                     throw new \Exception("Received weight for item #{$item->id} cannot exceed dispatched net weight ({$dispatchedWeight} kg).");
+                }
+                if ($receivedQty > $dispatchedQty) {
+                    throw new \Exception("Received bags for item #{$item->id} cannot exceed dispatched quantity ({$dispatchedQty} bags).");
                 }
 
                 $shortWeight    = max($dispatchedWeight - $receivedWeight, 0);
                 $allocatedExtra = round($receivedWeight * $perKgExtra, 2);
 
                 $item->update([
-                    'received_packing_qty'      => $input['received_packing_qty'] ?? null,
+                    'received_packing_qty'      => $receivedQty,
                     'received_net_weight'       => $receivedWeight,
                     'short_weight'               => $shortWeight,
                     'shortage_reason'            => $shortWeight > 0 ? ($input['shortage_reason'] ?? null) : null,
@@ -566,10 +571,17 @@ class PurchaseInvoiceController extends Controller
                 $totalReceivedValue   += $receivedWeight * (float) $item->price;
                 $totalDispatchedValue += $dispatchedWeight * (float) $item->price;
 
+                // FIX: stock is now tracked by QUANTITY (bags), not
+                // weight — 'quantity' is the count that gets sold and
+                // deducted at Sale time, matching how the business
+                // actually thinks about inventory (bags in, bags out).
+                // 'stock_weight' is maintained alongside purely as the
+                // net-weight-in-stock figure for display.
                 if ($item->variation_id) {
                     $variation = ProductVariation::find($item->variation_id);
                     if ($variation) {
-                        $variation->increment('stock_quantity', $receivedWeight);
+                        $variation->increment('stock_quantity', $receivedQty);
+                        $variation->increment('stock_weight', $receivedWeight);
                     } else {
                         Log::warning('[PI] Variation not found on receive', ['variation_id' => $item->variation_id]);
                     }
@@ -702,7 +714,8 @@ class PurchaseInvoiceController extends Controller
                 if ($item->variation_id && $item->received_net_weight) {
                     $variation = ProductVariation::find($item->variation_id);
                     if ($variation) {
-                        $variation->decrement('stock_quantity', (float) $item->received_net_weight);
+                        $variation->decrement('stock_quantity', (float) $item->received_packing_qty);
+                        $variation->decrement('stock_weight', (float) $item->received_net_weight);
                     }
                 }
 
