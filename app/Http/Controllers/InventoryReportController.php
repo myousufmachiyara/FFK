@@ -50,7 +50,7 @@ class InventoryReportController extends Controller
                 ->where('purchase_invoices.status', 'received')
                 ->whereNull('purchase_invoices.deleted_at')
                 ->where('purchase_invoices.received_at', '<', $from)
-                ->sum('purchase_invoice_items.received_packing_qty');
+                ->sum(DB::raw('COALESCE(purchase_invoice_items.received_packing_qty, purchase_invoice_items.quantity)'));
 
             $opSold = DB::table('sale_invoice_items')
                 ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
@@ -86,7 +86,7 @@ class InventoryReportController extends Controller
                 ->where('purchase_invoices.status', 'received')
                 ->whereNull('purchase_invoices.deleted_at')
                 ->where('purchase_invoices.received_at', '<', $from)
-                ->sum('purchase_invoice_items.received_net_weight');
+                ->sum(DB::raw('COALESCE(purchase_invoice_items.received_net_weight, purchase_invoice_items.net_weight)'));
 
             $opSoldWeight = DB::table('sale_invoice_items')
                 ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
@@ -240,14 +240,14 @@ class InventoryReportController extends Controller
                         ->where('purchase_invoice_items.item_id', $product->id)
                         ->where('purchase_invoices.status', 'received')
                         ->whereNull('purchase_invoices.deleted_at')
-                        ->sum('purchase_invoice_items.received_packing_qty');
+                        ->sum(DB::raw('COALESCE(purchase_invoice_items.received_packing_qty, purchase_invoice_items.quantity)'));
 
                     $purchasedWeight = (float) DB::table('purchase_invoice_items')
                         ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                         ->where('purchase_invoice_items.item_id', $product->id)
                         ->where('purchase_invoices.status', 'received')
                         ->whereNull('purchase_invoices.deleted_at')
-                        ->sum('purchase_invoice_items.received_net_weight');
+                        ->sum(DB::raw('COALESCE(purchase_invoice_items.received_net_weight, purchase_invoice_items.net_weight)'));
 
                     $sold = (float) DB::table('sale_invoice_items')
                         ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
