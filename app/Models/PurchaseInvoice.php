@@ -39,6 +39,7 @@ class PurchaseInvoice extends Model
         'total_weight',
         'total_gross_weight',
         'total_other_expenses',
+        'amount_paid',
         'net_amount',
         'created_by',
     ];
@@ -51,6 +52,7 @@ class PurchaseInvoice extends Model
         'total_weight'          => 'decimal:3',
         'total_gross_weight'    => 'decimal:3',
         'total_other_expenses'  => 'decimal:2',
+        'amount_paid'           => 'decimal:2',
         'net_amount'            => 'decimal:2',
     ];
 
@@ -114,6 +116,12 @@ class PurchaseInvoice extends Model
     public function totalBillAmount(): float
     {
         return round((float) $this->total_amount + (float) $this->total_other_expenses, 2);
+    }
+
+    /** What's left to pay the vendor. Only meaningful once Received — the full bill amount isn't known before that. */
+    public function remainingBalance(): float
+    {
+        return round($this->totalBillAmount() - (float) $this->amount_paid, 2);
     }
 
     public function isCredit(): bool

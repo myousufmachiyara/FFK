@@ -35,6 +35,8 @@ class CommissionInvoice extends Model
         'total_vendor_commission_amount',
         'total_customer_commission_amount',
         'total_other_expenses',
+        'amount_paid_to_vendor',
+        'amount_received_from_customer',
         'delivered_at',
         'delivered_by',
         'delivery_received_by_name',
@@ -54,6 +56,8 @@ class CommissionInvoice extends Model
         'total_vendor_commission_amount'     => 'decimal:2',
         'total_customer_commission_amount'   => 'decimal:2',
         'total_other_expenses'               => 'decimal:2',
+        'amount_paid_to_vendor'              => 'decimal:2',
+        'amount_received_from_customer'      => 'decimal:2',
     ];
 
     public function vendor()
@@ -114,6 +118,17 @@ class CommissionInvoice extends Model
     public function totalCustomerReceivable(): float
     {
         return round((float) $this->total_sale_amount + (float) $this->total_other_expenses, 2);
+    }
+
+    /** What's left to pay the vendor / collect from the customer. Only meaningful once Delivered. */
+    public function vendorRemainingBalance(): float
+    {
+        return round($this->totalVendorPayable() - (float) $this->amount_paid_to_vendor, 2);
+    }
+
+    public function customerRemainingBalance(): float
+    {
+        return round($this->totalCustomerReceivable() - (float) $this->amount_received_from_customer, 2);
     }
 
     public function isCredit(): bool

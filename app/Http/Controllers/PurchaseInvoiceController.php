@@ -268,8 +268,9 @@ class PurchaseInvoiceController extends Controller
         ])->findOrFail($id);
 
         $vouchers = $invoice->vouchers();
+        $paymentAccounts = ChartOfAccounts::whereIn('account_type', ['cash', 'bank'])->orderBy('name')->get();
 
-        return view('purchases.show', compact('invoice', 'vouchers'));
+        return view('purchases.show', compact('invoice', 'vouchers', 'paymentAccounts'));
     }
 
     public function edit($id)
@@ -486,19 +487,24 @@ class PurchaseInvoiceController extends Controller
                 ->with('error', 'Only invoices In Transit can be received.');
         }
 
-        return view('purchases.receive', compact('invoice'));
+        $paymentAccounts = ChartOfAccounts::whereIn('account_type', ['cash', 'bank'])->orderBy('name')->get();
+
+        return view('purchases.receive', compact('invoice', 'paymentAccounts'));
     }
 
     // ─────────────────────────────────────────────────────────────
     // RECEIVE  (In Transit -> Received)
     //
     // Other Expenses were already entered at creation — nothing new is
-    // collected here. This step just confirms received weight per item
-    // and posts the accounting:
+    // collected here. This step confirms received weight per item,
+    // posts the accounting, and optionally records an immediate payment
+    // to the vendor now that the full bill amount (items + expenses) is
+    // finally known:
     //
     //   DR Actual Inventory        CR Inventory In Transit   (received value, by weight)
     //   DR Shortage/Loss Account   CR Inventory In Transit   (shortage value, if any)
     //   DR Actual Inventory        CR (Vendor OR Payee)      (per expense — paid_by routed)
+    //   DR Vendor                  CR Payment Account        (optional immediate payment)
     // ─────────────────────────────────────────────────────────────
     public function receive(Request $request, $id)
     {
@@ -506,6 +512,8 @@ class PurchaseInvoiceController extends Controller
             'received_date'                     => 'required|date',
             'remarks'                           => 'nullable|string',
             'attachment'                        => 'nullable|file|mimes:jpg,jpeg,png,pdf,zip|max:2048',
+            'payment_account_id'                => 'nullable|exists:chart_of_accounts,id',
+            'amount_paid'                       => 'nullable|numeric|min:0',
             'items'                              => 'required|array|min:1',
             'items.*.id'                          => 'required|exists:purchase_invoice_items,id',
             'items.*.received_packing_qty'         => 'nullable|numeric|min:0',
@@ -517,6 +525,7 @@ class PurchaseInvoiceController extends Controller
 
         try {
             $invoice = PurchaseInvoice::with(['items', 'expenses'])->lockForUpdate()->findOrFail($id);
+
 
             if (!$invoice->isInTransit()) {
                 DB::rollBack();
@@ -612,6 +621,26 @@ class PurchaseInvoiceController extends Controller
                 'received_by'  => auth()->id(),
             ]);
 
+            // Optional immediate payment to the vendor — now that
+            // totalBillAmount() (items + expenses) is finally known.
+            $amountPaidNow = (float) ($request->amount_paid ?? 0);
+            if ($amountPaidNow > 0) {
+                if (!$request->payment_account_id) {
+                    throw new \Exception('A payment account is required to record a payment.');
+                }
+                if ($amountPaidNow > $invoice->totalBillAmount()) {
+                    throw new \Exception('Amount paid cannot exceed the total bill amount.');
+                }
+
+                $this->postVoucher(
+                    $request->received_date, $invoice->vendor, ChartOfAccounts::findOrFail($request->payment_account_id), $amountPaidNow,
+                    "PI-{$invoice->id}-PAYMENT-1",
+                    "Purchase Invoice #{$invoice->invoice_no} — payment to vendor"
+                );
+
+                $invoice->update(['amount_paid' => $amountPaidNow]);
+            }
+
             if ($request->hasFile('attachment')) {
                 $path = $request->file('attachment')->store('purchase_invoices', 'public');
                 $invoice->attachments()->create([
@@ -664,6 +693,11 @@ class PurchaseInvoiceController extends Controller
                 return back()->with('error', 'This invoice is not Received — nothing to undo.');
             }
 
+            if ((float) $invoice->amount_paid > 0) {
+                DB::rollBack();
+                return back()->with('error', 'A payment has already been recorded against this invoice (' . number_format($invoice->amount_paid, 2) . '). Undoing the receipt would leave that payment orphaned — this does not reverse a real bank transaction automatically, so it is blocked. Contact an admin if this genuinely needs correcting.');
+            }
+
             foreach ($invoice->items as $item) {
                 if ($item->variation_id && $item->received_net_weight) {
                     $variation = ProductVariation::find($item->variation_id);
@@ -703,6 +737,58 @@ class PurchaseInvoiceController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('[PI] RevertToInTransit error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ADD PAYMENT — records an additional payment to the vendor after
+    // Receiving. Only valid once Received (that's when totalBillAmount()
+    // is finalized).
+    // ─────────────────────────────────────────────────────────────
+    public function addPayment(Request $request, $id)
+    {
+        $request->validate([
+            'payment_date'       => 'required|date',
+            'payment_account_id' => 'required|exists:chart_of_accounts,id',
+            'amount'             => 'required|numeric|min:0.01',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $invoice = PurchaseInvoice::with('vendor')->lockForUpdate()->findOrFail($id);
+
+            if (!$invoice->isReceived()) {
+                DB::rollBack();
+                return back()->with('error', 'Payments can only be recorded once the invoice is Received.');
+            }
+
+            $remaining = $invoice->remainingBalance();
+            $amount = (float) $request->amount;
+
+            if ($amount > $remaining) {
+                DB::rollBack();
+                return back()->withErrors(['amount' => "Amount cannot exceed the remaining balance ({$remaining})."]);
+            }
+
+            $paymentCount = Voucher::where('reference', 'like', "PI-{$invoice->id}-PAYMENT-%")->count();
+
+            $this->postVoucher(
+                $request->payment_date, $invoice->vendor, ChartOfAccounts::findOrFail($request->payment_account_id), $amount,
+                "PI-{$invoice->id}-PAYMENT-" . ($paymentCount + 1),
+                "Purchase Invoice #{$invoice->invoice_no} — additional payment to vendor"
+            );
+
+            $invoice->update(['amount_paid' => (float) $invoice->amount_paid + $amount]);
+
+            DB::commit();
+            return redirect()->route('purchase_invoices.show', $invoice->id)
+                ->with('success', 'Payment recorded.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('[PI] AddPayment error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
             return back()->withErrors(['error' => $e->getMessage()]);
         }
     }

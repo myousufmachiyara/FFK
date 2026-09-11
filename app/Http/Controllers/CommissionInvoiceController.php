@@ -249,8 +249,9 @@ class CommissionInvoiceController extends Controller
         ])->findOrFail($id);
 
         $vouchers = $invoice->vouchers();
+        $paymentAccounts = ChartOfAccounts::whereIn('account_type', ['cash', 'bank'])->orderBy('name')->get();
 
-        return view('commissions.show', compact('invoice', 'vouchers'));
+        return view('commissions.show', compact('invoice', 'vouchers', 'paymentAccounts'));
     }
 
     public function edit($id)
@@ -469,6 +470,11 @@ class CommissionInvoiceController extends Controller
                 return back()->with('error', 'This invoice is not Delivered — nothing to undo.');
             }
 
+            if ((float) $invoice->amount_paid_to_vendor > 0 || (float) $invoice->amount_received_from_customer > 0) {
+                DB::rollBack();
+                return back()->with('error', 'A payment or receipt has already been recorded against this invoice — undoing delivery would leave that orphaned. This does not reverse a real bank transaction automatically, so it is blocked. Contact an admin if this genuinely needs correcting.');
+            }
+
             Voucher::where('reference', 'like', "CI-{$invoice->id}-DELIVERED-%")->delete();
 
             $invoice->update([
@@ -515,6 +521,10 @@ class CommissionInvoiceController extends Controller
             'delivery_received_by_name'  => 'nullable|string|max:150',
             'delivery_remarks'           => 'nullable|string',
             'attachment'                 => 'nullable|file|mimes:jpg,jpeg,png,pdf,zip|max:2048',
+            'vendor_payment_account_id'    => 'nullable|exists:chart_of_accounts,id',
+            'amount_paid_to_vendor'        => 'nullable|numeric|min:0',
+            'customer_receipt_account_id'  => 'nullable|exists:chart_of_accounts,id',
+            'amount_received_from_customer'=> 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -614,6 +624,40 @@ class CommissionInvoiceController extends Controller
                 "Commission Invoice #{$invoice->invoice_no} — goods pass-through portion of sale"
             );
 
+            // 6) Optional immediate payment to vendor / receipt from
+            // customer — now that both totals are finally known.
+            $amountPaidToVendor = (float) ($request->amount_paid_to_vendor ?? 0);
+            if ($amountPaidToVendor > 0) {
+                if (!$request->vendor_payment_account_id) {
+                    throw new \Exception('A payment account is required to record a payment to the vendor.');
+                }
+                if ($amountPaidToVendor > $invoice->totalVendorPayable()) {
+                    throw new \Exception('Amount paid to vendor cannot exceed the total vendor payable.');
+                }
+                $this->postVoucher(
+                    $date, $vendorAccount, ChartOfAccounts::findOrFail($request->vendor_payment_account_id), $amountPaidToVendor,
+                    "CI-{$invoice->id}-VENDOR-PAYMENT-1",
+                    "Commission Invoice #{$invoice->invoice_no} — payment to vendor"
+                );
+                $invoice->update(['amount_paid_to_vendor' => $amountPaidToVendor]);
+            }
+
+            $amountReceivedFromCustomer = (float) ($request->amount_received_from_customer ?? 0);
+            if ($amountReceivedFromCustomer > 0) {
+                if (!$request->customer_receipt_account_id) {
+                    throw new \Exception('A receipt account is required to record a receipt from the customer.');
+                }
+                if ($amountReceivedFromCustomer > $invoice->totalCustomerReceivable()) {
+                    throw new \Exception('Amount received from customer cannot exceed the total customer receivable.');
+                }
+                $this->postVoucher(
+                    $date, ChartOfAccounts::findOrFail($request->customer_receipt_account_id), $customerAccount, $amountReceivedFromCustomer,
+                    "CI-{$invoice->id}-CUSTOMER-RECEIPT-1",
+                    "Commission Invoice #{$invoice->invoice_no} — receipt from customer"
+                );
+                $invoice->update(['amount_received_from_customer' => $amountReceivedFromCustomer]);
+            }
+
             $this->logStatusChange($invoice, CommissionInvoice::STATUS_IN_TRANSIT, CommissionInvoice::STATUS_DELIVERED, $request->delivery_remarks);
 
             DB::commit();
@@ -623,6 +667,106 @@ class CommissionInvoiceController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('[CI] Deliver error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ADD VENDOR PAYMENT — records an additional payment to the vendor
+    // after Delivery. Only valid once Delivered.
+    // ─────────────────────────────────────────────────────────────
+    public function addVendorPayment(Request $request, $id)
+    {
+        $request->validate([
+            'payment_date'       => 'required|date',
+            'payment_account_id' => 'required|exists:chart_of_accounts,id',
+            'amount'             => 'required|numeric|min:0.01',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $invoice = CommissionInvoice::with('vendor')->lockForUpdate()->findOrFail($id);
+
+            if (!$invoice->isDelivered()) {
+                DB::rollBack();
+                return back()->with('error', 'Payments can only be recorded once the invoice is Delivered.');
+            }
+
+            $remaining = $invoice->vendorRemainingBalance();
+            $amount = (float) $request->amount;
+
+            if ($amount > $remaining) {
+                DB::rollBack();
+                return back()->withErrors(['amount' => "Amount cannot exceed the remaining vendor balance ({$remaining})."]);
+            }
+
+            $count = Voucher::where('reference', 'like', "CI-{$invoice->id}-VENDOR-PAYMENT-%")->count();
+
+            $this->postVoucher(
+                $request->payment_date, $invoice->vendor, ChartOfAccounts::findOrFail($request->payment_account_id), $amount,
+                "CI-{$invoice->id}-VENDOR-PAYMENT-" . ($count + 1),
+                "Commission Invoice #{$invoice->invoice_no} — additional payment to vendor"
+            );
+
+            $invoice->update(['amount_paid_to_vendor' => (float) $invoice->amount_paid_to_vendor + $amount]);
+
+            DB::commit();
+            return redirect()->route('commission_invoices.show', $invoice->id)->with('success', 'Payment recorded.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('[CI] AddVendorPayment error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ADD CUSTOMER RECEIPT — records an additional receipt from the
+    // customer after Delivery. Only valid once Delivered.
+    // ─────────────────────────────────────────────────────────────
+    public function addCustomerReceipt(Request $request, $id)
+    {
+        $request->validate([
+            'receipt_date'       => 'required|date',
+            'receipt_account_id' => 'required|exists:chart_of_accounts,id',
+            'amount'             => 'required|numeric|min:0.01',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $invoice = CommissionInvoice::with('customer')->lockForUpdate()->findOrFail($id);
+
+            if (!$invoice->isDelivered()) {
+                DB::rollBack();
+                return back()->with('error', 'Receipts can only be recorded once the invoice is Delivered.');
+            }
+
+            $remaining = $invoice->customerRemainingBalance();
+            $amount = (float) $request->amount;
+
+            if ($amount > $remaining) {
+                DB::rollBack();
+                return back()->withErrors(['amount' => "Amount cannot exceed the remaining customer balance ({$remaining})."]);
+            }
+
+            $count = Voucher::where('reference', 'like', "CI-{$invoice->id}-CUSTOMER-RECEIPT-%")->count();
+
+            $this->postVoucher(
+                $request->receipt_date, ChartOfAccounts::findOrFail($request->receipt_account_id), $invoice->customer, $amount,
+                "CI-{$invoice->id}-CUSTOMER-RECEIPT-" . ($count + 1),
+                "Commission Invoice #{$invoice->invoice_no} — additional receipt from customer"
+            );
+
+            $invoice->update(['amount_received_from_customer' => (float) $invoice->amount_received_from_customer + $amount]);
+
+            DB::commit();
+            return redirect()->route('commission_invoices.show', $invoice->id)->with('success', 'Receipt recorded.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('[CI] AddCustomerReceipt error', ['message' => $e->getMessage(), 'line' => $e->getLine()]);
             return back()->withErrors(['error' => $e->getMessage()]);
         }
     }

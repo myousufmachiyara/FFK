@@ -44,6 +44,11 @@
             <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#undoReceiveModal">
               <i class="fas fa-undo"></i> Undo Receive
             </button>
+            @if($invoice->remainingBalance() > 0.01)
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#recordPaymentModal">
+              <i class="fas fa-money-bill-wave"></i> Record Payment
+            </button>
+            @endif
           @endif
         </div>
       </header>
@@ -150,6 +155,12 @@
           <div class="col"><small class="text-muted d-block">Net Wt.</small><strong>{{ number_format($invoice->total_weight, 2) }} kg</strong></div>
           <div class="col"><small class="text-muted d-block">Total Bill Amount</small><strong class="text-danger">{{ number_format($invoice->totalBillAmount(), 2) }}</strong></div>
         </div>
+        @if($invoice->isReceived())
+        <div class="row mb-4 text-center">
+          <div class="col"><small class="text-muted d-block">Amount Paid</small><strong class="text-success">{{ number_format($invoice->amount_paid, 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Remaining Balance</small><strong class="text-danger">{{ number_format($invoice->remainingBalance(), 2) }}</strong></div>
+        </div>
+        @endif
 
         @if($invoice->attachments->count())
         <h5>Attachments</h5>
@@ -305,6 +316,47 @@
     </form>
   </div>
 </div>
+
+@if($invoice->isReceived())
+<!-- Record Payment modal -->
+<div class="modal fade" id="recordPaymentModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form action="{{ route('purchase_invoices.addPayment', $invoice->id) }}" method="POST">
+      @csrf
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Record Payment to Vendor</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">Remaining balance: <strong>{{ number_format($invoice->remainingBalance(), 2) }}</strong></p>
+          <div class="mb-3">
+            <label>Payment Date *</label>
+            <input type="date" name="payment_date" class="form-control" value="{{ date('Y-m-d') }}" required>
+          </div>
+          <div class="mb-3">
+            <label>Pay From *</label>
+            <select name="payment_account_id" class="form-control" required>
+              <option value="">Select Account</option>
+              @foreach($paymentAccounts as $pa)
+                <option value="{{ $pa->id }}">{{ $pa->name }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="mb-3">
+            <label>Amount *</label>
+            <input type="number" name="amount" class="form-control" step="any" min="0.01" max="{{ $invoice->remainingBalance() }}" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Record Payment</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+@endif
 @endsection
   </div>
 </div>

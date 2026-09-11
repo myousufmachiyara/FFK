@@ -178,3 +178,17 @@ Route::post('commission_invoices/{id}/revert-to-in-transit', [CommissionInvoiceC
     ->middleware('check.permission:commission_invoices.revert_to_in_transit')
     ->name('commission_invoices.revertToInTransit');
 });
+
+Route::post('purchase_invoices/{id}/add-payment', [PurchaseInvoiceController::class, 'addPayment'])
+    ->middleware('check.permission:purchase_invoices.add_payment')
+    ->name('purchase_invoices.addPayment');
+ 
+// Commission — additional payment to vendor after Delivery
+Route::post('commission_invoices/{id}/add-vendor-payment', [CommissionInvoiceController::class, 'addVendorPayment'])
+    ->middleware('check.permission:commission_invoices.add_vendor_payment')
+    ->name('commission_invoices.addVendorPayment');
+ 
+// Commission — additional receipt from customer after Delivery
+Route::post('commission_invoices/{id}/add-customer-receipt', [CommissionInvoiceController::class, 'addCustomerReceipt'])
+    ->middleware('check.permission:commission_invoices.add_customer_receipt')
+    ->name('commission_invoices.addCustomerReceipt');

@@ -110,6 +110,28 @@
           <p class="text-muted small mt-3">No Other Expenses were entered for this invoice.</p>
           @endif
 
+          <div class="row p-3 mt-3" style="background-color: #e7f3ff; border-radius: 5px; border: 1px solid #b8daff;">
+            <div class="col-md-12"><h5><i class="fas fa-money-bill-wave"></i> Record Payment to Vendor (Optional)</h5>
+              <p class="text-muted small mb-2">
+                Total Bill Amount (items + expenses): <strong>{{ number_format($invoice->totalBillAmount(), 2) }}</strong>.
+                Leave blank if you're settling this later — you can record a payment anytime from the invoice's Details page.
+              </p>
+            </div>
+            <div class="col-md-6">
+              <label>Pay From</label>
+              <select name="payment_account_id" class="form-control">
+                <option value="">— No payment now —</option>
+                @foreach($paymentAccounts as $pa)
+                  <option value="{{ $pa->id }}">{{ $pa->name }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label>Amount Paid Now</label>
+              <input type="number" name="amount_paid" class="form-control" step="any" min="0" value="0">
+            </div>
+          </div>
+
           <div class="row mb-3 mt-3">
             <div class="col-md-6">
               <label>Attachment</label>

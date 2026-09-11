@@ -32,6 +32,12 @@
           @endif
           @if($invoice->isDelivered())
             <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#undoDeliveryModal"><i class="fas fa-undo"></i> Undo Delivery</button>
+            @if($invoice->vendorRemainingBalance() > 0.01)
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#vendorPaymentModal"><i class="fas fa-money-bill-wave"></i> Pay Vendor</button>
+            @endif
+            @if($invoice->customerRemainingBalance() > 0.01)
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#customerReceiptModal"><i class="fas fa-hand-holding-usd"></i> Receive from Customer</button>
+            @endif
           @endif
         </div>
       </header>
@@ -128,6 +134,14 @@
           <div class="col"><small class="text-muted d-block">Vendor Payable</small><strong class="text-danger">{{ number_format($invoice->totalVendorPayable(), 2) }}</strong></div>
           <div class="col"><small class="text-muted d-block">Customer Receivable</small><strong class="text-primary">{{ number_format($invoice->totalCustomerReceivable(), 2) }}</strong></div>
         </div>
+        @if($invoice->isDelivered())
+        <div class="row mb-4 text-center">
+          <div class="col"><small class="text-muted d-block">Paid to Vendor</small><strong class="text-success">{{ number_format($invoice->amount_paid_to_vendor, 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Vendor Balance Remaining</small><strong class="text-danger">{{ number_format($invoice->vendorRemainingBalance(), 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Received from Customer</small><strong class="text-success">{{ number_format($invoice->amount_received_from_customer, 2) }}</strong></div>
+          <div class="col"><small class="text-muted d-block">Customer Balance Remaining</small><strong class="text-danger">{{ number_format($invoice->customerRemainingBalance(), 2) }}</strong></div>
+        </div>
+        @endif
 
         @if($invoice->isDelivered())
         <div class="row mb-3">
@@ -231,6 +245,40 @@
           <div class="mb-3"><label>Received By</label><input type="text" name="delivery_received_by_name" class="form-control"></div>
           <div class="mb-3"><label>Delivery Proof *</label><input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip" required></div>
           <div class="mb-3"><label>Remarks</label><textarea name="delivery_remarks" class="form-control" rows="2"></textarea></div>
+
+          <hr>
+          <p class="text-muted small mb-2">Optional — record an immediate payment/receipt now that both totals are known. You can also add these later from the Details page.</p>
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label>Pay Vendor From</label>
+              <select name="vendor_payment_account_id" class="form-control">
+                <option value="">— No payment now —</option>
+                @foreach($paymentAccounts as $pa)
+                  <option value="{{ $pa->id }}">{{ $pa->name }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label>Amount Paid to Vendor</label>
+              <input type="number" name="amount_paid_to_vendor" class="form-control" step="any" min="0" value="0">
+            </div>
+          </div>
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label>Receive From Customer To</label>
+              <select name="customer_receipt_account_id" class="form-control">
+                <option value="">— No receipt now —</option>
+                @foreach($paymentAccounts as $pa)
+                  <option value="{{ $pa->id }}">{{ $pa->name }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label>Amount Received from Customer</label>
+              <input type="number" name="amount_received_from_customer" class="form-control" step="any" min="0" value="0">
+            </div>
+          </div>
+
           <div class="alert alert-secondary small mb-0">
             This will create a Customer Receivable of <strong>{{ number_format($invoice->totalCustomerReceivable(), 2) }}</strong>,
             recognize Vendor Commission of <strong>{{ number_format($invoice->total_vendor_commission_amount, 2) }}</strong> and
@@ -300,4 +348,84 @@
     </form>
   </div>
 </div>
-@endsections
+
+@if($invoice->isDelivered())
+<!-- Pay Vendor modal -->
+<div class="modal fade" id="vendorPaymentModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form action="{{ route('commission_invoices.addVendorPayment', $invoice->id) }}" method="POST">
+      @csrf
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Pay Vendor</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">Remaining vendor balance: <strong>{{ number_format($invoice->vendorRemainingBalance(), 2) }}</strong></p>
+          <div class="mb-3">
+            <label>Payment Date *</label>
+            <input type="date" name="payment_date" class="form-control" value="{{ date('Y-m-d') }}" required>
+          </div>
+          <div class="mb-3">
+            <label>Pay From *</label>
+            <select name="payment_account_id" class="form-control" required>
+              <option value="">Select Account</option>
+              @foreach($paymentAccounts as $pa)
+                <option value="{{ $pa->id }}">{{ $pa->name }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="mb-3">
+            <label>Amount *</label>
+            <input type="number" name="amount" class="form-control" step="any" min="0.01" max="{{ $invoice->vendorRemainingBalance() }}" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Record Payment</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Receive from Customer modal -->
+<div class="modal fade" id="customerReceiptModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form action="{{ route('commission_invoices.addCustomerReceipt', $invoice->id) }}" method="POST">
+      @csrf
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Receive from Customer</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">Remaining customer balance: <strong>{{ number_format($invoice->customerRemainingBalance(), 2) }}</strong></p>
+          <div class="mb-3">
+            <label>Receipt Date *</label>
+            <input type="date" name="receipt_date" class="form-control" value="{{ date('Y-m-d') }}" required>
+          </div>
+          <div class="mb-3">
+            <label>Receive Into *</label>
+            <select name="receipt_account_id" class="form-control" required>
+              <option value="">Select Account</option>
+              @foreach($paymentAccounts as $pa)
+                <option value="{{ $pa->id }}">{{ $pa->name }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="mb-3">
+            <label>Amount *</label>
+            <input type="number" name="amount" class="form-control" step="any" min="0.01" max="{{ $invoice->customerRemainingBalance() }}" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Record Receipt</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+@endif
+@endsection
