@@ -21,6 +21,7 @@ use App\Http\Controllers\{
     PurchaseReportController,
     SalesReportController,
     AccountsReportController,
+    CommissionReportController,
     SaleReturnController,
     // PermissionController, // DISABLED: class does not exist in app/Http/Controllers yet.
                               // Was referenced in the original routes file but never built.
@@ -31,22 +32,34 @@ use App\Http\Controllers\{
 Auth::routes();
 
 Route::middleware(['auth'])->group(function () {
+
+    // ─────────────────────────────────────────────────────────────
     // Dashboard
+    // ─────────────────────────────────────────────────────────────
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
+    // ─────────────────────────────────────────────────────────────
+    // User account helpers
+    // ─────────────────────────────────────────────────────────────
     Route::put('/users/{id}/change-password', [UserController::class, 'changePassword'])->name('users.changePassword');
     Route::put('/users/{id}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggleActive');
     Route::post('/change-my-password', [UserController::class, 'changeMyPassword'])->name('users.changeMyPassword');
-    
-    // Product Helpers
+
+    // ─────────────────────────────────────────────────────────────
+    // Product helpers
+    // ─────────────────────────────────────────────────────────────
     Route::get('/products/details', [ProductController::class, 'details'])->name('products.receiving');
     Route::get('/product/{product}/variations', [ProductController::class, 'getVariations'])->name('product.variations');
     Route::get('/get-subcategories/{category_id}', [ProductCategoryController::class, 'getSubcategories'])->name('products.getSubcategories');
+    Route::get('/get-location-stock', [ProductController::class, 'getLocationStock'])->name('products.getLocationStock');
+    Route::get('/products/variations/{variation}/barcode', [ProductController::class, 'variationBarcode'])->name('products.variation.barcode');
 
-    //Purchase Helper
+    // Purchase helper
     Route::get('/product/{product}/invoices', [PurchaseInvoiceController::class, 'getProductInvoices']);
 
-    // Common Modules
+    // ─────────────────────────────────────────────────────────────
+    // Common CRUD modules — generic index/create/store/show/edit/update/destroy/print
+    // ─────────────────────────────────────────────────────────────
     $modules = [
         // User Management
         'roles' => ['controller' => RoleController::class, 'permission' => 'user_roles'],
@@ -118,6 +131,7 @@ Route::middleware(['auth'])->group(function () {
 
     // ─────────────────────────────────────────────────────────────
     // Purchase Invoice — status workflow (Pending -> In Transit -> Received)
+    // plus payment tracking, all grouped together.
     // ─────────────────────────────────────────────────────────────
     Route::post('purchase_invoices/{id}/move-to-in-transit', [PurchaseInvoiceController::class, 'moveToInTransit'])
         ->middleware('check.permission:purchase_invoices.move_to_in_transit')
@@ -135,12 +149,21 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('check.permission:purchase_invoices.restore')
         ->name('purchase_invoices.restore');
 
-        
     Route::post('purchase_invoices/{id}/revert-to-pending', [PurchaseInvoiceController::class, 'revertToPending'])
         ->middleware('check.permission:purchase_invoices.revert_to_pending')
         ->name('purchase_invoices.revertToPending');
+
+    Route::post('purchase_invoices/{id}/revert-to-in-transit', [PurchaseInvoiceController::class, 'revertToInTransit'])
+        ->middleware('check.permission:purchase_invoices.revert_to_in_transit')
+        ->name('purchase_invoices.revertToInTransit');
+
+    Route::post('purchase_invoices/{id}/add-payment', [PurchaseInvoiceController::class, 'addPayment'])
+        ->middleware('check.permission:purchase_invoices.add_payment')
+        ->name('purchase_invoices.addPayment');
+
     // ─────────────────────────────────────────────────────────────
     // Commission Invoice — status workflow (Pending -> In Transit -> Delivered)
+    // plus payment tracking, all grouped together.
     // ─────────────────────────────────────────────────────────────
     Route::post('commission_invoices/{id}/move-to-in-transit', [CommissionInvoiceController::class, 'moveToInTransit'])
         ->middleware('check.permission:commission_invoices.move_to_in_transit')
@@ -154,41 +177,38 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('check.permission:commission_invoices.restore')
         ->name('commission_invoices.restore');
 
+    Route::post('commission_invoices/{id}/revert-to-pending', [CommissionInvoiceController::class, 'revertToPending'])
+        ->middleware('check.permission:commission_invoices.revert_to_pending')
+        ->name('commission_invoices.revertToPending');
+
+    Route::post('commission_invoices/{id}/revert-to-in-transit', [CommissionInvoiceController::class, 'revertToInTransit'])
+        ->middleware('check.permission:commission_invoices.revert_to_in_transit')
+        ->name('commission_invoices.revertToInTransit');
+
+    Route::post('commission_invoices/{id}/add-vendor-payment', [CommissionInvoiceController::class, 'addVendorPayment'])
+        ->middleware('check.permission:commission_invoices.add_vendor_payment')
+        ->name('commission_invoices.addVendorPayment');
+
+    Route::post('commission_invoices/{id}/add-customer-receipt', [CommissionInvoiceController::class, 'addCustomerReceipt'])
+        ->middleware('check.permission:commission_invoices.add_customer_receipt')
+        ->name('commission_invoices.addCustomerReceipt');
+
+    // ─────────────────────────────────────────────────────────────
     // Reports (readonly)
+    // ─────────────────────────────────────────────────────────────
     Route::prefix('reports')->name('reports.')->group(function () {
         Route::get('inventory', [InventoryReportController::class, 'inventoryReports'])->name('inventory');
         Route::get('purchase', [PurchaseReportController::class, 'purchaseReports'])->name('purchase');
         Route::get('sale', [SalesReportController::class, 'saleReports'])->name('sale');
         Route::get('accounts', [AccountsReportController::class, 'accounts'])->name('accounts');
+        Route::get('commission', [CommissionReportController::class, 'commissionReports'])
+            ->middleware('check.permission:reports.commission')
+            ->name('commission');
     });
 
-    Route::get('/get-location-stock', [ProductController::class, 'getLocationStock']);
-    Route::get('/products/variations/{variation}/barcode', [ProductController::class, 'variationBarcode'])->name('products.variation.barcode');
-    Route::post('purchase_invoices/{id}/revert-to-in-transit', [PurchaseInvoiceController::class, 'revertToInTransit'])->middleware('check.permission:purchase_invoices.revert_to_in_transit')->name('purchase_invoices.revertToInTransit');
     // DISABLED: StockTransferController is referenced here but was never
     // imported above (and its existence hasn't been confirmed) — same class
     // of bug as PermissionController. Re-enable once that controller exists
     // and add it to the use {...} import block above.
     // Route::get('/stock-lots/available', [StockTransferController::class, 'getAvailableLots'])->name('stock.lots.available');
-    Route::post('commission_invoices/{id}/revert-to-pending', [CommissionInvoiceController::class, 'revertToPending'])
-    ->middleware('check.permission:commission_invoices.revert_to_pending')
-    ->name('commission_invoices.revertToPending');
- 
-Route::post('commission_invoices/{id}/revert-to-in-transit', [CommissionInvoiceController::class, 'revertToInTransit'])
-    ->middleware('check.permission:commission_invoices.revert_to_in_transit')
-    ->name('commission_invoices.revertToInTransit');
 });
-
-Route::post('purchase_invoices/{id}/add-payment', [PurchaseInvoiceController::class, 'addPayment'])
-    ->middleware('check.permission:purchase_invoices.add_payment')
-    ->name('purchase_invoices.addPayment');
- 
-// Commission — additional payment to vendor after Delivery
-Route::post('commission_invoices/{id}/add-vendor-payment', [CommissionInvoiceController::class, 'addVendorPayment'])
-    ->middleware('check.permission:commission_invoices.add_vendor_payment')
-    ->name('commission_invoices.addVendorPayment');
- 
-// Commission — additional receipt from customer after Delivery
-Route::post('commission_invoices/{id}/add-customer-receipt', [CommissionInvoiceController::class, 'addCustomerReceipt'])
-    ->middleware('check.permission:commission_invoices.add_customer_receipt')
-    ->name('commission_invoices.addCustomerReceipt');
