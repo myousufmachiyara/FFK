@@ -72,6 +72,8 @@
             <p class="text-muted small no-print mb-2">
                 <i class="fas fa-info-circle"></i> Purchases only appear once a Purchase Invoice reaches
                 <strong>Received</strong> status, dated by the actual receiving date — not the order date.
+                Stock is tracked by <strong>bags</strong> (Qty columns) — Weight columns show the net weight
+                behind that same movement, for reference.
             </p>
 
             <div id="il-table">
@@ -81,7 +83,10 @@
                             <th>Date</th><th>Type</th><th>Reference</th>
                             <th class="text-end">Qty In</th>
                             <th class="text-end">Qty Out</th>
-                            <th class="text-end">Balance</th>
+                            <th class="text-end">Bag Balance</th>
+                            <th class="text-end">Wt In (kg)</th>
+                            <th class="text-end">Wt Out (kg)</th>
+                            <th class="text-end">Wt Balance (kg)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -91,13 +96,18 @@
                             <td colspan="2" class="fw-bold">Opening Balance</td>
                             <td class="text-end">—</td><td class="text-end">—</td>
                             <td class="text-end fw-bold">{{ number_format($openingQty, 2) }}</td>
+                            <td class="text-end">—</td><td class="text-end">—</td>
+                            <td class="text-end fw-bold">{{ number_format($openingWeight ?? 0, 2) }}</td>
                         </tr>
-                        @php $runningBalance = $openingQty; @endphp
+                        @php $runningBalance = $openingQty; $runningWeightBalance = $openingWeight ?? 0; @endphp
                         @forelse ($itemLedger as $row)
                             @php
                                 $qtyIn  = (float) $row['qty_in'];
                                 $qtyOut = (float) $row['qty_out'];
+                                $wtIn   = (float) ($row['weight_in'] ?? 0);
+                                $wtOut  = (float) ($row['weight_out'] ?? 0);
                                 $runningBalance += ($qtyIn - $qtyOut);
+                                $runningWeightBalance += ($wtIn - $wtOut);
                                 $desc = $row['description'];
                                 $badgeClass = match ($row['type']) {
                                     'Purchase'        => 'bg-success',
@@ -113,8 +123,6 @@
                                 <td><span class="badge {{ $badgeClass }}">{{ $row['type'] }}</span></td>
                                 <td>
                                     @if (str_starts_with($desc, 'PI-'))
-                                        @php $pid = (int) filter_var(explode(' ', $desc)[0], FILTER_SANITIZE_NUMBER_INT); @endphp
-                                        {{-- description may be 'PI-000012' or 'PI-000012 (Shortage)' — pull the invoice number segment only --}}
                                         @php
                                             preg_match('/PI-(\d+)/', $desc, $m);
                                             $pid = $m[1] ?? null;
@@ -142,18 +150,23 @@
                                 <td class="text-end text-success">{{ $qtyIn  > 0 ? number_format($qtyIn,  2) : '—' }}</td>
                                 <td class="text-end text-danger">{{ $qtyOut > 0 ? number_format($qtyOut, 2) : '—' }}</td>
                                 <td class="text-end fw-bold">{{ number_format($runningBalance, 2) }}</td>
+                                <td class="text-end text-success">{{ $wtIn  > 0 ? number_format($wtIn,  2) : '—' }}</td>
+                                <td class="text-end text-danger">{{ $wtOut > 0 ? number_format($wtOut, 2) : '—' }}</td>
+                                <td class="text-end text-muted">{{ number_format($runningWeightBalance, 2) }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="text-center py-3 text-muted">No transactions in this period.</td></tr>
+                            <tr><td colspan="9" class="text-center py-3 text-muted">No transactions in this period.</td></tr>
                         @endforelse
                         @if ($itemLedger->count() > 0)
                             <tr class="table-secondary fw-bold">
                                 <td colspan="5" class="text-end">Closing Balance</td>
                                 <td class="text-end">{{ number_format($runningBalance, 2) }}</td>
+                                <td colspan="2"></td>
+                                <td class="text-end">{{ number_format($runningWeightBalance, 2) }}</td>
                             </tr>
                         @endif
                     @else
-                        <tr><td colspan="6" class="text-center text-muted py-3">Please select a product to generate the ledger.</td></tr>
+                        <tr><td colspan="9" class="text-center text-muted py-3">Please select a product to generate the ledger.</td></tr>
                     @endif
                     </tbody>
                 </table>
@@ -194,6 +207,8 @@
             <p class="text-muted small no-print mb-2">
                 <i class="fas fa-info-circle"></i> Only <strong>Received</strong> purchases count toward stock here.
                 Goods still Pending or In Transit appear on the <a href="{{ request()->fullUrlWithQuery(['tab' => 'IT']) }}">Stock In Transit</a> tab instead.
+                <strong>Current Stock</strong> is counted in bags/packing units — Net Weight shows the total kg that
+                represents.
             </p>
 
             <div id="sr-table">
@@ -201,7 +216,9 @@
                     <thead class="table-dark">
                         <tr>
                             <th>Product</th><th>Variation (SKU)</th>
-                            <th class="text-end">Current Stock</th><th>Unit</th>
+                            <th class="text-end">Current Stock</th>
+                            <th class="text-end">Net Weight (kg)</th>
+                            <th>Unit</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -212,10 +229,11 @@
                             <td class="text-end fw-bold {{ $stock['quantity'] <= 0 ? 'text-danger' : 'text-success' }}">
                                 {{ number_format($stock['quantity'], 2) }}
                             </td>
+                            <td class="text-end text-muted">{{ number_format($stock['weight'] ?? 0, 2) }}</td>
                             <td>{{ $stock['unit'] }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="text-center py-3 text-muted">No stock found. Click "Show Stock" to load.</td></tr>
+                        <tr><td colspan="5" class="text-center py-3 text-muted">No stock found. Click "Show Stock" to load.</td></tr>
                     @endforelse
                     </tbody>
                     @if ($stockInHand->isNotEmpty())
@@ -223,6 +241,7 @@
                         <tr>
                             <td colspan="2" class="text-end">Total Units In Stock:</td>
                             <td class="text-end">{{ number_format($stockInHand->sum('quantity'), 2) }}</td>
+                            <td class="text-end">{{ number_format($stockInHand->sum('weight'), 2) }}</td>
                             <td></td>
                         </tr>
                     </tfoot>
@@ -273,6 +292,7 @@
                         <tr>
                             <th>PI #</th><th>Date</th><th>Vendor</th><th>Vendor Bill #</th><th>Bilty #</th>
                             <th>Product</th><th>Variation</th>
+                            <th class="text-end">Dispatched Qty (bags)</th>
                             <th class="text-end">Dispatched Net Wt (kg)</th>
                             <th class="text-end">Rate</th>
                             <th class="text-end">Value</th>
@@ -292,18 +312,22 @@
                             <td>{{ $row->bilty_no ?? '—' }}</td>
                             <td>{{ $row->product_name }}</td>
                             <td>{{ $row->variation_sku ?? '—' }}</td>
-                            <td class="text-end">{{ number_format($row->dispatched_net_weight, 2) }}</td>
+                            <td class="text-end">{{ number_format($row->dispatched_qty, 2) }}</td>
+                            <td class="text-end text-muted">{{ number_format($row->dispatched_net_weight, 2) }}</td>
                             <td class="text-end">{{ number_format($row->price, 2) }}</td>
                             <td class="text-end fw-bold">{{ number_format($row->dispatched_value, 2) }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="text-center py-3 text-muted">Nothing currently In Transit.</td></tr>
+                        <tr><td colspan="11" class="text-center py-3 text-muted">Nothing currently In Transit.</td></tr>
                     @endforelse
                     </tbody>
                     @if ($stockInTransit->isNotEmpty())
                     <tfoot class="table-light fw-bold">
                         <tr>
-                            <td colspan="9" class="text-end">Total In Transit Value:</td>
+                            <td colspan="7" class="text-end">Totals:</td>
+                            <td class="text-end">{{ number_format($stockInTransit->sum('dispatched_qty'), 2) }}</td>
+                            <td class="text-end">{{ number_format($stockInTransit->sum('dispatched_net_weight'), 2) }}</td>
+                            <td></td>
                             <td class="text-end">{{ number_format($stockInTransit->sum('dispatched_value'), 2) }}</td>
                         </tr>
                     </tfoot>

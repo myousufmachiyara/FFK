@@ -26,6 +26,7 @@ class InventoryReportController extends Controller
         $products    = Product::with('variations')->orderBy('name')->get();
         $itemLedger  = collect();
         $openingQty  = 0;
+        $openingWeight = 0;
         $stockInHand = collect();
         $stockInTransit = collect();
         $commissionInTransit = collect();
@@ -75,6 +76,25 @@ class InventoryReportController extends Controller
 
             $openingQty = ((float)$opPurchased + (float)$opSaleReturned)
                         - ((float)$opSold      + (float)$opPurchaseReturned);
+
+            // Weight equivalent of the same opening balance — returns have
+            // no weight tracking in their schema, so they only factor into
+            // the bag-count opening balance above, not this figure.
+            $opPurchasedWeight = DB::table('purchase_invoice_items')
+                ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
+                ->where('purchase_invoice_items.item_id', $itemId)
+                ->where('purchase_invoices.status', 'received')
+                ->whereNull('purchase_invoices.deleted_at')
+                ->where('purchase_invoices.received_at', '<', $from)
+                ->sum('purchase_invoice_items.received_net_weight');
+
+            $opSoldWeight = DB::table('sale_invoice_items')
+                ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
+                ->where('sale_invoice_items.product_id', $itemId)
+                ->where('sale_invoices.date', '<', $from)
+                ->sum('sale_invoice_items.net_weight');
+
+            $openingWeight = (float) $opPurchasedWeight - (float) $opSoldWeight;
 
             $purchases = DB::table('purchase_invoice_items')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
@@ -374,6 +394,7 @@ class InventoryReportController extends Controller
             'products',
             'itemLedger',
             'openingQty',
+            'openingWeight',
             'stockInHand',
             'stockInTransit',
             'commissionInTransit',
