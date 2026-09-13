@@ -849,112 +849,96 @@ class PurchaseInvoiceController extends Controller
 
     public function print($id)
     {
-        $invoice = PurchaseInvoice::with(['vendor', 'items.product', 'items.variation', 'expenses'])->findOrFail($id);
+        $invoice = PurchaseInvoice::with(['vendor', 'items.product', 'items.variation'])->findOrFail($id);
 
         $pdf = new \TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
-        $pdf->SetCreator('BillTrix');
-        $pdf->SetAuthor('FFK');
-        $pdf->SetTitle('PUR-' . $invoice->invoice_no);
+        $pdf->SetCreator('Farooq Fulara (Karachi)');
+        $pdf->SetAuthor('Farooq Fulara (Karachi)');
+        $pdf->SetTitle('Purchase Invoice #' . $invoice->invoice_no);
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         $pdf->SetMargins(15, 15, 15);
         $pdf->SetAutoPageBreak(true, 20);
         $pdf->AddPage();
 
-        $logoPath = public_path('assets/img/logo.png');
+        // ── Header: logo + company name + two contact lines ──────────
+        $logoPath = public_path('assets/img/ff-logo.jpg');
         if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 15, 12, 35);
+            $pdf->Image($logoPath, 15, 12, 22);
         }
 
-        $pdf->SetFont('helvetica', 'B', 16);
-        $pdf->SetXY(110, 12);
-        $pdf->Cell(85, 10, 'PURCHASE INVOICE', 0, 1, 'R');
+        $pdf->SetFont('helvetica', 'B', 20);
+        $pdf->SetXY(40, 12);
+        $pdf->Cell(155, 9, 'FAROOQ FULARA (KARACHI)', 0, 1, 'L');
 
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->SetXY(110, 20);
-        $pdf->Cell(85, 5, 'Invoice #: ' . $invoice->invoice_no, 0, 1, 'R');
-        $pdf->SetX(110);
-        $pdf->Cell(85, 5, 'Date: ' . Carbon::parse($invoice->invoice_date)->format('d-M-Y'), 0, 1, 'R');
-        $pdf->SetX(110);
-        $pdf->Cell(85, 5, 'Status: ' . $invoice->statusLabel(), 0, 1, 'R');
-        $pdf->Ln(5);
+        $pdf->SetFont('helvetica', 'BI', 10);
+        $pdf->SetXY(40, 22);
+        $pdf->Cell(77, 5, 'Farooq Fulara   0320-2788117', 0, 0, 'L');
+        $pdf->Cell(78, 5, 'Hamiz Farooq Fulara   0335-0023574', 0, 1, 'L');
 
-        $vendorHtml = '
-        <table width="40%" border="1" cellpadding="3" style="font-size:10px;">
-            <tr><td width="40%"><b>Vendor:</b></td><td width="60%">' . ($invoice->vendor->name ?? 'N/A') . '</td></tr>
-            <tr><td><b>Vendor Bill No:</b></td><td>'  . ($invoice->bill_no ?? '-') . '</td></tr>
-            <tr><td><b>Bilty No:</b></td><td>'  . ($invoice->bilty_no ?? '-') . '</td></tr>
-            <tr><td><b>Transport:</b></td><td>'  . ($invoice->transport_name ?? '-') . '</td></tr>
-            <tr><td><b>Ref:</b></td><td>'       . ($invoice->ref_no  ?? '-') . '</td></tr>
-        </table>';
-        $pdf->writeHTML($vendorHtml, true, false, false, false, '');
-        $pdf->Ln(5);
+        $pdf->SetXY(15, 30);
+        $pdf->SetLineWidth(0.4);
+        $pdf->Line(15, 30, 195, 30);
 
+        // ── Date / S.No / Name ─────────────────────────────────────
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->SetXY(15, 34);
+        $pdf->Cell(90, 7, 'Date: ' . Carbon::parse($invoice->invoice_date)->format('d-m-Y'), 0, 0, 'L');
+        $pdf->Cell(90, 7, 'S. No.: ' . $invoice->invoice_no, 0, 1, 'R');
+
+        $pdf->SetXY(15, 42);
+        $pdf->Cell(180, 7, 'Name: ' . ($invoice->vendor->name ?? 'N/A'), 'B', 1, 'L');
+        $pdf->Ln(3);
+
+        // ── Items table: S.No | Particulars | Rate | Amount ────────
+        // Particulars carries item name + variation, with weight/qty
+        // shown as a smaller reference line underneath — same info the
+        // handwritten slip's "WT: ###" line carries, just folded into
+        // one column instead of a separate one, per the requested layout.
         $html = '
-        <table border="1" cellpadding="4" style="font-size:9px;">
+        <table border="1" cellpadding="5" style="font-size:11px;">
             <thead>
                 <tr style="background-color:#f2f2f2;font-weight:bold;text-align:center;">
-                    <th width="18%">Item</th>
-                    <th width="10%">Variation</th>
-                    <th width="10%">Wt/Packing</th>
-                    <th width="7%">Qty</th>
-                    <th width="10%">Gross Wt</th>
-                    <th width="10%">Net Wt</th>
-                    <th width="12%">Rate/40kg</th>
-                    <th width="11%">Rate/kg</th>
-                    <th width="12%">Amount</th>
+                    <th width="10%">S.No.</th>
+                    <th width="52%">Particulars</th>
+                    <th width="19%">Rate</th>
+                    <th width="19%">Amount</th>
                 </tr>
             </thead>
             <tbody>';
 
         foreach ($invoice->items as $index => $item) {
-            $variationName = $item->variation->sku ?? '-';
+            $itemName = e($item->product->name ?? '-');
+            $variation = $item->variation->sku ?? null;
+            $particulars = $itemName . ($variation ? ' (' . e($variation) . ')' : '');
+            $subLine = 'Qty: ' . number_format($item->quantity, 0) . ' bags &nbsp; Wt: ' . number_format($item->net_weight, 3) . ' kg';
 
             $html .= '
                 <tr>
-                    <td width="18%">' . e($item->product->name ?? '-') . '</td>
-                    <td width="10%" style="text-align:center;">' . e($variationName) . '</td>
-                    <td width="10%" style="text-align:right;">' . number_format($item->wt_per_packing, 2) . '</td>
-                    <td width="7%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
-                    <td width="10%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
-                    <td width="10%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
-                    <td width="12%" style="text-align:right;">' . number_format($item->rate_per_40kg, 2) . '</td>
-                    <td width="11%" style="text-align:right;">' . number_format($item->price, 2) . '</td>
-                    <td width="12%" style="text-align:right;">' . number_format($item->amount, 2) . '</td>
+                    <td width="10%" style="text-align:center;">' . ($index + 1) . '</td>
+                    <td width="52%">' . $particulars . '<br><span style="font-size:8px;color:#555;">' . $subLine . '</span></td>
+                    <td width="19%" style="text-align:right;">' . number_format($item->price, 2) . '</td>
+                    <td width="19%" style="text-align:right;">' . number_format($item->amount, 2) . '</td>
                 </tr>';
         }
 
         $html .= '
                 <tr style="font-weight:bold;background-color:#fafafa;">
-                    <td colspan="8" style="text-align:right;">Total Item Amount</td>
-                    <td style="text-align:right;">' . number_format($invoice->total_amount, 2) . '</td>
+                    <td colspan="2"></td>
+                    <td style="text-align:right;">Total</td>
+                    <td style="text-align:right;">' . number_format($invoice->total_amount, 2) . '/-</td>
                 </tr>
             </tbody>
         </table>';
 
         $pdf->writeHTML($html, true, false, false, false, '');
 
-        if ($invoice->expenses->count()) {
-            $pdf->Ln(3);
-            $expHtml = '<table border="1" cellpadding="4" style="font-size:9px;"><thead><tr style="background-color:#f2f2f2;font-weight:bold;"><th width="25%">Expense</th><th width="35%">Description</th><th width="20%">Paid By</th><th width="20%">Amount</th></tr></thead><tbody>';
-            foreach ($invoice->expenses as $exp) {
-                $expHtml .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="35%">' . e($exp->description) . '</td><td width="20%">' . $exp->paidByLabel() . '</td><td width="20%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
-            }
-            $expHtml .= '<tr style="font-weight:bold;"><td colspan="3" style="text-align:right;">Total Expense Amount</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>';
-            $expHtml .= '</tbody></table>';
-            $pdf->writeHTML($expHtml, true, false, false, false, '');
+        if ((float) $invoice->total_other_expenses > 0) {
+            $pdf->Ln(2);
+            $pdf->SetFont('helvetica', '', 10);
+            $pdf->Cell(180, 6, 'Other Expenses: ' . number_format($invoice->total_other_expenses, 2)
+                . '     Total Bill Amount: ' . number_format($invoice->totalBillAmount(), 2) . '/-', 0, 1, 'R');
         }
-
-        $pdf->Ln(3);
-        $summaryHtml = '
-        <table width="60%" border="1" cellpadding="4" style="font-size:10px;" align="right">
-            <tr><td><b>Gross Weight</b></td><td style="text-align:right;">' . number_format($invoice->total_gross_weight, 2) . ' kg</td></tr>
-            <tr><td><b>Net Weight</b></td><td style="text-align:right;">' . number_format($invoice->total_weight, 2) . ' kg</td></tr>
-            <tr><td><b>Total Item Amount</b></td><td style="text-align:right;">' . number_format($invoice->total_amount, 2) . '</td></tr>
-            <tr><td><b>Total Expense Amount</b></td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
-            <tr style="font-weight:bold;background-color:#fafafa;"><td>Total Bill Amount</td><td style="text-align:right;">' . number_format($invoice->totalBillAmount(), 2) . '</td></tr>
-        </table>';
-        $pdf->writeHTML($summaryHtml, true, false, false, false, '');
 
         if ($invoice->remarks) {
             $pdf->Ln(2);
@@ -962,17 +946,14 @@ class PurchaseInvoiceController extends Controller
             $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->remarks, 0, 'L');
         }
 
-        $pdf->SetFont('helvetica', '', 10);
-        $ySign = $pdf->GetY() + 25;
-        if ($ySign > 250) { $pdf->AddPage(); $ySign = 30; }
+        // ── Signature ───────────────────────────────────────────────
+        $pdf->SetFont('helvetica', '', 11);
+        $ySign = $pdf->GetY() + 20;
+        if ($ySign > 260) { $pdf->AddPage(); $ySign = 30; }
 
-        $pdf->Line(15, $ySign, 75, $ySign);
-        $pdf->SetXY(15, $ySign + 2);
-        $pdf->Cell(60, 5, 'Prepared By', 0, 0, 'C');
-
-        $pdf->Line(135, $ySign, 195, $ySign);
-        $pdf->SetXY(135, $ySign + 2);
-        $pdf->Cell(60, 5, 'Authorized Signature', 0, 0, 'C');
+        $pdf->SetXY(120, $ySign);
+        $pdf->Cell(20, 7, 'Signature', 0, 0, 'L');
+        $pdf->Line(150, $ySign + 6, 195, $ySign + 6);
 
         return $pdf->Output('PI_' . $invoice->invoice_no . '.pdf', 'I');
     }
