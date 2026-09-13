@@ -145,7 +145,8 @@ class SaleInvoiceController extends Controller
         $paymentAccounts = ChartOfAccounts::whereIn('account_type', config('sale_accounts.payment_account_types'))
             ->orderBy('name')->get();
         // Expense payees are Vendor-type accounts only (e.g. a transporter
-        // like "Suzuki wala") — not arbitrary chart-of-accounts entries.
+        // like "Suzuki wala") — picked per-expense, since Sale has no
+        // single invoice-level vendor to fall back to.
         $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $units = MeasurementUnit::all();
         $kgPerMaund = $this->kgPerMaund();
@@ -208,6 +209,7 @@ class SaleInvoiceController extends Controller
                 'expense_type'      => $expenseData['expense_type'],
                 'description'       => $expenseData['description'] ?? null,
                 'amount'            => $amount,
+                'paid_by'           => $expenseData['paid_by'],
                 'payee_account_id'  => $expenseData['payee_account_id'],
             ]);
         }
@@ -248,6 +250,10 @@ class SaleInvoiceController extends Controller
             'expenses.*.expense_type'     => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'      => 'nullable|string|max:255',
             'expenses.*.amount'           => 'required_with:expenses|numeric|min:0',
+            'expenses.*.paid_by'          => 'required_with:expenses|in:vendor,company',
+            // Always required — Sale has no invoice-level vendor to fall
+            // back to, so both "Vendor" and "Company" need their own
+            // account picked directly on the expense row.
             'expenses.*.payee_account_id' => 'required_with:expenses|exists:chart_of_accounts,id',
         ]);
 
@@ -320,13 +326,19 @@ class SaleInvoiceController extends Controller
                 );
             }
 
-            // 4) Each expense — always increases what customer owes; Company
-            // pays the chosen payee account (no Vendor concept on Sale).
+            // 4) Each expense — always increases what customer owes; credit
+            // side routes to whichever account was picked directly on
+            // this expense (paid_by is just a classification label here,
+            // since Sale has no single invoice-level vendor to default to).
             foreach ($invoice->expenses as $i => $expense) {
+                if (!$expense->payeeAccount) {
+                    throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
+                }
+
                 $this->postVoucher(
                     $request->date, $invoice->account, $expense->payeeAccount, (float) $expense->amount,
                     "SI-{$invoice->id}-EXPENSE-" . ($i + 1),
-                    "Sale Invoice #{$invoiceNo} — {$expense->typeLabel()}, payable to {$expense->payeeAccount->name}"
+                    "Sale Invoice #{$invoiceNo} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()} ({$expense->payeeAccount->name})"
                 );
             }
 
@@ -396,6 +408,7 @@ class SaleInvoiceController extends Controller
             'expenses.*.expense_type'     => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'      => 'nullable|string|max:255',
             'expenses.*.amount'           => 'required_with:expenses|numeric|min:0',
+            'expenses.*.paid_by'          => 'required_with:expenses|in:vendor,company',
             'expenses.*.payee_account_id' => 'required_with:expenses|exists:chart_of_accounts,id',
         ]);
 
@@ -464,10 +477,14 @@ class SaleInvoiceController extends Controller
 
             Voucher::where('reference', 'like', "SI-{$invoice->id}-EXPENSE-%")->delete();
             foreach ($invoice->expenses as $i => $expense) {
+                if (!$expense->payeeAccount) {
+                    throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
+                }
+
                 $this->postVoucher(
                     $request->date, ChartOfAccounts::findOrFail($request->account_id), $expense->payeeAccount, (float) $expense->amount,
                     "SI-{$invoice->id}-EXPENSE-" . ($i + 1),
-                    "Sale Invoice #{$invoice->invoice_no} — {$expense->typeLabel()}, payable to {$expense->payeeAccount->name} (updated)"
+                    "Sale Invoice #{$invoice->invoice_no} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()} ({$expense->payeeAccount->name}) (updated)"
                 );
             }
 
@@ -522,92 +539,109 @@ class SaleInvoiceController extends Controller
 
     public function print($id)
     {
-        $invoice = SaleInvoice::with(['account', 'items.product', 'items.variation', 'expenses.payeeAccount'])->findOrFail($id);
+        $invoice = SaleInvoice::with(['account', 'items.product', 'items.variation'])->findOrFail($id);
 
         $pdf = new \TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
-        $pdf->SetCreator('BillTrix');
-        $pdf->SetTitle('SI-' . $invoice->invoice_no);
+        $pdf->SetCreator('Farooq Fulara (Karachi)');
+        $pdf->SetAuthor('Farooq Fulara (Karachi)');
+        $pdf->SetTitle('Sale Invoice #' . $invoice->invoice_no);
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         $pdf->SetMargins(15, 15, 15);
         $pdf->SetAutoPageBreak(true, 20);
         $pdf->AddPage();
 
-        $pdf->SetFont('helvetica', 'B', 16);
-        $pdf->SetXY(110, 12);
-        $pdf->Cell(85, 10, 'SALE INVOICE', 0, 1, 'R');
+        // ── Header: logo + company name + two contact lines ──────────
+        $logoPath = public_path('assets/img/ff-logo.jpg');
+        if (file_exists($logoPath)) {
+            $pdf->Image($logoPath, 15, 12, 22);
+        }
 
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->SetXY(110, 20);
-        $pdf->Cell(85, 5, 'Invoice #: ' . $invoice->invoice_no, 0, 1, 'R');
-        $pdf->SetX(110);
-        $pdf->Cell(85, 5, 'Date: ' . Carbon::parse($invoice->date)->format('d-M-Y'), 0, 1, 'R');
-        $pdf->SetX(110);
-        $pdf->Cell(85, 5, 'Type: ' . ucfirst($invoice->type), 0, 1, 'R');
-        $pdf->Ln(5);
+        $pdf->SetFont('helvetica', 'B', 20);
+        $pdf->SetXY(40, 12);
+        $pdf->Cell(155, 9, 'FAROOQ FULARA (KARACHI)', 0, 1, 'L');
 
-        $custHtml = '
-        <table width="50%" border="1" cellpadding="3" style="font-size:10px;">
-            <tr><td width="40%"><b>Customer:</b></td><td width="60%">' . ($invoice->account->name ?? 'N/A') . '</td></tr>
-        </table>';
-        $pdf->writeHTML($custHtml, true, false, false, false, '');
-        $pdf->Ln(5);
+        $pdf->SetFont('helvetica', 'BI', 10);
+        $pdf->SetXY(40, 22);
+        $pdf->Cell(77, 5, 'Farooq Fulara   0320-2788117', 0, 0, 'L');
+        $pdf->Cell(78, 5, 'Hamiz Farooq Fulara   0335-0023574', 0, 1, 'L');
 
+        $pdf->SetXY(15, 30);
+        $pdf->SetLineWidth(0.4);
+        $pdf->Line(15, 30, 195, 30);
+
+        // ── Date / S.No / Name ─────────────────────────────────────
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->SetXY(15, 34);
+        $pdf->Cell(90, 7, 'Date: ' . Carbon::parse($invoice->date)->format('d-m-Y'), 0, 0, 'L');
+        $pdf->Cell(90, 7, 'S. No.: ' . $invoice->invoice_no, 0, 1, 'R');
+
+        $pdf->SetXY(15, 42);
+        $pdf->Cell(180, 7, 'Name: ' . ($invoice->account->name ?? 'N/A'), 'B', 1, 'L');
+        $pdf->Ln(3);
+
+        // ── Items table: S.No | Particulars | Rate | Amount ────────
         $html = '
-        <table border="1" cellpadding="4" style="font-size:9px;">
+        <table border="1" cellpadding="5" style="font-size:11px;">
             <thead>
                 <tr style="background-color:#f2f2f2;font-weight:bold;text-align:center;">
-                    <th width="18%">Item</th><th width="8%">Qty</th><th width="10%">Net Wt</th>
-                    <th width="12%">Rate (40kg)</th><th width="10%">Rate (kg)</th>
-                    <th width="10%">Disc %</th><th width="15%">Total</th>
+                    <th width="10%">S.No.</th>
+                    <th width="52%">Particulars</th>
+                    <th width="19%">Rate</th>
+                    <th width="19%">Amount</th>
                 </tr>
             </thead>
             <tbody>';
 
-        foreach ($invoice->items as $item) {
+        foreach ($invoice->items as $index => $item) {
+            $itemName = e($item->product->name ?? '-');
+            $variation = $item->variation->sku ?? null;
+            $particulars = $itemName . ($variation ? ' (' . e($variation) . ')' : '');
+            $subLine = 'Qty: ' . number_format($item->quantity, 0) . ' bags &nbsp; Wt: ' . number_format($item->net_weight, 3) . ' kg';
+
             $html .= '
                 <tr>
-                    <td width="18%">' . e($item->product->name ?? '-') . '</td>
-                    <td width="8%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
-                    <td width="10%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
-                    <td width="12%" style="text-align:right;">' . number_format($item->rate_per_40kg, 2) . '</td>
-                    <td width="10%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
-                    <td width="10%" style="text-align:center;">' . number_format($item->discount, 2) . '</td>
-                    <td width="15%" style="text-align:right;">' . number_format($item->total, 2) . '</td>
+                    <td width="10%" style="text-align:center;">' . ($index + 1) . '</td>
+                    <td width="52%">' . $particulars . '<br><span style="font-size:8px;color:#555;">' . $subLine . '</span></td>
+                    <td width="19%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
+                    <td width="19%" style="text-align:right;">' . number_format($item->total, 2) . '</td>
                 </tr>';
         }
 
-        $html .= '</tbody></table>';
-        $pdf->writeHTML($html, true, false, false, false, '');
-        $pdf->Ln(3);
-
-        if ($invoice->expenses->count()) {
-            $expHtml = '<table border="1" cellpadding="4" style="font-size:9px;"><thead><tr style="background-color:#f2f2f2;font-weight:bold;"><th width="25%">Expense</th><th width="35%">Description</th><th width="20%">Payable To</th><th width="20%">Amount</th></tr></thead><tbody>';
-            foreach ($invoice->expenses as $exp) {
-                $expHtml .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="35%">' . e($exp->description) . '</td><td width="20%">' . ($exp->payeeAccount->name ?? '-') . '</td><td width="20%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
-            }
-            $expHtml .= '</tbody></table>';
-            $pdf->writeHTML($expHtml, true, false, false, false, '');
-            $pdf->Ln(3);
-        }
-
-        $summaryHtml = '
-        <table width="60%" border="1" cellpadding="4" style="font-size:10px;" align="right">
-            <tr><td><b>Gross Weight</b></td><td style="text-align:right;">' . number_format($invoice->total_gross_weight, 2) . ' kg</td></tr>
-            <tr><td><b>Net Weight</b></td><td style="text-align:right;">' . number_format($invoice->total_weight, 2) . ' kg</td></tr>
-            <tr><td><b>Total Item Amount</b></td><td style="text-align:right;">' . number_format($invoice->net_amount, 2) . '</td></tr>
-            <tr><td><b>Total Expense Amount</b></td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
-            <tr style="font-weight:bold;background-color:#fafafa;"><td>Total Bill Amount</td><td style="text-align:right;">' . number_format($invoice->totalBillAmount(), 2) . '</td></tr>
-            <tr><td>Amount Received</td><td style="text-align:right;">' . number_format($invoice->amount_received, 2) . '</td></tr>
-            <tr style="font-weight:bold;color:#b30000;"><td>Balance Due</td><td style="text-align:right;">' . number_format($invoice->remainingBalance(), 2) . '</td></tr>
+        $html .= '
+                <tr style="font-weight:bold;background-color:#fafafa;">
+                    <td colspan="2"></td>
+                    <td style="text-align:right;">Total</td>
+                    <td style="text-align:right;">' . number_format($invoice->net_amount, 2) . '/-</td>
+                </tr>
+            </tbody>
         </table>';
-        $pdf->writeHTML($summaryHtml, true, false, false, false, '');
+
+        $pdf->writeHTML($html, true, false, false, false, '');
+
+        $pdf->Ln(2);
+        $pdf->SetFont('helvetica', '', 10);
+        if ((float) $invoice->total_other_expenses > 0) {
+            $pdf->Cell(180, 6, 'Other Expenses: ' . number_format($invoice->total_other_expenses, 2)
+                . '     Total Bill Amount: ' . number_format($invoice->totalBillAmount(), 2) . '/-', 0, 1, 'R');
+        }
+        $pdf->Cell(180, 6, 'Received: ' . number_format($invoice->amount_received, 2)
+            . '     Balance Due: ' . number_format($invoice->remainingBalance(), 2) . '/-', 0, 1, 'R');
 
         if ($invoice->remarks) {
             $pdf->Ln(2);
             $pdf->SetFont('helvetica', 'I', 9);
             $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->remarks, 0, 'L');
         }
+
+        // ── Signature ───────────────────────────────────────────────
+        $pdf->SetFont('helvetica', '', 11);
+        $ySign = $pdf->GetY() + 20;
+        if ($ySign > 260) { $pdf->AddPage(); $ySign = 30; }
+
+        $pdf->SetXY(120, $ySign);
+        $pdf->Cell(20, 7, 'Signature', 0, 0, 'L');
+        $pdf->Line(150, $ySign + 6, 195, $ySign + 6);
 
         return $pdf->Output('SI_' . $invoice->invoice_no . '.pdf', 'I');
     }

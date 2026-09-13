@@ -14,14 +14,16 @@ class SaleInvoiceExpense extends Model
     const TYPE_TULAI         = 'tulai';
     const TYPE_OTHERS        = 'others';
 
-    // No Vendor concept on Sale — every expense is Company-paid, to a
-    // chosen (Vendor-type) payee account. No paid_by field needed.
+    const PAID_BY_VENDOR  = 'vendor';
+    const PAID_BY_COMPANY = 'company';
+
     protected $fillable = [
         'sale_invoice_id',
         'expense_type',
         'description',
         'amount',
-        'payee_account_id',
+        'paid_by',
+        'payee_account_id', // only used when paid_by = company
     ];
 
     protected $casts = [
@@ -50,5 +52,10 @@ class SaleInvoiceExpense extends Model
             self::TYPE_OTHERS        => 'Others',
             default                  => ucfirst(str_replace('_', ' ', $this->expense_type)),
         };
+    }
+
+    public function paidByLabel(): string
+    {
+        return $this->paid_by === self::PAID_BY_VENDOR ? 'Vendor' : 'Company (FFK)';
     }
 }

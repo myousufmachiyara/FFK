@@ -103,10 +103,11 @@
           <table class="table table-bordered table-sm" id="expenseTable">
             <thead>
               <tr>
-                <th width="20%">Type</th>
-                <th width="32%">Description</th>
-                <th width="16%">Amount</th>
-                <th width="27%">Payable To (Vendor Account)</th>
+                <th width="15%">Type</th>
+                <th width="27%">Description</th>
+                <th width="13%">Amount</th>
+                <th width="15%">Paid By</th>
+                <th width="22%">Payee Account <small class="text-muted">(if Company)</small></th>
                 <th width="30px"></th>
               </tr>
             </thead>
@@ -115,7 +116,8 @@
           <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addExpenseRow()"><i class="fas fa-plus"></i> Add Expense</button>
           <p class="text-muted small mt-2 mb-0">
             <i class="fas fa-info-circle"></i> Every expense is always added to the Customer's receivable.
-            FFK pays it on the customer's behalf — pick which Vendor account we owe (e.g. a specific transporter).
+            Pick who it's payable to on each row — a Vendor or Company (FFK) account. "Paid By" is just a
+            label for reporting; either way the amount is owed to whichever account you select.
           </p>
         </div>
       </section>
@@ -286,8 +288,12 @@ function addExpenseRow() {
         </select></td>
         <td><input type="text" name="expenses[${idx}][description]" class="form-control"></td>
         <td><input type="number" step="any" min="0" name="expenses[${idx}][amount]" class="form-control exp-amount" oninput="calcSummary()"></td>
+        <td><select name="expenses[${idx}][paid_by]" class="form-control">
+            <option value="company">Company (FFK)</option>
+            <option value="vendor">Vendor</option>
+        </select></td>
         <td><select name="expenses[${idx}][payee_account_id]" class="form-control select2-js" required>
-            <option value="">Select Vendor Account</option>${payeeOptions()}
+            <option value="">Select Account</option>${payeeOptions()}
         </select></td>
         <td><button type="button" class="btn btn-danger btn-sm" onclick="$(this).closest('tr').remove(); calcSummary();"><i class="fas fa-times"></i></button></td>
     </tr>`;
