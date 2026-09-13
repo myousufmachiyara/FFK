@@ -96,7 +96,7 @@ class CommissionInvoiceController extends Controller
         $vendors   = ChartOfAccounts::where('account_type', config('commission_accounts.vendor_account_type'))->orderBy('name')->get();
         $customers = ChartOfAccounts::where('account_type', config('commission_accounts.customer_account_type'))->orderBy('name')->get();
         $units     = MeasurementUnit::all();
-        $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get(); // e.g. a specific transporter
+        $payeeAccounts = ChartOfAccounts::whereIn('account_type', ['vendor', 'cash', 'bank'])->orderBy('name')->get(); // vendor payable, or a direct cash/bank payment
         $kgPerMaund = $this->kgPerMaund();
 
         return view('commissions.create', compact('products', 'vendors', 'customers', 'units', 'payeeAccounts', 'kgPerMaund'));
@@ -266,7 +266,7 @@ class CommissionInvoiceController extends Controller
         $vendors   = ChartOfAccounts::where('account_type', config('commission_accounts.vendor_account_type'))->orderBy('name')->get();
         $customers = ChartOfAccounts::where('account_type', config('commission_accounts.customer_account_type'))->orderBy('name')->get();
         $units     = MeasurementUnit::all();
-        $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
+        $payeeAccounts = ChartOfAccounts::whereIn('account_type', ['vendor', 'cash', 'bank'])->orderBy('name')->get();
         $kgPerMaund = $this->kgPerMaund();
 
         return view('commissions.edit', compact('invoice', 'products', 'vendors', 'customers', 'units', 'payeeAccounts', 'kgPerMaund'));

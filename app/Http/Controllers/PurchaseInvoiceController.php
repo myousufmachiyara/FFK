@@ -100,7 +100,7 @@ class PurchaseInvoiceController extends Controller
         $products = Product::with('variations')->orderBy('name')->get();
         $vendors  = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $units    = MeasurementUnit::all();
-        $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get(); // e.g. a specific transporter
+        $payeeAccounts = ChartOfAccounts::whereIn('account_type', ['vendor', 'cash', 'bank'])->orderBy('name')->get(); // vendor payable, or a direct cash/bank payment
         $kgPerMaund = $this->kgPerMaund();
 
         return view('purchases.create', compact('products', 'vendors', 'units', 'payeeAccounts', 'kgPerMaund'));
@@ -286,7 +286,7 @@ class PurchaseInvoiceController extends Controller
         $vendors  = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
         $products = Product::with('variations')->select('id', 'name', 'measurement_unit')->get();
         $units    = MeasurementUnit::all();
-        $payeeAccounts = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
+        $payeeAccounts = ChartOfAccounts::whereIn('account_type', ['vendor', 'cash', 'bank'])->orderBy('name')->get();
         $kgPerMaund = $this->kgPerMaund();
 
         return view('purchases.edit', compact('invoice', 'vendors', 'products', 'units', 'payeeAccounts', 'kgPerMaund'));
