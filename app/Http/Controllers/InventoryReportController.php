@@ -41,8 +41,22 @@ class InventoryReportController extends Controller
         // tracked unit itself. Only RECEIVED purchase quantities count as
         // stock movement, dated by received_at (when stock actually
         // moved), not invoice_date (when the order was placed).
+        //
+        // OPENING BALANCE = base opening stock recorded directly on the
+        // item (or its variations, if any) at setup time, PLUS/MINUS all
+        // purchase/sale/return activity that happened before $from. The
+        // base opening stock is pulled from the already-loaded $products
+        // collection, so no extra query is needed for it.
         // ================================================================
         if ($tab === 'IL' && $itemId) {
+
+            $itemForOpening   = $products->firstWhere('id', (int) $itemId);
+            $baseOpeningStock = 0.0;
+            if ($itemForOpening) {
+                $baseOpeningStock = $itemForOpening->variations->isNotEmpty()
+                    ? (float) $itemForOpening->variations->sum('opening_stock')
+                    : (float) $itemForOpening->opening_stock;
+            }
 
             $opPurchased = DB::table('purchase_invoice_items')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
@@ -74,12 +88,16 @@ class InventoryReportController extends Controller
                     ->sum('sale_return_items.qty')
                 : 0;
 
-            $openingQty = ((float)$opPurchased + (float)$opSaleReturned)
+            $openingQty = $baseOpeningStock
+                        + ((float)$opPurchased + (float)$opSaleReturned)
                         - ((float)$opSold      + (float)$opPurchaseReturned);
 
             // Weight equivalent of the same opening balance — returns have
             // no weight tracking in their schema, so they only factor into
-            // the bag-count opening balance above, not this figure.
+            // the bag-count opening balance above, not this figure. Base
+            // opening stock is likewise a bag-count concept only (there's
+            // no "opening weight" column on products/variations), so it
+            // is intentionally NOT added here.
             $opPurchasedWeight = DB::table('purchase_invoice_items')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                 ->where('purchase_invoice_items.item_id', $itemId)
@@ -203,18 +221,16 @@ class InventoryReportController extends Controller
         // In Transit has NOT physically arrived and must not inflate
         // available stock.
         //
-        // FIX: for products WITH variations, this now reads
-        // ProductVariation.stock_quantity DIRECTLY instead of
-        // reconstructing a balance from historical purchase/sale sums.
-        // stock_quantity is already the live, authoritative value —
-        // incremented right when goods are received and decremented
-        // right when a sale is posted — so re-deriving it from a
-        // parallel set of queries here is both redundant and exactly
-        // how this report drifted out of sync before (it was still
-        // summing the old bag-count 'received_quantity' column after
-        // Purchase moved to weight-based 'received_net_weight').
-        // Products WITHOUT variations have no such live column, so
-        // those still reconstruct from transaction history below.
+        // For products WITH variations, this reads ProductVariation.stock_quantity
+        // DIRECTLY instead of reconstructing a balance from historical
+        // purchase/sale sums. stock_quantity is already the live,
+        // authoritative value — incremented right when goods are received
+        // and decremented right when a sale is posted. Products WITHOUT
+        // variations have no such live column, so those still reconstruct
+        // from transaction history below (starting from opening_stock).
+        //
+        // Weight is not displayed on this report — Current Stock is
+        // reported in bags/packing units only.
         // ================================================================
         if ($tab === 'SR') {
 
@@ -242,22 +258,10 @@ class InventoryReportController extends Controller
                         ->whereNull('purchase_invoices.deleted_at')
                         ->sum(DB::raw('COALESCE(purchase_invoice_items.received_packing_qty, purchase_invoice_items.quantity)'));
 
-                    $purchasedWeight = (float) DB::table('purchase_invoice_items')
-                        ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
-                        ->where('purchase_invoice_items.item_id', $product->id)
-                        ->where('purchase_invoices.status', 'received')
-                        ->whereNull('purchase_invoices.deleted_at')
-                        ->sum(DB::raw('COALESCE(purchase_invoice_items.received_net_weight, purchase_invoice_items.net_weight)'));
-
                     $sold = (float) DB::table('sale_invoice_items')
                         ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
                         ->where('sale_invoice_items.product_id', $product->id)
                         ->sum('sale_invoice_items.quantity');
-
-                    $soldWeight = (float) DB::table('sale_invoice_items')
-                        ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
-                        ->where('sale_invoice_items.product_id', $product->id)
-                        ->sum('sale_invoice_items.net_weight');
 
                     $purchaseReturned = $hasPurchaseReturns
                         ? (float) DB::table('purchase_return_items')->where('item_id', $product->id)->sum('quantity')
@@ -267,24 +271,25 @@ class InventoryReportController extends Controller
                         ? (float) DB::table('sale_return_items')->where('product_id', $product->id)->sum('qty')
                         : 0.0;
 
-                    $qty    = ($purchased + $saleReturned) - ($sold + $purchaseReturned);
-                    $weight = $purchasedWeight - $soldWeight; // returns have no weight tracking, approximate is fine here
+                    $qty = (float) $product->opening_stock
+                         + ($purchased + $saleReturned)
+                         - ($sold + $purchaseReturned);
 
                     if ($qty > 0) {
                         $stockInHand->push([
                             'product'   => $product->name,
                             'variation' => '—',
                             'quantity'  => $qty,
-                            'weight'    => round($weight, 3),
                             'unit'      => $product->unit_shortcode ?? '',
                         ]);
                     }
 
                 } else {
 
-                    // Variation-level stock — read the live columns directly.
-                    // 'quantity' (bags) is the tracked/authoritative figure;
-                    // 'weight' (kg) is shown alongside for reference.
+                    // Variation-level stock — read the live column directly.
+                    // 'quantity' (bags) is the tracked/authoritative figure.
+                    // stock_quantity already reflects opening_stock plus all
+                    // subsequent movement, so it is not added again here.
                     foreach ($product->variations as $v) {
                         $qty = (float) $v->stock_quantity;
 
@@ -293,7 +298,6 @@ class InventoryReportController extends Controller
                                 'product'   => $product->name,
                                 'variation' => $v->sku ?? $v->name ?? '—',
                                 'quantity'  => $qty,
-                                'weight'    => (float) $v->stock_weight,
                                 'unit'      => $product->unit_shortcode ?? '',
                             ]);
                         }

@@ -33,7 +33,7 @@
 
           @if($invoice->isInTransit())
             <a href="{{ route('purchase_invoices.receiveForm', $invoice->id) }}" class="btn btn-success">
-              <i class="fas fa-box-open"></i> Receive Goods
+              <i class="fas fa-box-open"></i> Received Goods
             </a>
             <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#revertModal">
               <i class="fas fa-undo"></i> Revert Dispatch
