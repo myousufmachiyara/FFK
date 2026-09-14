@@ -103,7 +103,7 @@
                   <div class="variation-block border p-2 mb-3 existing-variation">
                     <input type="hidden" name="variations[{{ $i }}][id]" value="{{ $variation->id }}">
                     <div class="row">
-                      <div class="col-md-3">
+                      <div class="col-md-2">
                         <label>SKU</label>
                         <input type="text" name="variations[{{ $i }}][sku]" class="form-control sku-field" value="{{ $variation->sku }}">
                       </div>
@@ -116,8 +116,12 @@
                         <input type="number" step="any" name="variations[{{ $i }}][selling_price]" class="form-control" value="{{ $variation->selling_price }}">
                       </div>
                       <div class="col-md-2">
-                        <label>Stock</label>
-                        <input type="number" step="any" name="variations[{{ $i }}][stock_quantity]" class="form-control" value="{{ $variation->stock_quantity }}">
+                        <label>Opening Stock</label>
+                        <input type="number" step="any" name="variations[{{ $i }}][opening_stock]" class="form-control" value="{{ $variation->opening_stock }}">
+                      </div>
+                      <div class="col-md-2">
+                        <label>Stock (transactional) <small class="text-muted">read-only</small></label>
+                        <input type="number" step="any" name="variations[{{ $i }}][stock_quantity]" class="form-control" value="{{ $variation->stock_quantity }}" readonly>
                       </div>
                       <div class="col-md-2">
                         <label>&nbsp;</label>
@@ -197,8 +201,8 @@
               <input type="number" step="any" name="new_variations[${newVariationIndex}][selling_price]" value="0.00" class="form-control">
             </div>
             <div class="col-md-2">
-              <label>Stock</label>
-              <input type="number" step="any" name="new_variations[${newVariationIndex}][stock_quantity]" value="0.00" class="form-control">
+              <label>Opening Stock</label>
+              <input type="number" step="any" name="new_variations[${newVariationIndex}][opening_stock]" value="0.00" class="form-control">
             </div>
             <div class="col-md-2">
               <label>&nbsp;</label>

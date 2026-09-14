@@ -126,7 +126,7 @@
                     <th>SKU</th>
                     <th>Barcode</th>
                     <th>Selling Price</th>
-                    <th>Stock</th>
+                    <th>Opening Stock</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -188,7 +188,7 @@
             <td><input type="text" name="variations[${index}][sku]" class="form-control variation-sku" value="${variationSku}"></td>
             <td><input type="text" name="variations[${index}][barcode]" class="form-control" placeholder="= SKU if left blank"></td>
             <td><input type="number" name="variations[${index}][selling_price]" step="any" class="form-control" value="${defaultPrice}" required></td>
-            <td><input type="number" name="variations[${index}][stock_quantity]" step="any" class="form-control" value="0" required></td>
+            <td><input type="number" name="variations[${index}][opening_stock]" step="any" class="form-control" value="0" required></td>
             <td><button type="button" class="btn btn-sm btn-danger remove-variation">X</button></td>
           </tr>
         `);

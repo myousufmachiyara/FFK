@@ -85,6 +85,7 @@ class ProductController extends Controller
                         'sku'            => $sku,
                         'barcode'        => $this->resolveBarcode($variationData['barcode'] ?? null, $sku),
                         'stock_quantity' => $variationData['stock_quantity'] ?? 0,
+                        'opening_stock'  => $variationData['opening_stock'] ?? 0,
                         'selling_price'  => $variationData['selling_price'] ?? 0,
                     ]);
                     Log::info('[Product Store] Variation created', ['variation_id' => $variation->id, 'product_id' => $product->id, 'data' => $variationData]);
@@ -185,6 +186,7 @@ class ProductController extends Controller
                         'sku'            => $variationData['sku'],
                         'barcode'        => $this->resolveBarcode($variationData['barcode'] ?? $variation->barcode, $variationData['sku']),
                         'stock_quantity' => $variationData['stock_quantity'] ?? 0,
+                        'opening_stock'  => $variationData['opening_stock'] ?? 0,
                         'selling_price'  => $variationData['selling_price'] ?? 0,
                     ]);
 
@@ -204,6 +206,7 @@ class ProductController extends Controller
                         'sku'            => $sku,
                         'barcode'        => $this->resolveBarcode($newVar['barcode'] ?? null, $sku),
                         'stock_quantity' => $newVar['stock_quantity'] ?? 0,
+                        'opening_stock'  => $newVar['opening_stock'] ?? 0,
                         'selling_price'  => $newVar['selling_price'] ?? 0,
                     ]);
 
@@ -263,6 +266,8 @@ class ProductController extends Controller
                 'barcode'        => $v->barcode,
                 'unit'           => $unitId,
                 'stock_quantity' => (float) $v->stock_quantity,
+                'opening_stock'  => (float) $v->opening_stock,
+                'available_stock'=> round((float) $v->opening_stock + (float) $v->stock_quantity, 3),
                 'stock_weight'   => (float) $v->stock_weight,
                 'selling_price'  => $v->selling_price !== null ? (float) $v->selling_price : null,
             ];

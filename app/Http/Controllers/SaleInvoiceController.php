@@ -63,11 +63,39 @@ class SaleInvoiceController extends Controller
     }
 
     /** Bags available — the tracked stock unit. */
-    private function resolveAvailableStock(?int $variationId): float
+    /**
+     * Available stock = opening_stock + stock_quantity (bags). For a
+     * variation, both live on ProductVariation directly. For a product
+     * with no variations, opening_stock lives on Product itself, and
+     * the transactional side has to be reconstructed from history (no
+     * live column exists for that case) — same logic Inventory Report's
+     * Stock In Hand uses for its no-variation branch.
+     */
+    private function resolveAvailableStock(?int $variationId, ?int $productId = null): float
     {
-        if (!$variationId) return 0;
-        $variation = ProductVariation::find($variationId);
-        return $variation ? (float) $variation->stock_quantity : 0;
+        if ($variationId) {
+            $variation = ProductVariation::find($variationId);
+            return $variation ? $variation->availableStock() : 0;
+        }
+
+        if (!$productId) return 0;
+
+        $product = Product::find($productId);
+        if (!$product) return 0;
+
+        $purchased = (float) DB::table('purchase_invoice_items')
+            ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
+            ->where('purchase_invoice_items.item_id', $productId)
+            ->where('purchase_invoices.status', 'received')
+            ->whereNull('purchase_invoices.deleted_at')
+            ->sum(DB::raw('COALESCE(purchase_invoice_items.received_packing_qty, purchase_invoice_items.quantity)'));
+
+        $sold = (float) DB::table('sale_invoice_items')
+            ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
+            ->where('sale_invoice_items.product_id', $productId)
+            ->sum('sale_invoice_items.quantity');
+
+        return round((float) $product->opening_stock + $purchased - $sold, 3);
     }
 
     /**
@@ -137,7 +165,7 @@ class SaleInvoiceController extends Controller
     {
         $products = Product::with('variations')->orderBy('name')->get();
         $products->each(function ($p) {
-            $p->computed_stock = $p->variations->sum('stock_quantity');
+            $p->computed_stock = $p->variations->sum('stock_quantity') + $p->variations->sum('opening_stock');
         });
 
         $customers = ChartOfAccounts::where('account_type', config('sale_accounts.customer_account_type'))
@@ -261,7 +289,7 @@ class SaleInvoiceController extends Controller
 
         try {
             foreach ($request->items as $itemData) {
-                $available = $this->resolveAvailableStock($itemData['variation_id'] ?? null);
+                $available = $this->resolveAvailableStock($itemData['variation_id'] ?? null, $itemData['product_id'] ?? null);
                 $qty = (float) $itemData['quantity'];
 
                 if ($qty > $available) {
@@ -368,7 +396,7 @@ class SaleInvoiceController extends Controller
 
         $products = Product::with('variations')->orderBy('name')->get();
         $products->each(function ($p) {
-            $p->computed_stock = $p->variations->sum('stock_quantity');
+            $p->computed_stock = $p->variations->sum('stock_quantity') + $p->variations->sum('opening_stock');
         });
 
         $customers = ChartOfAccounts::where('account_type', config('sale_accounts.customer_account_type'))
@@ -423,7 +451,7 @@ class SaleInvoiceController extends Controller
             }
 
             foreach ($request->items as $itemData) {
-                $available = $this->resolveAvailableStock($itemData['variation_id'] ?? null);
+                $available = $this->resolveAvailableStock($itemData['variation_id'] ?? null, $itemData['product_id'] ?? null);
                 $qty = (float) $itemData['quantity'];
 
                 if ($qty > $available) {
