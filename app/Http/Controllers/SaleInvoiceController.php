@@ -581,30 +581,41 @@ class SaleInvoiceController extends Controller
 
         // ── Header: logo + company name + two contact lines ──────────
         $logoPath = public_path('assets/img/ff-logo.jpg');
+        $nameX = 15;
         if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 15, 12, 22);
+            $pdf->Image($logoPath, 15, 10, 24);
+            $nameX = 42;
         }
 
-        $pdf->SetFont('helvetica', 'B', 20);
-        $pdf->SetXY(40, 12);
-        $pdf->Cell(155, 9, 'FAROOQ FULARA (KARACHI)', 0, 1, 'L');
+        $pdf->SetFont('helvetica', 'B', 18);
+        $pdf->SetXY($nameX, 12);
+        $pdf->Cell(195 - $nameX, 8, 'FAROOQ FULARA (KARACHI)', 0, 1, 'L');
 
-        $pdf->SetFont('helvetica', 'BI', 10);
-        $pdf->SetXY(40, 22);
-        $pdf->Cell(77, 5, 'Farooq Fulara   0320-2788117', 0, 0, 'L');
-        $pdf->Cell(78, 5, 'Hamiz Farooq Fulara   0335-0023574', 0, 1, 'L');
+        $pdf->SetFont('helvetica', 'BI', 9);
+        $pdf->SetXY($nameX, 21);
+        $pdf->Cell(80, 5, 'Farooq Fulara   0320-2788117', 0, 0, 'L');
+        $pdf->Cell(80, 5, 'Hamiz Farooq Fulara   0335-0023574', 0, 1, 'L');
 
-        $pdf->SetXY(15, 30);
         $pdf->SetLineWidth(0.4);
         $pdf->Line(15, 30, 195, 30);
 
-        // ── Invoice #, Date, Type ──────────────────────────────────
+        // ── Invoice #, Date, Type, Credit Days, Due Date ────────────
         $pdf->SetFont('helvetica', '', 10);
         $pdf->SetXY(15, 34);
         $pdf->Cell(90, 5, 'Invoice #: ' . $invoice->invoice_no, 0, 0, 'L');
         $pdf->Cell(90, 5, 'Date: ' . Carbon::parse($invoice->date)->format('d-M-Y'), 0, 1, 'R');
         $pdf->SetX(105);
-        $pdf->Cell(90, 5, 'Type: ' . ucfirst($invoice->type), 0, 1, 'R');
+
+        $typeLine = 'Type: ' . ucfirst($invoice->type);
+        if ($invoice->isCredit() && $invoice->credit_days) {
+            $typeLine .= ' (' . $invoice->credit_days . ' days)';
+        }
+        $pdf->Cell(90, 5, $typeLine, 0, 1, 'R');
+
+        if ($invoice->isCredit() && $invoice->dueDate()) {
+            $pdf->SetX(105);
+            $pdf->Cell(90, 5, 'Due Date: ' . $invoice->dueDate()->format('d-M-Y'), 0, 1, 'R');
+        }
         $pdf->Ln(3);
 
         // ── Customer / master details ──────────────────────────────

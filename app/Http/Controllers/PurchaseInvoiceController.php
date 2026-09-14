@@ -863,30 +863,43 @@ class PurchaseInvoiceController extends Controller
 
         // ── Header: logo + company name + two contact lines ──────────
         $logoPath = public_path('assets/img/ff-logo.jpg');
+        $nameX = 15;
         if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 15, 12, 22);
+            $pdf->Image($logoPath, 15, 10, 24);
+            $nameX = 42; // only push the name over if a logo actually rendered
         }
 
-        $pdf->SetFont('helvetica', 'B', 20);
-        $pdf->SetXY(40, 12);
-        $pdf->Cell(155, 9, 'FAROOQ FULARA (KARACHI)', 0, 1, 'L');
+        $pdf->SetFont('helvetica', 'B', 18);
+        $pdf->SetXY($nameX, 12);
+        $pdf->Cell(195 - $nameX, 8, 'FAROOQ FULARA (KARACHI)', 0, 1, 'L');
 
-        $pdf->SetFont('helvetica', 'BI', 10);
-        $pdf->SetXY(40, 22);
-        $pdf->Cell(77, 5, 'Farooq Fulara   0320-2788117', 0, 0, 'L');
-        $pdf->Cell(78, 5, 'Hamiz Farooq Fulara   0335-0023574', 0, 1, 'L');
+        $pdf->SetFont('helvetica', 'BI', 9);
+        $pdf->SetXY($nameX, 21);
+        $pdf->Cell(80, 5, 'Farooq Fulara   0320-2788117', 0, 0, 'L');
+        $pdf->Cell(80, 5, 'Hamiz Farooq Fulara   0335-0023574', 0, 1, 'L');
 
-        $pdf->SetXY(15, 30);
         $pdf->SetLineWidth(0.4);
         $pdf->Line(15, 30, 195, 30);
 
-        // ── Invoice #, Date, Status ────────────────────────────────
+        // ── Invoice #, Date, Status, Payment Terms, Due Date ────────
         $pdf->SetFont('helvetica', '', 10);
         $pdf->SetXY(15, 34);
         $pdf->Cell(90, 5, 'Invoice #: ' . $invoice->invoice_no, 0, 0, 'L');
         $pdf->Cell(90, 5, 'Date: ' . Carbon::parse($invoice->invoice_date)->format('d-M-Y'), 0, 1, 'R');
         $pdf->SetX(105);
         $pdf->Cell(90, 5, 'Status: ' . $invoice->statusLabel(), 0, 1, 'R');
+
+        $paymentTermsLine = 'Payment Terms: ' . ucfirst($invoice->payment_terms ?? 'cash');
+        if ($invoice->isCredit() && $invoice->credit_days) {
+            $paymentTermsLine .= ' (' . $invoice->credit_days . ' days)';
+        }
+        $pdf->SetX(105);
+        $pdf->Cell(90, 5, $paymentTermsLine, 0, 1, 'R');
+
+        if ($invoice->isCredit() && $invoice->dueDate()) {
+            $pdf->SetX(105);
+            $pdf->Cell(90, 5, 'Due Date: ' . $invoice->dueDate()->format('d-M-Y'), 0, 1, 'R');
+        }
         $pdf->Ln(3);
 
         // ── Vendor / master details ────────────────────────────────
@@ -966,7 +979,10 @@ class PurchaseInvoiceController extends Controller
             <tr><td><b>Net Weight</b></td><td style="text-align:right;">' . number_format($invoice->total_weight, 2) . ' kg</td></tr>
             <tr><td><b>Total Item Amount</b></td><td style="text-align:right;">' . number_format($invoice->total_amount, 2) . '</td></tr>
             <tr><td><b>Total Expense Amount</b></td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
-            <tr style="font-weight:bold;background-color:#fafafa;"><td>Total Bill Amount</td><td style="text-align:right;">' . number_format($invoice->totalBillAmount(), 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#fafafa;"><td>Total Bill Amount</td><td style="text-align:right;">' . number_format($invoice->totalBillAmount(), 2) . '</td></tr>'
+            . ($invoice->isReceived() ? '
+            <tr><td>Amount Paid</td><td style="text-align:right;">' . number_format($invoice->amount_paid, 2) . '</td></tr>
+            <tr style="font-weight:bold;color:#b30000;"><td>Remaining Balance</td><td style="text-align:right;">' . number_format($invoice->remainingBalance(), 2) . '</td></tr>' : '') . '
         </table>';
         $pdf->writeHTML($summaryHtml, true, false, false, false, '');
 
