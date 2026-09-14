@@ -146,31 +146,6 @@ class InventoryReportController extends Controller
                 ->whereNull('purchase_invoices.deleted_at')
                 ->whereBetween('purchase_invoices.received_at', [$from, $to]);
 
-            // Shortage recorded at receiving time is its own traceable
-            // ledger line — bags dispatched but never actually arrived.
-            // Net weight shortage is shown alongside for context even
-            // when bag count matched (e.g. moisture/spillage loss within
-            // bags that did arrive).
-            $shortages = DB::table('purchase_invoice_items')
-                ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
-                ->select(
-                    'purchase_invoices.received_at as date',
-                    DB::raw("'Shortage' as type"),
-                    DB::raw("CONCAT('PI-', purchase_invoices.invoice_no, ' (Shortage)') as description"),
-                    DB::raw('0 as qty_in'),
-                    DB::raw('(purchase_invoice_items.quantity - purchase_invoice_items.received_packing_qty) as qty_out'),
-                    DB::raw('0 as weight_in'),
-                    'purchase_invoice_items.short_weight as weight_out'
-                )
-                ->where('purchase_invoice_items.item_id', $itemId)
-                ->where('purchase_invoices.status', 'received')
-                ->where(function ($q) {
-                    $q->where('purchase_invoice_items.short_weight', '>', 0)
-                      ->orWhereColumn('purchase_invoice_items.received_packing_qty', '<', 'purchase_invoice_items.quantity');
-                })
-                ->whereNull('purchase_invoices.deleted_at')
-                ->whereBetween('purchase_invoices.received_at', [$from, $to]);
-
             $sales = DB::table('sale_invoice_items')
                 ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
                 ->select(
@@ -185,7 +160,7 @@ class InventoryReportController extends Controller
                 ->where('sale_invoice_items.product_id', $itemId)
                 ->whereBetween('sale_invoices.date', [$from, $to]);
 
-            $itemLedger = $purchases->union($shortages)->union($sales);
+            $itemLedger = $purchases->union($sales);
 
             if ($hasPurchaseReturns) {
                 $purchaseReturns = DB::table('purchase_return_items')
