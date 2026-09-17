@@ -208,8 +208,8 @@
                 <i class="fas fa-info-circle"></i> Only <strong>Received</strong> purchases count toward stock here.
                 Goods still Pending or In Transit appear on the <a href="{{ request()->fullUrlWithQuery(['tab' => 'IT']) }}">Stock In Transit</a> tab instead.
                 <strong>Current Stock</strong> is counted in bags/packing units (including opening stock) —
-                Net Weight shows the total kg that represents, and Stock Value estimates it at the last known
-                purchase cost.
+                Net Weight shows the total kg that represents, and Stock Value estimates it at the
+                weighted-average purchase cost across all Received invoices for that item.
             </p>
 
             <div id="sr-table">
