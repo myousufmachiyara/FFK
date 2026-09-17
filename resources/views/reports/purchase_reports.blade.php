@@ -37,6 +37,9 @@
         <li class="nav-item">
             <a class="nav-link {{ $tab=='SAC' ? 'active' : '' }}" data-bs-toggle="tab" href="#SAC">Shortages & Additional Costs</a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link {{ $tab=='EXP' ? 'active' : '' }}" data-bs-toggle="tab" href="#EXP">Other Expenses</a>
+        </li>
     </ul>
 
     <div class="tab-content mt-3">
@@ -357,14 +360,7 @@
             </div>
         </div>
 
-        {{-- ── STATUS OVERVIEW ───────────────────────────────────
-             FIX: the old 3-way Bilty/Labor/Other split no longer exists
-             (Purchase now uses a dynamic Other Expenses list) — replaced
-             with a single, accurate "Other Expenses" total and Gross/Net
-             Weight columns, and "Landed Total" now uses the invoice's own
-             totalBillAmount() instead of manually re-adding three
-             non-existent columns together.
-        --}}
+        {{-- ── STATUS OVERVIEW ───────────────────────────────────── --}}
         <div id="STA" class="tab-pane fade {{ $tab=='STA' ? 'show active' : '' }}">
             <form method="GET" action="{{ route('reports.purchase') }}" class="no-print">
                 <input type="hidden" name="tab" value="STA">
@@ -433,14 +429,7 @@
             </div>
         </div>
 
-        {{-- ── SHORTAGES & ADDITIONAL COSTS ──────────────────────
-             FIX: dispatched/received/short quantity columns now show
-             actual weight in kg (the old bag-count comparison against a
-             per-kg price was meaningless). The Bilty/Labor/Other 3-way
-             split is replaced by the real dynamic expense list per
-             invoice (type + amount + who it's payable to), shown inline
-             instead of pretending three fixed categories still exist.
-        --}}
+        {{-- ── SHORTAGES & ADDITIONAL COSTS ────────────────────── --}}
         <div id="SAC" class="tab-pane fade {{ $tab=='SAC' ? 'show active' : '' }}">
             <form method="GET" action="{{ route('reports.purchase') }}" class="no-print">
                 <input type="hidden" name="tab" value="SAC">
@@ -538,6 +527,81 @@
                             <td class="text-end">{{ number_format($totalShortageValue, 2) }}</td>
                             <td></td>
                             <td class="text-end">{{ number_format($totalAdditional, 2) }}</td>
+                        </tr>
+                    </tfoot>
+                    @endif
+                </table>
+            </div>
+        </div>
+
+        {{-- ── OTHER EXPENSES (NEW — this tab's data already existed in
+             the controller but had no view to reach it) ───────────── --}}
+        <div id="EXP" class="tab-pane fade {{ $tab=='EXP' ? 'show active' : '' }}">
+            <form method="GET" action="{{ route('reports.purchase') }}" class="no-print">
+                <input type="hidden" name="tab" value="EXP">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3">
+                        <label>Vendor</label>
+                        <select name="vendor_id" class="select2-report-filter form-control">
+                            <option value="">-- All Vendors --</option>
+                            @foreach($vendors as $vendor)
+                                <option value="{{ $vendor->id }}" {{ request('vendor_id')==$vendor->id ? 'selected' : '' }}>
+                                    {{ $vendor->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label>From Date</label>
+                        <input type="date" name="from_date" class="form-control" value="{{ request('from_date', $from) }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label>To Date</label>
+                        <input type="date" name="to_date" class="form-control" value="{{ request('to_date', $to) }}">
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end gap-2">
+                        <button type="submit" class="btn btn-primary w-100">Filter</button>
+                        <button type="button" class="btn btn-danger"
+                                onclick="exportPDF('exp-table', 'Purchase Other Expenses', '{{ request('from_date', $from) }} to {{ request('to_date', $to) }}')">
+                            <i class="fas fa-file-pdf"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <div id="exp-table">
+                <table class="table table-bordered table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Date</th><th>Invoice #</th><th>Type</th><th>Description</th>
+                            <th class="text-end">Amount</th><th>Paid By</th><th>Payable To</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @forelse($expenseReport as $row)
+                        <tr>
+                            <td>{{ $row->date ? \Carbon\Carbon::parse($row->date)->format('d-M-Y') : '—' }}</td>
+                            <td>
+                                <a href="{{ route('purchase_invoices.show', $row->invoice_id ?? 0) }}" target="_blank" class="ref-link text-success">
+                                    PI-{{ $row->invoice_no }}
+                                </a>
+                            </td>
+                            <td>{{ $row->type }}</td>
+                            <td>{{ $row->description }}</td>
+                            <td class="text-end">{{ number_format($row->amount, 2) }}</td>
+                            <td><span class="badge {{ $row->paid_by === 'Vendor' ? 'bg-secondary' : 'bg-info text-dark' }}">{{ $row->paid_by }}</span></td>
+                            <td>{{ $row->payable_to }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="7" class="text-center text-muted">No expenses in this period.</td></tr>
+                    @endforelse
+                    </tbody>
+                    @if($expenseReport->count())
+                    <tfoot class="table-light fw-bold">
+                        <tr>
+                            <td colspan="4" class="text-end">Total</td>
+                            <td class="text-end">{{ number_format($expenseReport->sum('amount'), 2) }}</td>
+                            <td colspan="2"></td>
                         </tr>
                     </tfoot>
                     @endif

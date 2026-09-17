@@ -20,7 +20,7 @@ class PurchaseReportController extends Controller
 
         $hasPurchaseReturns = Schema::hasTable('purchase_returns') && Schema::hasTable('purchase_return_items');
 
-        $vendors = ChartOfAccounts::where('account_type', 'vendor')->get();
+        $vendors = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
 
         $purchaseRegister   = collect();
         $purchaseReturns    = collect();
@@ -29,13 +29,7 @@ class PurchaseReportController extends Controller
         $shortagesAndCosts  = collect();
         $expenseReport      = collect();
 
-        /* ================= PURCHASE REGISTER =================
-         * FIX: rewritten for the weight-based schema — item->amount
-         * (already = rate_per_kg * net_weight, computed server-side) is
-         * used directly instead of the old quantity*price, which would
-         * now multiply a bag count by a per-kg rate — nonsensical unit
-         * mixing left over from before the weight-based rebuild.
-         */
+        /* ================= PURCHASE REGISTER ================= */
         if ($tab === 'PUR') {
             $query = PurchaseInvoice::with(['vendor', 'items.product', 'items.variation'])
                 ->whereBetween('invoice_date', [$from, $to]);
@@ -64,7 +58,7 @@ class PurchaseReportController extends Controller
                         'gross_weight'        => $item->gross_weight,
                         'net_weight'          => $item->net_weight,
                         'received_net_weight' => $item->received_net_weight,
-                        'received_quantity'   => $item->received_net_weight, // kept this key name for blade compatibility
+                        'received_quantity'   => $item->received_net_weight,
                         'rate_per_kg'         => $item->price,
                         'total'               => $item->amount,
                     ];
@@ -72,9 +66,7 @@ class PurchaseReportController extends Controller
             });
         }
 
-        /* ================= PURCHASE RETURNS =================
-         * Guarded — this module was never migrated in every environment.
-         */
+        /* ================= PURCHASE RETURNS ================= */
         if ($tab === 'PR' && $hasPurchaseReturns) {
             $query = PurchaseReturn::with(['vendor', 'items.item'])
                 ->whereBetween('return_date', [$from, $to]);
@@ -99,9 +91,7 @@ class PurchaseReportController extends Controller
             });
         }
 
-        /* ================= VENDOR-WISE PURCHASE =================
-         * FIX: same amount/weight fixes as Purchase Register.
-         */
+        /* ================= VENDOR-WISE PURCHASE ================= */
         if ($tab === 'VWP') {
             $query = PurchaseInvoice::with(['vendor', 'items.product', 'items.variation'])
                 ->whereBetween('invoice_date', [$from, $to]);
@@ -146,11 +136,7 @@ class PurchaseReportController extends Controller
                 ->values();
         }
 
-        /* ================= STATUS OVERVIEW =================
-         * FIX: bilty_charges/labor_charges/other_charges (legacy flat
-         * fields) replaced by total_other_expenses (the dynamic
-         * expenses table). Added total_gross_weight per status.
-         */
+        /* ================= STATUS OVERVIEW ================= */
         if ($tab === 'STA') {
             $query = PurchaseInvoice::whereBetween('invoice_date', [$from, $to]);
 
@@ -176,13 +162,6 @@ class PurchaseReportController extends Controller
                     'total_net_weight'    => $group->sum('total_weight'),
                     'total_other_expenses'=> $group->sum('total_other_expenses'),
                     'total_bill_amount'   => $group->sum(fn ($i) => $i->totalBillAmount()),
-                    // Legacy 3-way split no longer exists (replaced by the
-                    // dynamic expenses list) — kept these keys for blade
-                    // compatibility, with the full expense total folded
-                    // into 'bilty_charges' so the view's existing
-                    // total_amount + bilty + labor + other formula still
-                    // adds up correctly. See Other Expenses tab for the
-                    // real per-type breakdown.
                     'bilty_charges'       => $group->sum('total_other_expenses'),
                     'labor_charges'       => 0,
                     'other_charges'       => 0,
@@ -190,15 +169,7 @@ class PurchaseReportController extends Controller
             }
         }
 
-        /* ================= SHORTAGES & ADDITIONAL COSTS =================
-         * FIX: short_quantity -> short_weight, received_quantity ->
-         * received_net_weight, dispatched_quantity (bag count) ->
-         * net_weight (kg, the actual dispatched weight) — the old
-         * version compared a bag count against a per-kg price, which
-         * silently produced a meaningless "shortage_value".
-         * bilty_charges/labor_charges/other_charges (legacy flat fields,
-         * no longer written to) replaced by the dynamic expenses list.
-         */
+        /* ================= SHORTAGES & ADDITIONAL COSTS ================= */
         if ($tab === 'SAC') {
             $query = PurchaseInvoice::with(['items', 'expenses.payeeAccount', 'vendor'])
                 ->where('status', PurchaseInvoice::STATUS_RECEIVED)
@@ -231,11 +202,6 @@ class PurchaseReportController extends Controller
                         'shortage_value'    => $shortageValue,
                         'expenses'          => $invoice->expenses,
                         'total_other_expenses' => $invoice->total_other_expenses,
-                        // Legacy keys kept for blade compatibility —
-                        // dispatched_qty/received_qty/short_qty now carry
-                        // weight (kg) values instead of bag counts, and
-                        // the 3-way charge split is folded into
-                        // bilty_charges the same way as the STA tab above.
                         'dispatched_qty'    => $dispatchedWeight,
                         'received_qty'      => $receivedWeight,
                         'short_qty'         => $shortWeight,
@@ -248,11 +214,7 @@ class PurchaseReportController extends Controller
                 ->values();
         }
 
-        /* ================= OTHER EXPENSES (NEW) =================
-         * Purchase's expenses list — shown flat with paid-by/payee
-         * breakdown, so it's visible at a glance which vendors vs which
-         * named payee accounts (e.g. transporters) are owed what.
-         */
+        /* ================= OTHER EXPENSES ================= */
         if ($tab === 'EXP') {
             $query = \App\Models\PurchaseInvoiceExpense::with(['purchaseInvoice.vendor', 'payeeAccount'])
                 ->whereHas('purchaseInvoice', function ($q) use ($from, $to, $request) {
@@ -266,6 +228,7 @@ class PurchaseReportController extends Controller
                     : ($exp->payeeAccount->name ?? '—');
 
                 return (object)[
+                    'invoice_id'  => $exp->purchaseInvoice->id ?? null,
                     'date'        => $exp->purchaseInvoice->invoice_date ?? null,
                     'invoice_no'  => $exp->purchaseInvoice->invoice_no ?? '',
                     'type'        => $exp->typeLabel(),
