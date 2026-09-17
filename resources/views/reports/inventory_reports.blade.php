@@ -37,7 +37,7 @@
                 <div class="row g-2">
                     <div class="col-md-4">
                         <label class="small fw-bold">Product <span class="text-danger">*</span></label>
-                        <select name="item_id" class="form-select form-select-sm" required>
+                        <select name="item_id" class="select2-report-filter form-select form-select-sm" required>
                             <option value="">-- Select Product --</option>
                             @foreach ($products as $product)
                                 <option value="{{ $product->id }}"
@@ -72,9 +72,8 @@
             <p class="text-muted small no-print mb-2">
                 <i class="fas fa-info-circle"></i> Purchases only appear once a Purchase Invoice reaches
                 <strong>Received</strong> status, dated by the actual receiving date — not the order date.
-                Opening Balance includes the item's recorded opening stock plus all activity before the
-                From date. Stock is tracked by <strong>bags</strong> (Qty columns) — Weight columns show
-                the net weight behind that same movement, for reference.
+                Stock is tracked by <strong>bags</strong> (Qty columns) — Weight columns show the net weight
+                behind that same movement, for reference.
             </p>
 
             <div id="il-table">
@@ -93,7 +92,7 @@
                     <tbody>
                     @if (request('item_id'))
                         <tr class="table-info">
-                            <td>{{ $from }}</td>
+                            <td>{{ \Carbon\Carbon::parse($from)->format('d-M-Y') }}</td>
                             <td colspan="2" class="fw-bold">Opening Balance</td>
                             <td class="text-end">—</td><td class="text-end">—</td>
                             <td class="text-end fw-bold">{{ number_format($openingQty, 2) }}</td>
@@ -120,7 +119,7 @@
                                 };
                             @endphp
                             <tr>
-                                <td>{{ $row['date'] }}</td>
+                                <td>{{ \Carbon\Carbon::parse($row['date'])->format('d-M-Y') }}</td>
                                 <td><span class="badge {{ $badgeClass }}">{{ $row['type'] }}</span></td>
                                 <td>
                                     @if (str_starts_with($desc, 'PI-'))
@@ -181,7 +180,7 @@
                 <div class="row g-2">
                     <div class="col-md-5">
                         <label class="small fw-bold">Product (leave blank for all)</label>
-                        <select name="item_id" class="form-select form-select-sm">
+                        <select name="item_id" class="select2-report-filter form-select form-select-sm">
                             <option value="">-- All Products --</option>
                             @foreach ($products as $product)
                                 <option value="{{ $product->id }}"
@@ -208,7 +207,9 @@
             <p class="text-muted small no-print mb-2">
                 <i class="fas fa-info-circle"></i> Only <strong>Received</strong> purchases count toward stock here.
                 Goods still Pending or In Transit appear on the <a href="{{ request()->fullUrlWithQuery(['tab' => 'IT']) }}">Stock In Transit</a> tab instead.
-                <strong>Current Stock</strong> is counted in bags/packing units.
+                <strong>Current Stock</strong> is counted in bags/packing units (including opening stock) —
+                Net Weight shows the total kg that represents, and Stock Value estimates it at the last known
+                purchase cost.
             </p>
 
             <div id="sr-table">
@@ -217,6 +218,9 @@
                         <tr>
                             <th>Product</th><th>Variation (SKU)</th>
                             <th class="text-end">Current Stock</th>
+                            <th class="text-end">Net Weight (kg)</th>
+                            <th class="text-end">Unit Cost (kg)</th>
+                            <th class="text-end">Stock Value</th>
                             <th>Unit</th>
                         </tr>
                     </thead>
@@ -228,10 +232,13 @@
                             <td class="text-end fw-bold {{ $stock['quantity'] <= 0 ? 'text-danger' : 'text-success' }}">
                                 {{ number_format($stock['quantity'], 2) }}
                             </td>
+                            <td class="text-end text-muted">{{ number_format($stock['weight'] ?? 0, 2) }}</td>
+                            <td class="text-end text-muted">{{ number_format($stock['unit_cost'] ?? 0, 2) }}</td>
+                            <td class="text-end fw-bold">{{ number_format($stock['stock_value'] ?? 0, 2) }}</td>
                             <td>{{ $stock['unit'] }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="text-center py-3 text-muted">No stock found. Click "Show Stock" to load.</td></tr>
+                        <tr><td colspan="7" class="text-center py-3 text-muted">No stock found. Click "Show Stock" to load.</td></tr>
                     @endforelse
                     </tbody>
                     @if ($stockInHand->isNotEmpty())
@@ -239,6 +246,9 @@
                         <tr>
                             <td colspan="2" class="text-end">Total Units In Stock:</td>
                             <td class="text-end">{{ number_format($stockInHand->sum('quantity'), 2) }}</td>
+                            <td class="text-end">{{ number_format($stockInHand->sum('weight'), 2) }}</td>
+                            <td></td>
+                            <td class="text-end">{{ number_format($stockInHand->sum('stock_value'), 2) }}</td>
                             <td></td>
                         </tr>
                     </tfoot>
@@ -254,7 +264,7 @@
                 <div class="row g-2">
                     <div class="col-md-5">
                         <label class="small fw-bold">Product (leave blank for all)</label>
-                        <select name="item_id" class="form-select form-select-sm">
+                        <select name="item_id" class="select2-report-filter form-select form-select-sm">
                             <option value="">-- All Products --</option>
                             @foreach ($products as $product)
                                 <option value="{{ $product->id }}"
@@ -340,7 +350,7 @@
                 <div class="row g-2">
                     <div class="col-md-5">
                         <label class="small fw-bold">Product (leave blank for all)</label>
-                        <select name="item_id" class="form-select form-select-sm">
+                        <select name="item_id" class="select2-report-filter form-select form-select-sm">
                             <option value="">-- All Products --</option>
                             @foreach ($products as $product)
                                 <option value="{{ $product->id }}"
@@ -449,5 +459,11 @@ function exportPDF(tableId, title, period) {
     win.document.write(html);
     win.document.close();
 }
+</script>
+
+<script>
+$(document).ready(function () {
+    $('.select2-report-filter').select2({ width: '100%' });
+});
 </script>
 @endsection

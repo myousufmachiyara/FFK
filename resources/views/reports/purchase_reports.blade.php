@@ -56,7 +56,7 @@
                     </div>
                     <div class="col-md-3">
                         <label>Vendor</label>
-                        <select name="vendor_id" class="form-control">
+                        <select name="vendor_id" class="select2-report-filter form-control">
                             <option value="">-- All Vendors --</option>
                             @foreach($vendors as $vendor)
                                 <option value="{{ $vendor->id }}" {{ request('vendor_id')==$vendor->id ? 'selected' : '' }}>
@@ -109,7 +109,7 @@
                     <tbody>
                     @forelse($purchaseRegister as $pur)
                         <tr>
-                            <td>{{ $pur->date }}</td>
+                            <td>{{ \Carbon\Carbon::parse($pur->date)->format('d-M-Y') }}</td>
                             <td>
                                 <a href="{{ route('purchase_invoices.show', $pur->invoice_id) }}"
                                    target="_blank" class="ref-link text-success">
@@ -175,7 +175,7 @@
                     </div>
                     <div class="col-md-3">
                         <label>Vendor</label>
-                        <select name="vendor_id" class="form-control">
+                        <select name="vendor_id" class="select2-report-filter form-control">
                             <option value="">-- All Vendors --</option>
                             @foreach($vendors as $vendor)
                                 <option value="{{ $vendor->id }}" {{ request('vendor_id')==$vendor->id ? 'selected' : '' }}>
@@ -248,7 +248,7 @@
                 <div class="row g-3 mb-3">
                     <div class="col-md-3">
                         <label>Vendor</label>
-                        <select name="vendor_id" class="form-control">
+                        <select name="vendor_id" class="select2-report-filter form-control">
                             <option value="">-- All Vendors --</option>
                             @foreach($vendors as $vendor)
                                 <option value="{{ $vendor->id }}" {{ request('vendor_id')==$vendor->id ? 'selected' : '' }}>
@@ -371,7 +371,7 @@
                 <div class="row g-3 mb-3">
                     <div class="col-md-3">
                         <label>Vendor</label>
-                        <select name="vendor_id" class="form-control">
+                        <select name="vendor_id" class="select2-report-filter form-control">
                             <option value="">-- All Vendors --</option>
                             @foreach($vendors as $vendor)
                                 <option value="{{ $vendor->id }}" {{ request('vendor_id')==$vendor->id ? 'selected' : '' }}>
@@ -447,7 +447,7 @@
                 <div class="row g-3 mb-3">
                     <div class="col-md-3">
                         <label>Vendor</label>
-                        <select name="vendor_id" class="form-control">
+                        <select name="vendor_id" class="select2-report-filter form-control">
                             <option value="">-- All Vendors --</option>
                             @foreach($vendors as $vendor)
                                 <option value="{{ $vendor->id }}" {{ request('vendor_id')==$vendor->id ? 'selected' : '' }}>
@@ -582,5 +582,11 @@ function exportPDF(tableId, title, period) {
     win.document.write(html);
     win.document.close();
 }
+</script>
+
+<script>
+$(document).ready(function () {
+    $('.select2-report-filter').select2({ width: '100%' });
+});
 </script>
 @endsection

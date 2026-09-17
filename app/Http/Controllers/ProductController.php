@@ -62,6 +62,8 @@ class ProductController extends Controller
             'measurement_unit' => 'required|exists:measurement_units,id',
             'selling_price' => 'nullable|numeric',
             'opening_stock' => 'required|numeric',
+            'opening_weight' => 'nullable|numeric',
+            'opening_rate' => 'nullable|numeric',
             'is_active' => 'boolean',
             'variations.*.barcode' => 'nullable|string|max:64|unique:product_variations,barcode',
         ]);
@@ -71,7 +73,7 @@ class ProductController extends Controller
         try {
             $productData = $request->only([
                 'name', 'category_id', 'subcategory_id', 'sku', 'description',
-                'measurement_unit', 'opening_stock', 'selling_price', 'is_active'
+                'measurement_unit', 'opening_stock', 'opening_weight', 'opening_rate', 'selling_price', 'is_active'
             ]);
 
             $product = Product::create($productData);
@@ -86,6 +88,8 @@ class ProductController extends Controller
                         'barcode'        => $this->resolveBarcode($variationData['barcode'] ?? null, $sku),
                         'stock_quantity' => $variationData['stock_quantity'] ?? 0,
                         'opening_stock'  => $variationData['opening_stock'] ?? 0,
+                        'opening_weight' => $variationData['opening_weight'] ?? 0,
+                        'opening_rate'   => $variationData['opening_rate'] ?? 0,
                         'selling_price'  => $variationData['selling_price'] ?? 0,
                     ]);
                     Log::info('[Product Store] Variation created', ['variation_id' => $variation->id, 'product_id' => $product->id, 'data' => $variationData]);
@@ -174,7 +178,7 @@ class ProductController extends Controller
             $product = Product::findOrFail($id);
 
             $product->update($request->only([
-                'name', 'category_id', 'subcategory_id', 'sku', 'measurement_unit', 'opening_stock', 'description', 'selling_price', 'is_active'
+                'name', 'category_id', 'subcategory_id', 'sku', 'measurement_unit', 'opening_stock', 'opening_weight', 'opening_rate', 'description', 'selling_price', 'is_active'
             ]));
 
             $handledVariationIds = [];
@@ -187,6 +191,8 @@ class ProductController extends Controller
                         'barcode'        => $this->resolveBarcode($variationData['barcode'] ?? $variation->barcode, $variationData['sku']),
                         'stock_quantity' => $variationData['stock_quantity'] ?? 0,
                         'opening_stock'  => $variationData['opening_stock'] ?? 0,
+                        'opening_weight' => $variationData['opening_weight'] ?? 0,
+                        'opening_rate'   => $variationData['opening_rate'] ?? 0,
                         'selling_price'  => $variationData['selling_price'] ?? 0,
                     ]);
 
@@ -207,6 +213,8 @@ class ProductController extends Controller
                         'barcode'        => $this->resolveBarcode($newVar['barcode'] ?? null, $sku),
                         'stock_quantity' => $newVar['stock_quantity'] ?? 0,
                         'opening_stock'  => $newVar['opening_stock'] ?? 0,
+                        'opening_weight' => $newVar['opening_weight'] ?? 0,
+                        'opening_rate'   => $newVar['opening_rate'] ?? 0,
                         'selling_price'  => $newVar['selling_price'] ?? 0,
                     ]);
 
@@ -268,6 +276,8 @@ class ProductController extends Controller
                 'stock_quantity' => (float) $v->stock_quantity,
                 'opening_stock'  => (float) $v->opening_stock,
                 'available_stock'=> round((float) $v->opening_stock + (float) $v->stock_quantity, 3),
+                'opening_weight' => (float) $v->opening_weight,
+                'available_weight'=> round((float) $v->opening_weight + (float) $v->stock_weight, 3),
                 'stock_weight'   => (float) $v->stock_weight,
                 'selling_price'  => $v->selling_price !== null ? (float) $v->selling_price : null,
             ];

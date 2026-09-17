@@ -75,7 +75,7 @@
                     </div>
                     <div class="col-md-3">
                         <label>Customer</label>
-                        <select name="customer_id" class="form-control">
+                        <select name="customer_id" class="select2-report-filter form-control">
                             <option value="">All Customers</option>
                             @foreach($customers as $cust)
                                 <option value="{{ $cust->id }}" {{ $customerId == $cust->id ? 'selected' : '' }}>
@@ -138,7 +138,7 @@
                     <tbody>
                     @forelse($sales as $row)
                         <tr>
-                            <td>{{ $row->date }}</td>
+                            <td>{{ \Carbon\Carbon::parse($row->date)->format('d-M-Y') }}</td>
                             <td>
                                 <a href="{{ route('sale_invoices.show', $row->id) }}"
                                    target="_blank" class="ref-link text-primary">
@@ -226,7 +226,7 @@
                     <tbody>
                     @forelse($returns as $row)
                         <tr>
-                            <td>{{ $row->date }}</td>
+                            <td>{{ \Carbon\Carbon::parse($row->date)->format('d-M-Y') }}</td>
                             <td>SR-{{ $row->invoice }}</td>
                             <td>{{ $row->customer }}</td>
                             <td class="text-end fw-bold">{{ number_format($row->total, 2) }}</td>
@@ -262,7 +262,7 @@
                     </div>
                     <div class="col-md-3">
                         <label>Customer</label>
-                        <select name="customer_id" class="form-control">
+                        <select name="customer_id" class="select2-report-filter form-control">
                             <option value="">All Customers</option>
                             @foreach($customers as $cust)
                                 <option value="{{ $cust->id }}" {{ $customerId == $cust->id ? 'selected' : '' }}>
@@ -346,7 +346,7 @@
                     </div>
                     <div class="col-md-3">
                         <label>Customer</label>
-                        <select name="customer_id" class="form-control">
+                        <select name="customer_id" class="select2-report-filter form-control">
                             <option value="">All Customers</option>
                             @foreach($customers as $cust)
                                 <option value="{{ $cust->id }}" {{ $customerId == $cust->id ? 'selected' : '' }}>
@@ -422,7 +422,7 @@
                     </div>
                     <div class="col-md-3">
                         <label>Customer</label>
-                        <select name="customer_id" class="form-control">
+                        <select name="customer_id" class="select2-report-filter form-control">
                             <option value="">All Customers</option>
                             @foreach($customers as $cust)
                                 <option value="{{ $cust->id }}" {{ $customerId == $cust->id ? 'selected' : '' }}>
@@ -462,7 +462,7 @@
                     <tbody>
                     @forelse($outstanding as $row)
                         <tr>
-                            <td>{{ $row->date }}</td>
+                            <td>{{ \Carbon\Carbon::parse($row->date)->format('d-M-Y') }}</td>
                             <td>
                                 <a href="{{ route('sale_invoices.show', $row->id) }}" target="_blank" class="ref-link text-primary">
                                     SI-{{ $row->invoice_no }}
@@ -573,7 +573,7 @@
                     </div>
                     <div class="col-md-3">
                         <label>Customer</label>
-                        <select name="customer_id" class="form-control">
+                        <select name="customer_id" class="select2-report-filter form-control">
                             <option value="">All Customers</option>
                             @foreach($customers as $cust)
                                 <option value="{{ $cust->id }}" {{ $customerId == $cust->id ? 'selected' : '' }}>
@@ -665,5 +665,11 @@ function exportPDF(tableId, title, period) {
     win.document.write(html);
     win.document.close();
 }
+</script>
+
+<script>
+$(document).ready(function () {
+    $('.select2-report-filter').select2({ width: '100%' });
+});
 </script>
 @endsection

@@ -16,20 +16,39 @@ class InventoryReportController extends Controller
      * for COGS. Used here purely to value on-hand stock; returns 0 if
      * there's no purchase history at all (nothing to value it against).
      */
+    /**
+     * Weighted-average landed cost per KG for a product/variation, across
+     * every Received Purchase — same averaging Sale uses for COGS, so
+     * Stock In Hand's valuation matches Sale's costing exactly.
+     */
     private function resolveLatestUnitCost(int $productId, ?int $variationId): float
     {
-        $query = PurchaseInvoiceItem::whereNotNull('received_net_weight')
-            ->where('item_id', $productId)
-            ->when($variationId, fn ($q) => $q->where('variation_id', $variationId))
-            ->latest('updated_at');
-
-        $lastReceived = $query->first();
-
-        if ($lastReceived && (float) $lastReceived->received_net_weight > 0) {
-            return $lastReceived->landedUnitCost();
+        if ($variationId) {
+            $variation = \App\Models\ProductVariation::find($variationId);
+            return $variation ? $variation->averageLandedCost() : 0.0;
         }
 
-        return 0.0;
+        $product = Product::find($productId);
+
+        $totals = DB::table('purchase_invoice_items')
+            ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
+            ->where('purchase_invoice_items.item_id', $productId)
+            ->where('purchase_invoices.status', 'received')
+            ->whereNull('purchase_invoices.deleted_at')
+            ->whereNotNull('purchase_invoice_items.received_net_weight')
+            ->selectRaw('SUM(purchase_invoice_items.received_net_weight * purchase_invoice_items.price + COALESCE(purchase_invoice_items.allocated_additional_cost, 0)) as total_cost')
+            ->selectRaw('SUM(purchase_invoice_items.received_net_weight) as total_weight')
+            ->first();
+
+        $totalCost   = (float) ($totals->total_cost ?? 0);
+        $totalWeight = (float) ($totals->total_weight ?? 0);
+
+        if ($product && (float) $product->opening_weight > 0 && (float) $product->opening_rate > 0) {
+            $totalCost   += (float) $product->opening_weight * (float) $product->opening_rate;
+            $totalWeight += (float) $product->opening_weight;
+        }
+
+        return $totalWeight > 0 ? round($totalCost / $totalWeight, 4) : 0.0;
     }
 
     public function inventoryReports(Request $request)
@@ -64,6 +83,16 @@ class InventoryReportController extends Controller
         // tracked unit itself. Only RECEIVED purchase quantities count as
         // stock movement, dated by received_at (when stock actually
         // moved), not invoice_date (when the order was placed).
+        //
+        // FIX: Shortage is NOT its own ledger movement. The Purchase-in
+        // line below already only credits stock by 'received_packing_qty'
+        // (what actually arrived) — the shortfall between dispatched and
+        // received was never added to stock in the first place, so there
+        // is nothing to separately subtract back out. A prior version of
+        // this report added a "Shortage" qty_out row on top of that,
+        // which double-counted the shortfall and understated the running
+        // balance. Removed entirely — shortage is purely informational
+        // and belongs on the Purchase side's own reporting, not here.
         // ================================================================
         if ($tab === 'IL' && $itemId) {
 
@@ -129,6 +158,15 @@ class InventoryReportController extends Controller
                 ->sum('sale_invoice_items.net_weight');
 
             $openingWeight = (float) $opPurchasedWeight - (float) $opSoldWeight;
+
+            // Add the one-time opening weight balance — same treatment as
+            // opening_stock above, kept permanently separate from the
+            // transactional purchase/sale weight sums.
+            if ($product) {
+                $openingWeight += $product->variations->isNotEmpty()
+                    ? (float) $product->variations->sum('opening_weight')
+                    : (float) $product->opening_weight;
+            }
 
             $purchases = DB::table('purchase_invoice_items')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
@@ -277,7 +315,7 @@ class InventoryReportController extends Controller
                         : 0.0;
 
                     $qty    = ($purchased + $saleReturned + (float) $product->opening_stock) - ($sold + $purchaseReturned);
-                    $weight = $purchasedWeight - $soldWeight; // returns have no weight tracking, approximate is fine here
+                    $weight = $purchasedWeight - $soldWeight + (float) $product->opening_weight; // returns have no weight tracking, approximate is fine here
 
                     if ($qty > 0) {
                         $unitCost = $this->resolveLatestUnitCost($product->id, null);
@@ -307,9 +345,9 @@ class InventoryReportController extends Controller
                                 'product'     => $product->name,
                                 'variation'   => $v->sku ?? $v->name ?? '—',
                                 'quantity'    => $qty,
-                                'weight'      => (float) $v->stock_weight,
+                                'weight'      => $v->availableWeight(),
                                 'unit_cost'   => $unitCost,
-                                'stock_value' => round((float) $v->stock_weight * $unitCost, 2),
+                                'stock_value' => round($v->availableWeight() * $unitCost, 2),
                                 'unit'        => $product->unit_shortcode ?? '',
                             ]);
                         }

@@ -73,8 +73,18 @@
             </div>
 
             <div class="col-md-2 mt-3">
-              <label>Opening Stock</label>
+              <label>Opening Stock <small class="text-muted">(bags)</small></label>
               <input type="number" step="any" name="opening_stock" class="form-control" value="{{ old('opening_stock', $product->opening_stock) }}">
+            </div>
+
+            <div class="col-md-2 mt-3">
+              <label>Opening Wt. <small class="text-muted">(kg)</small></label>
+              <input type="number" step="any" name="opening_weight" class="form-control" value="{{ old('opening_weight', $product->opening_weight) }}">
+            </div>
+
+            <div class="col-md-2 mt-3">
+              <label>Opening Rate <small class="text-muted">(cost/kg)</small></label>
+              <input type="number" step="any" name="opening_rate" class="form-control" value="{{ old('opening_rate', $product->opening_rate) }}">
             </div>
 
             <div class="col-md-2 mt-3">
@@ -116,16 +126,30 @@
                         <input type="number" step="any" name="variations[{{ $i }}][selling_price]" class="form-control" value="{{ $variation->selling_price }}">
                       </div>
                       <div class="col-md-2">
-                        <label>Opening Stock</label>
+                        <label>Opening Stock (bags)</label>
                         <input type="number" step="any" name="variations[{{ $i }}][opening_stock]" class="form-control" value="{{ $variation->opening_stock }}">
                       </div>
                       <div class="col-md-2">
-                        <label>Stock (transactional) <small class="text-muted">read-only</small></label>
-                        <input type="number" step="any" name="variations[{{ $i }}][stock_quantity]" class="form-control" value="{{ $variation->stock_quantity }}" readonly>
+                        <label>Opening Wt. (kg)</label>
+                        <input type="number" step="any" name="variations[{{ $i }}][opening_weight]" class="form-control" value="{{ $variation->opening_weight }}">
+                      </div>
+                      <div class="col-md-2">
+                        <label>Opening Rate</label>
+                        <input type="number" step="any" name="variations[{{ $i }}][opening_rate]" class="form-control" value="{{ $variation->opening_rate }}">
                       </div>
                       <div class="col-md-2">
                         <label>&nbsp;</label>
                         <button type="button" class="btn btn-sm btn-danger remove-existing-variation d-block" data-id="{{ $variation->id }}">Remove</button>
+                      </div>
+                    </div>
+                    <div class="row mt-2">
+                      <div class="col-md-4">
+                        <label>Stock (transactional, bags) <small class="text-muted">read-only</small></label>
+                        <input type="number" step="any" name="variations[{{ $i }}][stock_quantity]" class="form-control" value="{{ $variation->stock_quantity }}" readonly>
+                      </div>
+                      <div class="col-md-4">
+                        <label>Stock Weight (transactional, kg) <small class="text-muted">read-only</small></label>
+                        <input type="number" step="any" class="form-control" value="{{ $variation->stock_weight }}" readonly>
                       </div>
                     </div>
                     <div class="row mt-2">
@@ -188,7 +212,7 @@
       const html = `
         <div class="variation-block border p-2 mb-3">
           <div class="row">
-            <div class="col-md-3">
+            <div class="col-md-2">
               <label>SKU</label>
               <input type="text" name="new_variations[${newVariationIndex}][sku]" class="form-control sku-field">
             </div>
@@ -201,8 +225,16 @@
               <input type="number" step="any" name="new_variations[${newVariationIndex}][selling_price]" value="0.00" class="form-control">
             </div>
             <div class="col-md-2">
-              <label>Opening Stock</label>
+              <label>Opening Stock (bags)</label>
               <input type="number" step="any" name="new_variations[${newVariationIndex}][opening_stock]" value="0.00" class="form-control">
+            </div>
+            <div class="col-md-2">
+              <label>Opening Wt. (kg)</label>
+              <input type="number" step="any" name="new_variations[${newVariationIndex}][opening_weight]" value="0.00" class="form-control">
+            </div>
+            <div class="col-md-2">
+              <label>Opening Rate</label>
+              <input type="number" step="any" name="new_variations[${newVariationIndex}][opening_rate]" value="0.00" class="form-control">
             </div>
             <div class="col-md-2">
               <label>&nbsp;</label>

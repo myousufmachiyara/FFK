@@ -127,24 +127,58 @@ class SaleInvoiceController extends Controller
     }
 
     /** Cost per KG — reuses Purchase's landed cost. Multiplied by net_weight, not quantity. */
+    /**
+     * FIX: previously used only the LATEST Received purchase's rate.
+     * Now uses a proper weighted average across every Received purchase
+     * of this product/variation, folding in the item's allocated share
+     * of Other Expenses too — the same purchase can legitimately happen
+     * at different rates across invoices, so COGS should reflect the
+     * blend, not whatever the most recent invoice happened to say.
+     */
     private function resolveUnitCost(int $productId, ?int $variationId, float $fallback): float
     {
-        $query = PurchaseInvoiceItem::whereNotNull('received_net_weight')
-            ->where('item_id', $productId)
-            ->when($variationId, fn ($q) => $q->where('variation_id', $variationId))
-            ->latest('updated_at');
-
-        $lastReceived = $query->first();
-
-        if ($lastReceived && (float) $lastReceived->received_net_weight > 0) {
-            return $lastReceived->landedUnitCost();
+        if ($variationId) {
+            $variation = ProductVariation::find($variationId);
+            if ($variation) {
+                $cost = $variation->averageLandedCost();
+                if ($cost > 0) return $cost;
+            }
+        } else {
+            $cost = $this->averageLandedCostForProduct($productId);
+            if ($cost > 0) return $cost;
         }
 
-        Log::warning('[SI] No purchase history found for costing — using sale rate as fallback unit cost.', [
+        Log::warning('[SI] No purchase history (and no opening rate) found for costing — using sale rate as fallback unit cost.', [
             'product_id' => $productId, 'variation_id' => $variationId,
         ]);
 
         return $fallback;
+    }
+
+    /** Same averaging as ProductVariation::averageLandedCost(), for products with no variations. */
+    private function averageLandedCostForProduct(int $productId): float
+    {
+        $product = Product::find($productId);
+
+        $totals = DB::table('purchase_invoice_items')
+            ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
+            ->where('purchase_invoice_items.item_id', $productId)
+            ->where('purchase_invoices.status', 'received')
+            ->whereNull('purchase_invoices.deleted_at')
+            ->whereNotNull('purchase_invoice_items.received_net_weight')
+            ->selectRaw('SUM(purchase_invoice_items.received_net_weight * purchase_invoice_items.price + COALESCE(purchase_invoice_items.allocated_additional_cost, 0)) as total_cost')
+            ->selectRaw('SUM(purchase_invoice_items.received_net_weight) as total_weight')
+            ->first();
+
+        $totalCost   = (float) ($totals->total_cost ?? 0);
+        $totalWeight = (float) ($totals->total_weight ?? 0);
+
+        if ($product && (float) $product->opening_weight > 0 && (float) $product->opening_rate > 0) {
+            $totalCost   += (float) $product->opening_weight * (float) $product->opening_rate;
+            $totalWeight += (float) $product->opening_weight;
+        }
+
+        return $totalWeight > 0 ? round($totalCost / $totalWeight, 4) : 0.0;
     }
 
     public function index(Request $request)

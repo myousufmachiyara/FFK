@@ -56,7 +56,7 @@
             </div>
 
             <div class="col-md-2 mb-3">
-              <label>Bilti # <small class="text-muted">(optional now)</small></label>
+              <label>Bilty # <small class="text-muted">(optional now)</small></label>
               <input type="text" name="bilty_no" class="form-control">
             </div>
 
@@ -101,7 +101,7 @@
         <header class="card-header"><h2 class="card-title">Items</h2></header>
         <div class="card-body">
           <div class="table-responsive mb-3">
-            <table class="table table-bordered table-sm" id="purchaseTable">
+            <table class="table table-bordered table-sm" id="purchaseTable" style="table-layout: fixed; width: 100%;">
               <thead>
                 <tr>
                   <th width="15%">Item</th>
@@ -180,7 +180,7 @@ const KG_PER_MAUND = {{ $kgPerMaund ?? 40 }};
 let itemIdx = 0;
 let expenseIdx = 0;
 
-function productOptions() { return products.map(p => `<option value="${p.id}">${p.name}</option>`).join(''); }
+function productOptions() { return products.map(p => `<option value="${p.id}" data-unit="${p.measurement_unit ?? ''}">${p.name}</option>`).join(''); }
 function unitOptions() { return units.map(u => `<option value="${u.id}">${u.name}</option>`).join(''); }
 function payeeOptions() { return payeeAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join(''); }
 
@@ -199,7 +199,7 @@ function addItemRow() {
             </select>
         </td>
         <td>
-            <select name="items[${idx}][packing_unit_id]" class="form-control select2-js">
+            <select name="items[${idx}][packing_unit_id]" class="form-control select2-js" id="unit${idx}">
                 <option value="">—</option>${unitOptions()}
             </select>
         </td>
@@ -219,6 +219,14 @@ function addItemRow() {
 function onProductChange(sel, idx) {
     const productId = sel.value;
     const variationSelect = $(`#variation${idx}`);
+
+    // Auto-pick the packing unit from the product's default measurement
+    // unit, if it has one and one wasn't already manually chosen.
+    const defaultUnit = $(sel).find('option:selected').data('unit');
+    if (defaultUnit) {
+        $(`#unit${idx}`).val(defaultUnit).trigger('change.select2');
+    }
+
     if (!productId) {
         variationSelect.html('<option value="">—</option>').trigger('change.select2');
         return;

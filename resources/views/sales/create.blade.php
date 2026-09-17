@@ -71,7 +71,8 @@
       <section class="card">
         <header class="card-header"><h2 class="card-title">Items</h2></header>
         <div class="card-body">
-          <table class="table table-bordered table-sm" id="itemTable">
+          <div class="table-responsive">
+            <table class="table table-bordered table-sm" id="itemTable" style="table-layout: fixed; width: 100%;">
             <thead>
               <tr>
                 <th width="14%">Item</th>
@@ -90,6 +91,7 @@
             </thead>
             <tbody id="itemBody"></tbody>
           </table>
+          </div>
           <button type="button" class="btn btn-success btn-sm" onclick="addItemRow()">+ Add Item</button>
         </div>
       </section>
@@ -175,7 +177,7 @@ const KG_PER_MAUND = {{ $kgPerMaund }};
 let itemIdx = 0;
 let expenseIdx = 0;
 
-function productOptions() { return products.map(p => `<option value="${p.id}" data-stock="${p.computed_stock ?? 0}">${p.name}</option>`).join(''); }
+function productOptions() { return products.map(p => `<option value="${p.id}" data-stock="${p.computed_stock ?? 0}" data-unit="${p.measurement_unit ?? ''}">${p.name}</option>`).join(''); }
 function unitOptions() { return units.map(u => `<option value="${u.id}">${u.name}</option>`).join(''); }
 function payeeOptions() { return payeeAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join(''); }
 
@@ -189,7 +191,7 @@ function addItemRow() {
         <td><select name="items[${idx}][variation_id]" class="form-control select2-js variation-select" id="variation${idx}">
             <option value="">—</option>
         </select></td>
-        <td><select name="items[${idx}][packing_unit_id]" class="form-control select2-js">
+        <td><select name="items[${idx}][packing_unit_id]" class="form-control select2-js" id="unit${idx}">
             <option value="">—</option>${unitOptions()}
         </select></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][wt_per_packing]" class="form-control wt-packing" oninput="calcRow(${idx})" required></td>
@@ -214,6 +216,12 @@ function addItemRow() {
 function onProductChange(sel, idx) {
     const productId = sel.value;
     const variationSelect = $(`#variation${idx}`);
+
+    const defaultUnit = $(sel).find('option:selected').data('unit');
+    if (defaultUnit) {
+        $(`#unit${idx}`).val(defaultUnit).trigger('change.select2');
+    }
+
     if (!productId) {
         variationSelect.html('<option value="">—</option>').trigger('change.select2');
         return;
@@ -225,7 +233,7 @@ function onProductChange(sel, idx) {
             const variations = data.variation || data.variations || [];
             let html = '<option value="">—</option>';
             variations.forEach(v => {
-                const stock = v.stock_quantity ?? 0;
+                const stock = v.available_stock ?? v.stock_quantity ?? 0;
                 const stockWt = v.stock_weight ?? 0;
                 html += `<option value="${v.id}" data-stock="${stock}">${v.sku} (Stock: ${stock} bags / ${stockWt} kg)</option>`;
             });

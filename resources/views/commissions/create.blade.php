@@ -68,7 +68,7 @@
         <header class="card-header"><h2 class="card-title">Items</h2></header>
         <div class="card-body">
           <div class="table-responsive">
-            <table class="table table-bordered table-sm" id="itemTable">
+            <table class="table table-bordered table-sm" id="itemTable" style="table-layout: fixed; width: 100%;">
               <thead>
                 <tr>
                   <th width="9%">Product</th><th width="6%">Variation</th><th width="5%">Packing</th>
@@ -149,7 +149,7 @@ const KG_PER_MAUND = {{ $kgPerMaund }};
 let itemIdx = 0;
 let expenseIdx = 0;
 
-function productOptions() { return products.map(p => `<option value="${p.id}">${p.name}</option>`).join(''); }
+function productOptions() { return products.map(p => `<option value="${p.id}" data-unit="${p.measurement_unit ?? ''}">${p.name}</option>`).join(''); }
 function unitOptions() { return units.map(u => `<option value="${u.id}">${u.name}</option>`).join(''); }
 function payeeOptions() { return payeeAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join(''); }
 
@@ -159,7 +159,7 @@ function addItemRow() {
     <tr data-row="${idx}">
         <td><select name="items[${idx}][product_id]" class="form-control select2-js product-select" onchange="onProductChange(this, ${idx})" required><option value="">Select</option>${productOptions()}</select></td>
         <td><select name="items[${idx}][variation_id]" class="form-control select2-js variation-select" id="variation${idx}"><option value="">—</option></select></td>
-        <td><select name="items[${idx}][packing_unit_id]" class="form-control select2-js"><option value="">—</option>${unitOptions()}</select></td>
+        <td><select name="items[${idx}][packing_unit_id]" class="form-control select2-js" id="unit${idx}"><option value="">—</option>${unitOptions()}</select></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][wt_per_packing]" class="form-control wt-packing" oninput="calcRow(${idx})" required></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][quantity]" class="form-control qty" oninput="calcRow(${idx})" required></td>
         <td><input type="text" class="form-control readonly-calc gross-weight" readonly value="0.00"></td>
@@ -183,6 +183,12 @@ function addItemRow() {
 function onProductChange(sel, idx) {
     const productId = sel.value;
     const variationSelect = $(`#variation${idx}`);
+
+    const defaultUnit = $(sel).find('option:selected').data('unit');
+    if (defaultUnit) {
+        $(`#unit${idx}`).val(defaultUnit).trigger('change.select2');
+    }
+
     if (!productId) { variationSelect.html('<option value="">—</option>').trigger('change.select2'); return; }
     variationSelect.html('<option value="">Loading...</option>').trigger('change.select2');
     fetch(`/product/${productId}/variations`).then(res => res.json()).then(data => {

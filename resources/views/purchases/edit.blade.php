@@ -90,7 +90,7 @@
         <header class="card-header"><h2 class="card-title">Items</h2></header>
         <div class="card-body">
           <div class="table-responsive mb-3">
-            <table class="table table-bordered table-sm" id="purchaseTable">
+            <table class="table table-bordered table-sm" id="purchaseTable" style="table-layout: fixed; width: 100%;">
               <thead>
                 <tr>
                   <th width="15%">Item</th>
@@ -166,7 +166,7 @@ const KG_PER_MAUND = {{ $kgPerMaund }};
 let itemIdx = 0;
 let expenseIdx = 0;
 
-function productOptions(selectedId) { return products.map(p => `<option value="${p.id}" ${p.id == selectedId ? 'selected' : ''}>${p.name}</option>`).join(''); }
+function productOptions(selectedId) { return products.map(p => `<option value="${p.id}" data-unit="${p.measurement_unit ?? ''}" ${p.id == selectedId ? 'selected' : ''}>${p.name}</option>`).join(''); }
 function unitOptions(selectedId) { return units.map(u => `<option value="${u.id}" ${u.id == selectedId ? 'selected' : ''}>${u.name}</option>`).join(''); }
 function payeeOptions(selectedId) { return payeeAccounts.map(a => `<option value="${a.id}" ${a.id == selectedId ? 'selected' : ''}>${a.name}</option>`).join(''); }
 
@@ -192,7 +192,7 @@ function addItemRow(existing = null) {
             </select>
         </td>
         <td>
-            <select name="items[${idx}][packing_unit_id]" class="form-control select2-js">
+            <select name="items[${idx}][packing_unit_id]" class="form-control select2-js" id="unit${idx}">
                 <option value="">—</option>${unitOptions(packingUnitId)}
             </select>
         </td>
@@ -215,6 +215,10 @@ function addItemRow(existing = null) {
 }
 
 function onProductChange(sel, idx) {
+    const defaultUnit = $(sel).find('option:selected').data('unit');
+    if (defaultUnit) {
+        $(`#unit${idx}`).val(defaultUnit).trigger('change.select2');
+    }
     loadVariationsForRow(sel.value, idx, null);
 }
 

@@ -69,9 +69,21 @@
             </div>
 
             <div class="col-md-2 mt-3">
-              <label>Opening Stock</label>
+              <label>Opening Stock <small class="text-muted">(bags)</small></label>
               <input type="number" step="any" name="opening_stock" class="form-control" value="{{ old('opening_stock', '0') }}">
               @error('opening_stock')<div class="text-danger">{{ $message }}</div>@enderror
+            </div>
+
+            <div class="col-md-2 mt-3">
+              <label>Opening Wt. <small class="text-muted">(kg)</small></label>
+              <input type="number" step="any" name="opening_weight" class="form-control" value="{{ old('opening_weight', '0') }}">
+              @error('opening_weight')<div class="text-danger">{{ $message }}</div>@enderror
+            </div>
+
+            <div class="col-md-2 mt-3">
+              <label>Opening Rate <small class="text-muted">(cost/kg, optional)</small></label>
+              <input type="number" step="any" name="opening_rate" class="form-control" value="{{ old('opening_rate', '0') }}" placeholder="Leave 0 if unknown">
+              @error('opening_rate')<div class="text-danger">{{ $message }}</div>@enderror
             </div>
 
             <div class="col-md-2 mt-3">
@@ -126,7 +138,9 @@
                     <th>SKU</th>
                     <th>Barcode</th>
                     <th>Selling Price</th>
-                    <th>Opening Stock</th>
+                    <th>Opening Stock (bags)</th>
+                    <th>Opening Wt. (kg)</th>
+                    <th>Opening Rate</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -189,6 +203,8 @@
             <td><input type="text" name="variations[${index}][barcode]" class="form-control" placeholder="= SKU if left blank"></td>
             <td><input type="number" name="variations[${index}][selling_price]" step="any" class="form-control" value="${defaultPrice}" required></td>
             <td><input type="number" name="variations[${index}][opening_stock]" step="any" class="form-control" value="0" required></td>
+            <td><input type="number" name="variations[${index}][opening_weight]" step="any" class="form-control" value="0"></td>
+            <td><input type="number" name="variations[${index}][opening_rate]" step="any" class="form-control" value="0" placeholder="optional"></td>
             <td><button type="button" class="btn btn-sm btn-danger remove-variation">X</button></td>
           </tr>
         `);
