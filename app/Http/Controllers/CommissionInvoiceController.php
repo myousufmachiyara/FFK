@@ -810,54 +810,161 @@ class CommissionInvoiceController extends Controller
         }
     }
 
+    /** English number-to-words, standard Million/Thousand system, whole rupees. */
+    private function numberToWords(float $number): string
+    {
+        $number = (int) round($number);
+        if ($number == 0) return 'Zero';
+
+        $ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+                 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+                 'Seventeen', 'Eighteen', 'Nineteen'];
+        $tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        $convertHundreds = function ($n) use (&$convertHundreds, $ones, $tens) {
+            $str = '';
+            if ($n >= 100) {
+                $str .= $ones[intdiv($n, 100)] . ' Hundred ';
+                $n %= 100;
+            }
+            if ($n >= 20) {
+                $str .= $tens[intdiv($n, 10)] . ' ';
+                $n %= 10;
+            }
+            if ($n > 0) {
+                $str .= $ones[$n] . ' ';
+            }
+            return $str;
+        };
+
+        $parts = [];
+        $billions = intdiv($number, 1000000000); $number %= 1000000000;
+        $millions = intdiv($number, 1000000);    $number %= 1000000;
+        $thousands = intdiv($number, 1000);       $number %= 1000;
+        $rest = $number;
+
+        if ($billions  > 0) $parts[] = trim($convertHundreds($billions))  . ' Billion';
+        if ($millions  > 0) $parts[] = trim($convertHundreds($millions))  . ' Million';
+        if ($thousands > 0) $parts[] = trim($convertHundreds($thousands)) . ' Thousand';
+        if ($rest      > 0) $parts[] = trim($convertHundreds($rest));
+
+        return trim(implode(' ', $parts));
+    }
+
     public function print($id)
     {
-        $invoice = CommissionInvoice::with(['vendor', 'customer', 'items.product', 'items.variation', 'expenses'])->findOrFail($id);
+        $invoice = CommissionInvoice::with(['vendor', 'customer', 'items.product', 'items.variation', 'expenses.payeeAccount'])->findOrFail($id);
 
         $pdf = new \TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
-        $pdf->SetCreator('BillTrix');
-        $pdf->SetTitle('CI-' . $invoice->invoice_no);
+        $pdf->SetCreator('Farooq Fulara (Karachi)');
+        $pdf->SetAuthor('Farooq Fulara (Karachi)');
+        $pdf->SetTitle('Commission Invoice #' . $invoice->invoice_no);
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
-        $pdf->SetMargins(15, 15, 15);
-        $pdf->SetAutoPageBreak(true, 20);
+        $pdf->SetMargins(10, 10, 10);
+        $pdf->SetAutoPageBreak(true, 25);
         $pdf->AddPage();
 
-        $pdf->SetFont('helvetica', 'B', 16);
-        $pdf->SetXY(15, 12);
-        $pdf->Cell(180, 10, 'COMMISSION / BROKERAGE INVOICE', 0, 1, 'L');
+        // ── Header band (navy, full width) ─────────────────────────
+        $pdf->SetFillColor(27, 58, 92);
+        $pdf->Rect(0, 0, 210, 32, 'F');
 
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->Cell(180, 5, 'Invoice #: ' . $invoice->invoice_no . '   |   Date: ' . Carbon::parse($invoice->invoice_date)->format('d-M-Y') . '   |   Status: ' . $invoice->statusLabel(), 0, 1, 'L');
-        $pdf->Ln(3);
+        $logoPath = public_path('assets/img/ff-logo.jpg');
+        $nameX = 12;
+        if (file_exists($logoPath)) {
+            $pdf->Image($logoPath, 12, 5, 22);
+            $nameX = 38;
+        }
 
-        $partiesHtml = '
-        <table width="100%" border="1" cellpadding="3" style="font-size:10px;">
-            <tr>
-                <td width="50%"><b>Vendor:</b> ' . ($invoice->vendor->name ?? 'N/A') . '</td>
-                <td width="50%"><b>Customer:</b> ' . ($invoice->customer->name ?? 'N/A') . '</td>
-            </tr>
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('helvetica', 'B', 19);
+        $pdf->SetXY($nameX, 8);
+        $pdf->Cell(120, 8, 'FAROOQ FULARA', 0, 1, 'L');
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->SetXY($nameX, 17);
+        $pdf->SetTextColor(201, 162, 75);
+        $pdf->Cell(120, 6, '(KARACHI)', 0, 1, 'L');
+
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetXY(120, 8);
+        $pdf->Cell(80, 5, 'Farooq Fulara: 0320-2788117', 0, 1, 'R');
+        $pdf->SetX(120);
+        $pdf->Cell(80, 5, 'Hamiz Farooq Fulara: 0335-0023574', 0, 1, 'R');
+        $pdf->SetTextColor(0, 0, 0);
+
+        // ── Title bar: gold chevron-style label + invoice info box ──
+        $pdf->SetFillColor(201, 162, 75);
+        $pdf->Rect(10, 38, 90, 12, 'F');
+        $pdf->SetFont('helvetica', 'B', 13);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetXY(10, 40.5);
+        $pdf->Cell(90, 7, '  COMMISSION INVOICE', 0, 0, 'L');
+        $pdf->SetTextColor(0, 0, 0);
+
+        $paymentTermsLine = ucfirst($invoice->payment_terms ?? 'cash');
+        if ($invoice->isCredit() && $invoice->credit_days) {
+            $paymentTermsLine .= ' (' . $invoice->credit_days . ' days)';
+        }
+        $dueDateLine = ($invoice->isCredit() && $invoice->dueDate()) ? $invoice->dueDate()->format('d-M-Y') : '—';
+
+        $infoHtml = '<table width="100%" cellpadding="1" style="font-size:9px;">
+            <tr><td width="40%"><b>Invoice No</b></td><td width="5%">:</td><td width="55%">CI-' . $invoice->invoice_no . '</td></tr>
+            <tr><td><b>Date</b></td><td>:</td><td>' . Carbon::parse($invoice->invoice_date)->format('d-m-Y') . '</td></tr>
+            <tr><td><b>Due Date</b></td><td>:</td><td>' . $dueDateLine . '</td></tr>
+            <tr><td><b>Status</b></td><td>:</td><td>' . $invoice->statusLabel() . '</td></tr>
         </table>';
-        $pdf->writeHTML($partiesHtml, true, false, false, false, '');
-        $pdf->Ln(5);
+        $pdf->SetXY(105, 38);
+        $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
 
+        // ── Two boxed detail sections: Vendor | Customer ────────────
+        $boxY = 55;
+        $pdf->SetFillColor(27, 58, 92);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('helvetica', 'B', 10);
+        $pdf->SetXY(10, $boxY);
+        $pdf->Cell(90, 7, '  Vendor Details', 1, 0, 'L', true);
+        $pdf->SetXY(105, $boxY);
+        $pdf->Cell(95, 7, '  Customer Details', 1, 0, 'L', true);
+        $pdf->SetTextColor(0, 0, 0);
+
+        $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
+            <tr><td width="30%"><b>Vendor</b></td><td width="5%">:</td><td width="65%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
+            <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->vendor_bill_no ?? '-') . '</td></tr>
+            <tr><td><b>Bilty No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
+        </table>';
+        $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
+            <tr><td width="30%"><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
+            <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
+        </table>';
+
+        $pdf->SetXY(10, $boxY + 7);
+        $pdf->writeHTMLCell(90, 22, 10, $boxY + 7, $vendorHtml, 1, 0);
+        $pdf->SetXY(105, $boxY + 7);
+        $pdf->writeHTMLCell(95, 22, 105, $boxY + 7, $custHtml, 1, 1);
+
+        $pdf->SetY($boxY + 32);
+
+        // ── Items table ─────────────────────────────────────────────
         $html = '
-        <table border="1" cellpadding="3" style="font-size:8px;">
+        <table border="1" cellpadding="2.5" style="font-size:7.5px;">
             <thead>
-                <tr style="background-color:#f2f2f2;font-weight:bold;text-align:center;">
-                    <th width="14%">Item</th><th width="6%">Qty</th><th width="8%">Net Wt</th>
+                <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
+                    <th width="13%">Item</th><th width="6%">Qty</th><th width="8%">Net Wt</th>
                     <th width="9%">Pur Rate/kg</th><th width="9%">Pur Total</th>
                     <th width="9%">Sale Rate/kg</th><th width="9%">Sale Total</th>
                     <th width="9%">Vendor Comm %</th><th width="9%">Vendor Comm</th>
-                    <th width="9%">Cust Comm %</th><th width="9%">Cust Comm</th>
+                    <th width="9%">Cust Comm %</th><th width="10%">Cust Comm</th>
                 </tr>
             </thead>
             <tbody>';
 
-        foreach ($invoice->items as $item) {
+        foreach ($invoice->items as $index => $item) {
+            $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
             $html .= '
-                <tr>
-                    <td width="14%">' . e($item->product->name ?? '-') . '</td>
+                <tr style="background-color:' . $rowBg . ';">
+                    <td width="13%">' . e($item->product->name ?? '-') . '</td>
                     <td width="6%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="8%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->purchase_price, 2) . '</td>
@@ -867,34 +974,96 @@ class CommissionInvoiceController extends Controller
                     <td width="9%" style="text-align:center;">' . number_format($item->vendor_commission_percentage, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->vendor_commission_amount, 2) . '</td>
                     <td width="9%" style="text-align:center;">' . number_format($item->customer_commission_percentage, 2) . '</td>
-                    <td width="9%" style="text-align:right;">' . number_format($item->customer_commission_amount, 2) . '</td>
+                    <td width="10%" style="text-align:right;">' . number_format($item->customer_commission_amount, 2) . '</td>
                 </tr>';
         }
         $html .= '</tbody></table>';
         $pdf->writeHTML($html, true, false, false, false, '');
-        $pdf->Ln(3);
+        $pdf->Ln(4);
 
-        if ($invoice->expenses->count()) {
-            $expHtml = '<table border="1" cellpadding="4" style="font-size:9px;"><thead><tr style="background-color:#f2f2f2;font-weight:bold;"><th width="25%">Expense</th><th width="35%">Description</th><th width="20%">Paid By</th><th width="20%">Amount</th></tr></thead><tbody>';
-            foreach ($invoice->expenses as $exp) {
-                $expHtml .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="35%">' . e($exp->description) . '</td><td width="20%">' . $exp->paidByLabel() . '</td><td width="20%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
-            }
-            $expHtml .= '</tbody></table>';
-            $pdf->writeHTML($expHtml, true, false, false, false, '');
-            $pdf->Ln(3);
+        // ── Additional Info (expenses) | Totals — side by side ──────
+        $sideY = $pdf->GetY();
+
+        $expRows = '';
+        foreach ($invoice->expenses as $exp) {
+            $payTo = $exp->paid_by === 'vendor' ? ($invoice->vendor->name ?? '-') : ($exp->payeeAccount->name ?? '-');
+            $expRows .= '<tr><td width="50%">' . $exp->typeLabel() . '</td><td width="25%">' . $exp->paidByLabel() . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+        }
+        if (!$invoice->expenses->count()) {
+            $expRows = '<tr><td colspan="3" style="color:#888;">No Other Expenses</td></tr>';
         }
 
-        $summaryHtml = '
-        <table width="65%" border="1" cellpadding="4" style="font-size:10px;" align="right">
-            <tr><td><b>Total Purchase Amount</b></td><td style="text-align:right;">' . number_format($invoice->total_purchase_amount, 2) . '</td></tr>
-            <tr><td><b>Total Sale Amount</b></td><td style="text-align:right;">' . number_format($invoice->total_sale_amount, 2) . '</td></tr>
-            <tr><td><b>Vendor Commission</b></td><td style="text-align:right;">' . number_format($invoice->total_vendor_commission_amount, 2) . '</td></tr>
-            <tr><td><b>Customer Commission</b></td><td style="text-align:right;">' . number_format($invoice->total_customer_commission_amount, 2) . '</td></tr>
-            <tr><td><b>Total Other Expenses</b></td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
-            <tr style="font-weight:bold;background-color:#fafafa;"><td>Total Vendor Payable</td><td style="text-align:right;">' . number_format($invoice->totalVendorPayable(), 2) . '</td></tr>
-            <tr style="font-weight:bold;background-color:#fafafa;"><td>Total Customer Receivable</td><td style="text-align:right;">' . number_format($invoice->totalCustomerReceivable(), 2) . '</td></tr>
+        $leftHtml = '
+        <table width="100%" cellpadding="2" style="font-size:8.5px;">
+            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="3">  Additional Information — Expenses</td></tr>
+            ' . $expRows . '
+            <tr style="font-weight:bold;background-color:#F5EFDF;"><td colspan="2">Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
         </table>';
-        $pdf->writeHTML($summaryHtml, true, false, false, false, '');
+
+        $rightRows = '
+            <tr><td width="55%">Total Purchase Amount</td><td width="45%" style="text-align:right;">' . number_format($invoice->total_purchase_amount, 2) . '</td></tr>
+            <tr><td>Total Sale Amount</td><td style="text-align:right;">' . number_format($invoice->total_sale_amount, 2) . '</td></tr>
+            <tr><td>Vendor Commission</td><td style="text-align:right;">' . number_format($invoice->total_vendor_commission_amount, 2) . '</td></tr>
+            <tr><td>Customer Commission</td><td style="text-align:right;">' . number_format($invoice->total_customer_commission_amount, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#C9A24B;color:#ffffff;"><td>Vendor Payable</td><td style="text-align:right;">' . number_format($invoice->totalVendorPayable(), 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#C9A24B;color:#ffffff;"><td>Customer Receivable</td><td style="text-align:right;">' . number_format($invoice->totalCustomerReceivable(), 2) . '</td></tr>';
+
+        if ($invoice->isDelivered()) {
+            $rightRows .= '
+            <tr><td>Paid to Vendor</td><td style="text-align:right;">' . number_format($invoice->amount_paid_to_vendor, 2) . '</td></tr>
+            <tr style="color:#b30000;"><td>Vendor Balance Remaining</td><td style="text-align:right;">' . number_format($invoice->vendorRemainingBalance(), 2) . '</td></tr>
+            <tr><td>Received from Customer</td><td style="text-align:right;">' . number_format($invoice->amount_received_from_customer, 2) . '</td></tr>
+            <tr style="color:#b30000;"><td>Customer Balance Remaining</td><td style="text-align:right;">' . number_format($invoice->customerRemainingBalance(), 2) . '</td></tr>';
+        }
+
+        $rightHtml = '<table width="100%" cellpadding="2" style="font-size:8.5px;">' . $rightRows . '</table>';
+
+        $pdf->SetXY(10, $sideY);
+        $pdf->writeHTMLCell(90, 0, 10, $sideY, $leftHtml, 1, 0);
+        $leftEndY = $pdf->GetY();
+
+        $pdf->SetXY(105, $sideY);
+        $pdf->writeHTMLCell(95, 0, 105, $sideY, $rightHtml, 1, 1);
+        $rightEndY = $pdf->GetY();
+
+        $pdf->SetY(max($leftEndY, $rightEndY) + 4);
+
+        // ── Amount in Words (Customer Receivable — the figure the
+        // customer actually needs to know they owe) ──────────────────
+        $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
+            <tr style="background-color:#F5EFDF;">
+                <td><b>Customer Receivable in Words:</b> ' . $this->numberToWords($invoice->totalCustomerReceivable()) . ' Only.</td>
+            </tr>
+        </table>';
+        $pdf->writeHTML($wordsHtml, true, false, false, false, '');
+        $pdf->Ln(2);
+
+        if ($invoice->delivery_remarks) {
+            $pdf->SetFont('helvetica', 'I', 9);
+            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->delivery_remarks, 0, 'L');
+        }
+
+        // ── Signature ───────────────────────────────────────────────
+        $pdf->SetFont('helvetica', '', 10);
+        $ySign = $pdf->GetY() + 20;
+        if ($ySign > 250) { $pdf->AddPage(); $ySign = 30; }
+
+        $pdf->Line(140, $ySign, 195, $ySign);
+        $pdf->SetXY(140, $ySign + 1);
+        $pdf->Cell(55, 5, 'Authorized Signature', 0, 1, 'C');
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetX(140);
+        $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
+
+        // ── Footer band ───────────────────────────────────────────────
+        $footY = 282;
+        $pdf->SetFillColor(27, 58, 92);
+        $pdf->Rect(0, $footY, 210, 15, 'F');
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetXY(10, $footY + 4);
+        $pdf->Cell(190, 5, 'Farooq Fulara: 0320-2788117   |   Hamiz Farooq Fulara: 0335-0023574   |   Karachi, Pakistan', 0, 1, 'C');
+        $pdf->SetTextColor(0, 0, 0);
 
         return $pdf->Output('CI_' . $invoice->invoice_no . '.pdf', 'I');
     }

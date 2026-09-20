@@ -1,44 +1,54 @@
 @extends('layouts.app')
+
 @section('title', 'Purchase Returns')
 
 @section('content')
 <div class="row">
   <div class="col">
-    <div class="card">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <h4 class="card-title">Purchase Returns</h4>
-        <a href="{{ route('purchase_return.create') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Purchase Return</a>
-      </div>
+    <section class="card">
+      <header class="card-header"><h2 class="card-title">Purchase Returns</h2></header>
       <div class="card-body">
-        <table class="table table-bordered datatable">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Vendor</th>
-              <th>Date</th>
-              <th>Total Amount</th>
-              <th>Remarks</th>
-              <th>Action</th>
-            </tr>
+
+        <form method="GET" class="row g-2 mb-3">
+          <div class="col-md-3">
+            <select name="vendor_id" class="form-control select2-js">
+              <option value="">All Vendors</option>
+              @foreach($vendors as $v)
+                <option value="{{ $v->id }}" {{ request('vendor_id') == $v->id ? 'selected' : '' }}>{{ $v->name }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-md-2"><input type="date" name="from_date" class="form-control" value="{{ request('from_date') }}"></div>
+          <div class="col-md-2"><input type="date" name="to_date" class="form-control" value="{{ request('to_date') }}"></div>
+          <div class="col-md-2"><button class="btn btn-primary w-100">Filter</button></div>
+        </form>
+
+        <table class="table table-bordered table-striped">
+          <thead class="table-dark">
+            <tr><th>Return #</th><th>Date</th><th>Against PI</th><th>Vendor</th><th class="text-end">Amount</th><th class="text-center">Actions</th></tr>
           </thead>
           <tbody>
-            @foreach ($returns as $ret)
-              <tr>
-                <td>{{ $ret->id }}</td>
-                <td>{{ $ret->vendor->name ?? '-' }}</td>
-                <td>{{ \Carbon\Carbon::parse($ret->return_date)->format('d-M-Y') }}</td>
-                <td>{{ number_format($ret->total_amount, 2) }}</td>
-                <td>{{ $ret->remarks }}</td>
-                <td>
-                  <a href="{{ route('purchase_return.edit', $ret->id) }}" class="text-primary"><i class="fas fa-edit"></i></a>
-                  <a href="{{ route('purchase_return.print', $ret->id) }}" target="_blank" class="text-success"><i class="fas fa-print"></i></a>
-                </td>
-              </tr>
-            @endforeach
+            @forelse($returns as $r)
+            <tr>
+              <td>PR-{{ $r->return_no }}</td>
+              <td>{{ \Carbon\Carbon::parse($r->return_date)->format('d-M-Y') }}</td>
+              <td><a href="{{ route('purchase_invoices.show', $r->purchase_invoice_id) }}">PI-{{ $r->purchaseInvoice->invoice_no ?? '-' }}</a></td>
+              <td>{{ $r->vendor->name ?? '' }}</td>
+              <td class="text-end">{{ number_format($r->total_amount, 2) }}</td>
+              <td class="text-center">
+                <a href="{{ route('purchase_returns.show', $r->id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-eye"></i></a>
+                <a href="{{ route('purchase_returns.print', $r->id) }}" target="_blank" class="btn btn-sm btn-outline-success"><i class="fas fa-print"></i></a>
+              </td>
+            </tr>
+            @empty
+            <tr><td colspan="6" class="text-center text-muted">No returns recorded yet.</td></tr>
+            @endforelse
           </tbody>
         </table>
+
+        {{ $returns->links() }}
       </div>
-    </div>
+    </section>
   </div>
 </div>
-@endsection
+@endsections
