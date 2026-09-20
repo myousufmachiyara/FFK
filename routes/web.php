@@ -10,7 +10,9 @@ use App\Http\Controllers\{
     SaleInvoiceController,
     PurchaseInvoiceController,
     PurchaseReturnController,
+    SaleReturnController,
     CommissionInvoiceController,
+    CommissionReturnController,
     ProductController,
     UserController,
     RoleController,
@@ -22,7 +24,6 @@ use App\Http\Controllers\{
     SalesReportController,
     AccountsReportController,
     CommissionReportController,
-    SaleReturnController,
     // PermissionController, // DISABLED: class does not exist in app/Http/Controllers yet.
                               // Was referenced in the original routes file but never built.
                               // Re-enable once that controller is actually created.
@@ -59,6 +60,15 @@ Route::middleware(['auth'])->group(function () {
 
     // ─────────────────────────────────────────────────────────────
     // Common CRUD modules — generic index/create/store/show/edit/update/destroy/print
+    //
+    // NOTE: 'purchase_return', 'sale_return', and Commission's return
+    // module are intentionally NOT in this generic list. Their create()
+    // methods require a specific invoice ID as a parameter (a return
+    // always starts FROM an invoice, it's never a standalone blank
+    // form) — the generic loop below would register
+    // "GET purchase_return/create" with no parameter at all, which
+    // would fatal-error the moment it's hit. Each Return module has its
+    // own fully custom route block further down instead.
     // ─────────────────────────────────────────────────────────────
     $modules = [
         // User Management
@@ -79,11 +89,9 @@ Route::middleware(['auth'])->group(function () {
 
         // Purchases
         'purchase_invoices' => ['controller' => PurchaseInvoiceController::class, 'permission' => 'purchase_invoices'],
-        'purchase_return' => ['controller' => PurchaseReturnController::class, 'permission' => 'purchase_return'],
 
         // Sales
         'sale_invoices' => ['controller' => SaleInvoiceController::class, 'permission' => 'sale_invoices'],
-        'sale_return' => ['controller' => SaleReturnController::class, 'permission' => 'sale_return'],
 
         // Commission / Brokerage
         'commission_invoices' => ['controller' => CommissionInvoiceController::class, 'permission' => 'commission_invoices'],
@@ -162,6 +170,41 @@ Route::middleware(['auth'])->group(function () {
         ->name('purchase_invoices.addPayment');
 
     // ─────────────────────────────────────────────────────────────
+    // Purchase Return — always starts from a specific Received invoice.
+    // ─────────────────────────────────────────────────────────────
+    Route::get('purchase_returns', [PurchaseReturnController::class, 'index'])
+        ->middleware('check.permission:purchase_return.index')
+        ->name('purchase_returns.index');
+
+    Route::get('purchase_invoices/{purchaseInvoice}/return', [PurchaseReturnController::class, 'create'])
+        ->middleware('check.permission:purchase_return.create')
+        ->name('purchase_returns.create');
+
+    Route::post('purchase_returns', [PurchaseReturnController::class, 'store'])
+        ->middleware('check.permission:purchase_return.create')
+        ->name('purchase_returns.store');
+
+    Route::get('purchase_returns/{id}', [PurchaseReturnController::class, 'show'])
+        ->middleware('check.permission:purchase_return.index')
+        ->name('purchase_returns.show');
+
+    Route::get('purchase_returns/{id}/edit', [PurchaseReturnController::class, 'edit'])
+        ->middleware('check.permission:purchase_return.edit')
+        ->name('purchase_returns.edit');
+
+    Route::put('purchase_returns/{id}', [PurchaseReturnController::class, 'update'])
+        ->middleware('check.permission:purchase_return.edit')
+        ->name('purchase_returns.update');
+
+    Route::get('purchase_returns/{id}/print', [PurchaseReturnController::class, 'print'])
+        ->middleware('check.permission:purchase_return.print')
+        ->name('purchase_returns.print');
+
+    Route::delete('purchase_returns/{id}', [PurchaseReturnController::class, 'destroy'])
+        ->middleware('check.permission:purchase_return.delete')
+        ->name('purchase_returns.destroy');
+
+    // ─────────────────────────────────────────────────────────────
     // Commission Invoice — status workflow (Pending -> In Transit -> Delivered)
     // plus payment tracking, all grouped together.
     // ─────────────────────────────────────────────────────────────
@@ -192,6 +235,76 @@ Route::middleware(['auth'])->group(function () {
     Route::post('commission_invoices/{id}/add-customer-receipt', [CommissionInvoiceController::class, 'addCustomerReceipt'])
         ->middleware('check.permission:commission_invoices.add_customer_receipt')
         ->name('commission_invoices.addCustomerReceipt');
+
+    // ─────────────────────────────────────────────────────────────
+    // Sale Return — always starts from a specific Sale invoice.
+    // ─────────────────────────────────────────────────────────────
+    Route::get('sale_returns', [SaleReturnController::class, 'index'])
+        ->middleware('check.permission:sale_return.index')
+        ->name('sale_returns.index');
+
+    Route::get('sale_invoices/{saleInvoice}/return', [SaleReturnController::class, 'create'])
+        ->middleware('check.permission:sale_return.create')
+        ->name('sale_returns.create');
+
+    Route::post('sale_returns', [SaleReturnController::class, 'store'])
+        ->middleware('check.permission:sale_return.create')
+        ->name('sale_returns.store');
+
+    Route::get('sale_returns/{id}', [SaleReturnController::class, 'show'])
+        ->middleware('check.permission:sale_return.index')
+        ->name('sale_returns.show');
+
+    Route::get('sale_returns/{id}/edit', [SaleReturnController::class, 'edit'])
+        ->middleware('check.permission:sale_return.edit')
+        ->name('sale_returns.edit');
+
+    Route::put('sale_returns/{id}', [SaleReturnController::class, 'update'])
+        ->middleware('check.permission:sale_return.edit')
+        ->name('sale_returns.update');
+
+    Route::get('sale_returns/{id}/print', [SaleReturnController::class, 'print'])
+        ->middleware('check.permission:sale_return.print')
+        ->name('sale_returns.print');
+
+    Route::delete('sale_returns/{id}', [SaleReturnController::class, 'destroy'])
+        ->middleware('check.permission:sale_return.delete')
+        ->name('sale_returns.destroy');
+
+    // ─────────────────────────────────────────────────────────────
+    // Commission Return — always starts from a specific Delivered invoice.
+    // ─────────────────────────────────────────────────────────────
+    Route::get('commission_returns', [CommissionReturnController::class, 'index'])
+        ->middleware('check.permission:commission_return.index')
+        ->name('commission_returns.index');
+
+    Route::get('commission_invoices/{commissionInvoice}/return', [CommissionReturnController::class, 'create'])
+        ->middleware('check.permission:commission_return.create')
+        ->name('commission_returns.create');
+
+    Route::post('commission_returns', [CommissionReturnController::class, 'store'])
+        ->middleware('check.permission:commission_return.create')
+        ->name('commission_returns.store');
+
+    Route::get('commission_returns/{id}', [CommissionReturnController::class, 'show'])
+        ->middleware('check.permission:commission_return.index')
+        ->name('commission_returns.show');
+
+    Route::get('commission_returns/{id}/edit', [CommissionReturnController::class, 'edit'])
+        ->middleware('check.permission:commission_return.edit')
+        ->name('commission_returns.edit');
+
+    Route::put('commission_returns/{id}', [CommissionReturnController::class, 'update'])
+        ->middleware('check.permission:commission_return.edit')
+        ->name('commission_returns.update');
+
+    Route::get('commission_returns/{id}/print', [CommissionReturnController::class, 'print'])
+        ->middleware('check.permission:commission_return.print')
+        ->name('commission_returns.print');
+
+    Route::delete('commission_returns/{id}', [CommissionReturnController::class, 'destroy'])
+        ->middleware('check.permission:commission_return.delete')
+        ->name('commission_returns.destroy');
 
     // ─────────────────────────────────────────────────────────────
     // Reports (readonly)

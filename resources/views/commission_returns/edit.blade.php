@@ -1,17 +1,17 @@
 @extends('layouts.app')
 
-@section('title', 'Sale Return | Edit')
+@section('title', 'Commission Return | Edit')
 
 @section('content')
 <div class="row">
   <div class="col">
-    <form action="{{ route('sale_returns.update', $return->id) }}" method="POST">
+    <form action="{{ route('commission_returns.update', $return->id) }}" method="POST">
       @csrf
       @method('PUT')
 
       <section class="card">
         <header class="card-header">
-          <h2 class="card-title">Edit Return SR-{{ $return->return_no }} — SI-{{ $invoice->invoice_no }} ({{ $invoice->account->name ?? '' }})</h2>
+          <h2 class="card-title">Edit Return CR-{{ $return->return_no }} — CI-{{ $invoice->invoice_no }} (Vendor: {{ $invoice->vendor->name ?? '' }} / Customer: {{ $invoice->customer->name ?? '' }})</h2>
         </header>
         <div class="card-body">
           @if ($errors->any())
@@ -31,12 +31,20 @@
             </div>
           </div>
 
+          <p class="text-muted small">
+            <i class="fas fa-info-circle"></i> Items already part of this return are checked and pre-filled.
+            "Remaining Returnable" already accounts for this return's own current amounts. Sale value and
+            commission reversals are recalculated proportionally against the ORIGINAL invoice item's totals
+            every time you save — never against this return's prior values — so editing never compounds
+            rounding drift.
+          </p>
+
           <table class="table table-bordered table-sm">
             <thead>
               <tr>
                 <th width="30px"></th>
                 <th>Item</th><th>Variation</th>
-                <th>Sold (bags)</th><th>Sold (kg)</th>
+                <th>Delivered (bags)</th><th>Delivered (kg)</th>
                 <th>Remaining Returnable (bags)</th><th>Remaining Returnable (kg)</th>
                 <th>Return Qty (bags)</th><th>Return Wt (kg)</th>
               </tr>
@@ -44,25 +52,39 @@
             <tbody>
               @foreach($items as $i => $item)
               <tr>
-                <td><input type="checkbox" class="item-check" data-idx="{{ $i }}" onchange="toggleRow({{ $i }})" {{ $item->is_in_return ? 'checked' : '' }}></td>
+                <td>
+                  <input type="checkbox" class="item-check" data-idx="{{ $i }}" onchange="toggleRow({{ $i }})"
+                         {{ $item->is_in_return ? 'checked' : '' }}>
+                </td>
                 <td>
                   {{ $item->product->name ?? '-' }}
-                  <input type="hidden" name="items[{{ $i }}][sale_invoice_item_id]" value="{{ $item->id }}" {{ $item->is_in_return ? '' : 'disabled' }} id="pii_{{ $i }}">
+                  <input type="hidden" name="items[{{ $i }}][commission_invoice_item_id]" value="{{ $item->id }}"
+                         {{ $item->is_in_return ? '' : 'disabled' }} id="pii_{{ $i }}">
                 </td>
                 <td>{{ $item->variation->sku ?? '-' }}</td>
                 <td>{{ number_format($item->quantity, 2) }}</td>
                 <td>{{ number_format($item->net_weight, 2) }}</td>
                 <td>{{ number_format($item->remaining_qty, 2) }}</td>
                 <td>{{ number_format($item->remaining_weight, 2) }}</td>
-                <td><input type="number" step="any" min="0" max="{{ $item->remaining_qty }}" name="items[{{ $i }}][qty]" class="form-control" value="{{ $item->current_qty ?: '' }}" {{ $item->is_in_return ? '' : 'disabled' }} id="qty_{{ $i }}"></td>
-                <td><input type="number" step="any" min="0" max="{{ $item->remaining_weight }}" name="items[{{ $i }}][net_weight]" class="form-control" value="{{ $item->current_weight ?: '' }}" {{ $item->is_in_return ? '' : 'disabled' }} id="wt_{{ $i }}"></td>
+                <td>
+                  <input type="number" step="any" min="0" max="{{ $item->remaining_qty }}"
+                         name="items[{{ $i }}][qty]" class="form-control"
+                         value="{{ $item->current_qty ?: '' }}"
+                         {{ $item->is_in_return ? '' : 'disabled' }} id="qty_{{ $i }}">
+                </td>
+                <td>
+                  <input type="number" step="any" min="0" max="{{ $item->remaining_weight }}"
+                         name="items[{{ $i }}][net_weight]" class="form-control"
+                         value="{{ $item->current_weight ?: '' }}"
+                         {{ $item->is_in_return ? '' : 'disabled' }} id="wt_{{ $i }}">
+                </td>
               </tr>
               @endforeach
             </tbody>
           </table>
         </div>
         <footer class="card-footer text-end">
-          <a href="{{ route('sale_returns.show', $return->id) }}" class="btn btn-danger">Cancel</a>
+          <a href="{{ route('commission_returns.show', $return->id) }}" class="btn btn-danger">Cancel</a>
           <button type="submit" class="btn btn-primary">Update Return</button>
         </footer>
       </section>
