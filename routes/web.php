@@ -176,6 +176,14 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('check.permission:purchase_return.index')
         ->name('purchase_returns.index');
 
+    // Backward-compatible alias — some blade (e.g. sidebar nav) still
+    // links to the old generic name from before this module had its
+    // own custom routes. Same URI path is fine to skip since this is
+    // purely a name -> same controller/action alias, not a new page.
+    Route::get('purchase_return', [PurchaseReturnController::class, 'index'])
+        ->middleware('check.permission:purchase_return.index')
+        ->name('purchase_return.index');
+
     Route::get('purchase_invoices/{purchaseInvoice}/return', [PurchaseReturnController::class, 'create'])
         ->middleware('check.permission:purchase_return.create')
         ->name('purchase_returns.create');
@@ -243,6 +251,11 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('check.permission:sale_return.index')
         ->name('sale_returns.index');
 
+    // Backward-compatible alias — same reasoning as purchase_return.index above.
+    Route::get('sale_return', [SaleReturnController::class, 'index'])
+        ->middleware('check.permission:sale_return.index')
+        ->name('sale_return.index');
+
     Route::get('sale_invoices/{saleInvoice}/return', [SaleReturnController::class, 'create'])
         ->middleware('check.permission:sale_return.create')
         ->name('sale_returns.create');
@@ -277,6 +290,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('commission_returns', [CommissionReturnController::class, 'index'])
         ->middleware('check.permission:commission_return.index')
         ->name('commission_returns.index');
+
+    // Backward-compatible alias, for consistency with the other two
+    // Return modules — harmless to include even if nothing references it.
+    Route::get('commission_return', [CommissionReturnController::class, 'index'])
+        ->middleware('check.permission:commission_return.index')
+        ->name('commission_return.index');
 
     Route::get('commission_invoices/{commissionInvoice}/return', [CommissionReturnController::class, 'create'])
         ->middleware('check.permission:commission_return.create')
