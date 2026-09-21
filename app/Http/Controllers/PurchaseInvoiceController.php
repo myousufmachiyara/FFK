@@ -995,7 +995,7 @@ class PurchaseInvoiceController extends Controller
 
         $leftHtml = '
         <table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="2">  Additional Information — Expenses</td></tr>
+            <tr cellpadding="0" style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="2">  Additional Information — Expenses</td></tr>
             ' . $expRows . '
             <tr style="font-weight:bold;background-color:#F5EFDF;"><td>Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
         </table>';
