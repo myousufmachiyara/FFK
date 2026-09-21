@@ -916,7 +916,7 @@ class PurchaseInvoiceController extends Controller
         $this->pdfTitleBar($pdf, 'PURCHASE INVOICE', $infoHtml);
 
         // ── Two boxed detail sections: Vendor | Transport ───────────
-        $boxY = 70;
+        $boxY = 60;
         $this->pdfSectionHeading($pdf, 10, $boxY, 90, 'Vendor Details');
         $this->pdfSectionHeading($pdf, 105, $boxY, 95, 'Transport Details', true);
 
