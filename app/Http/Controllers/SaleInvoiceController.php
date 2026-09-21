@@ -777,7 +777,6 @@ class SaleInvoiceController extends Controller
         }
 
         $this->pdfSignature($pdf);
-        $this->pdfFooterBand($pdf);
 
         return $pdf->Output('SI_' . $invoice->invoice_no . '.pdf', 'I');
     }

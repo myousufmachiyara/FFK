@@ -117,26 +117,6 @@ trait RendersInvoicePdf
         $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
     }
 
-    protected function pdfFooterBand(\TCPDF $pdf): void
-    {
-        $footY = 282;
-        $pdf->SetFillColor(27, 58, 92);
-        $pdf->Rect(0, $footY, 210, 15, 'F');
-        $pdf->SetTextColor(255, 255, 255);
-
-        $parts = [];
-        foreach ($this->companyContacts() as $name => $number) {
-            $parts[] = $name . ': ' . $number;
-        }
-        $parts[] = 'Karachi, Pakistan';
-
-        $pdf->SetFont('dejavusans', '', 8);
-        $pdf->SetXY(10, $footY + 4);
-        $pdf->Cell(190, 5, "\u{260E}  " . implode('   |   ', $parts), 0, 1, 'C');
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetTextColor(0, 0, 0);
-    }
-
     /**
      * Item name and variation read as one thing on a printed line, so they
      * are printed as one "Description" column rather than two.
