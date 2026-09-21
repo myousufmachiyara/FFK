@@ -960,7 +960,7 @@ class PurchaseInvoiceController extends Controller
 
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="25%">' . $item->product->variations->sku . '</td>
+                    <td width="25%">' . e($this->itemDescription($item)) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->wt_per_packing, 2) . '</td>
                     <td width="6%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="10%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>

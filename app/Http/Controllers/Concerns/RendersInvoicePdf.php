@@ -146,7 +146,7 @@ trait RendersInvoicePdf
         $name = $item->product->name ?? '-';
         $sku  = $item->variation->sku ?? null;
 
-        return $sku ? $name . ' — ' . $sku : $name;
+        return $sku;
     }
 
     /** A fresh A4 portrait document with this app's standard setup. */
