@@ -82,19 +82,48 @@ class PurchaseInvoiceItem extends Model
         float $quantity,
         ?float $netWeightOverride,
         float $ratePer40kg,
-        int $kgPerMaund
+        int $kgPerMaund,
+        ?float $ratePerKgOverride = null
     ): array {
         $grossWeight = round($wtPerPacking * $quantity, 3);
         $netWeight   = ($netWeightOverride !== null && $netWeightOverride > 0) ? $netWeightOverride : $grossWeight;
-        $ratePerKg   = $kgPerMaund > 0 ? round($ratePer40kg / $kgPerMaund, 4) : 0;
-        $amount      = round($ratePerKg * $netWeight, 2);
+
+        // Two-way rate entry. The user may type EITHER the rate per 40 kg
+        // OR the rate per kg on the form; whichever they typed last is the
+        // one that wins, and the other is derived from it here so the two
+        // stored columns can never disagree.
+        [$ratePer40kg, $ratePerKg] = self::resolveRates($ratePer40kg, $ratePerKgOverride, $kgPerMaund);
+
+        $amount = round($ratePerKg * $netWeight, 2);
 
         return [
             'grossWeight' => $grossWeight,
             'netWeight'   => $netWeight,
+            'ratePer40kg' => $ratePer40kg,
             'ratePerKg'   => $ratePerKg,
             'amount'      => $amount,
         ];
+    }
+
+    /**
+     * Reconcile a 40 kg rate and a per-kg rate into a consistent pair.
+     * A per-kg rate, when supplied, is authoritative (it is the finer of
+     * the two, so deriving the 40 kg figure from it loses nothing).
+     *
+     * @return array{0: float, 1: float}  [ratePer40kg, ratePerKg]
+     */
+    public static function resolveRates(float $ratePer40kg, ?float $ratePerKg, int $kgPerMaund): array
+    {
+        if ($kgPerMaund <= 0) {
+            return [round($ratePer40kg, 2), 0.0];
+        }
+
+        if ($ratePerKg !== null && $ratePerKg > 0) {
+            $ratePerKg = round($ratePerKg, 4);
+            return [round($ratePerKg * $kgPerMaund, 2), $ratePerKg];
+        }
+
+        return [round($ratePer40kg, 2), round($ratePer40kg / $kgPerMaund, 4)];
     }
 
     /** Final landed cost PER KG after Other Expenses are allocated in. */

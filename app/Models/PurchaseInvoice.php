@@ -106,7 +106,7 @@ class PurchaseInvoice extends Model
         return $this->status === self::STATUS_RECEIVED;
     }
 
-    /** Total Other Expenses (Bilty/Labor/Weighing/etc), from the dynamic expense list. */
+    /** Total Other Expenses (Bilti/Labor/Weighing/etc), from the dynamic expense list. */
     public function totalAdditionalCharges(): float
     {
         return (float) $this->total_other_expenses;

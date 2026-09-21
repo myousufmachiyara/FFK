@@ -16,8 +16,7 @@ class SaleInvoiceItem extends Model
         'gross_weight',
         'net_weight',
         'rate_per_40kg',
-        'sale_price',      // rate per KG (computed)
-        'discount',        // percentage, applied to the rate before multiplying
+        'sale_price',      // rate per KG (typed directly, or derived from rate_per_40kg)
         'total',           // line total
         'unit_cost',       // COGS cost per KG (snapshot from Purchase's landed cost)
     ];
@@ -29,7 +28,6 @@ class SaleInvoiceItem extends Model
         'net_weight'     => 'decimal:3',
         'rate_per_40kg'  => 'decimal:2',
         'sale_price'     => 'decimal:4',
-        'discount'       => 'decimal:2',
         'total'          => 'decimal:2',
         'unit_cost'      => 'decimal:4',
     ];
@@ -55,26 +53,31 @@ class SaleInvoiceItem extends Model
      *
      *   gross_weight = wt_per_packing * quantity
      *   net_weight   = user override, or gross_weight if not provided
-     *   rate_per_kg  = rate_per_40kg / kg_per_maund
-     *   total        = (rate_per_kg - rate_per_kg * discount%) * net_weight
+     *   rate_per_kg  = typed directly, or rate_per_40kg / kg_per_maund
+     *   total        = rate_per_kg * net_weight
+     *
+     * Line discount was removed from the Sale module — the rate itself is
+     * negotiated, so there is nothing left to discount off it.
      */
     public static function computeLine(
         float $wtPerPacking,
         float $quantity,
         ?float $netWeightOverride,
         float $ratePer40kg,
-        float $discountPct,
-        int $kgPerMaund
+        int $kgPerMaund,
+        ?float $ratePerKgOverride = null
     ): array {
         $grossWeight = round($wtPerPacking * $quantity, 3);
         $netWeight   = ($netWeightOverride !== null && $netWeightOverride > 0) ? $netWeightOverride : $grossWeight;
-        $ratePerKg   = $kgPerMaund > 0 ? round($ratePer40kg / $kgPerMaund, 4) : 0;
-        $discountedRate = $ratePerKg - ($ratePerKg * $discountPct / 100);
-        $total       = round($discountedRate * $netWeight, 2);
+
+        [$ratePer40kg, $ratePerKg] = PurchaseInvoiceItem::resolveRates($ratePer40kg, $ratePerKgOverride, $kgPerMaund);
+
+        $total = round($ratePerKg * $netWeight, 2);
 
         return [
             'grossWeight' => $grossWeight,
             'netWeight'   => $netWeight,
+            'ratePer40kg' => $ratePer40kg,
             'ratePerKg'   => $ratePerKg,
             'total'       => $total,
         ];

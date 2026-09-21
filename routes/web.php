@@ -285,6 +285,25 @@ Route::middleware(['auth'])->group(function () {
         ->name('sale_returns.destroy');
 
     // ─────────────────────────────────────────────────────────────
+    // Commission Invoice — party-specific prints.
+    //
+    // The generic {id}/print route above is the merged office copy
+    // (vendor + customer on one sheet). These two are the copies that
+    // actually get handed over, each showing only that party's side.
+    //
+    // Both are registered BEFORE the Commission Return block so the
+    // more specific URI wins, and both reuse the commission_invoices
+    // print permission rather than inventing new ones.
+    // ─────────────────────────────────────────────────────────────
+    Route::get('commission_invoices/{id}/print/vendor', [CommissionInvoiceController::class, 'printVendor'])
+        ->middleware('check.permission:commission_invoices.print')
+        ->name('commission_invoices.print_vendor');
+
+    Route::get('commission_invoices/{id}/print/customer', [CommissionInvoiceController::class, 'printCustomer'])
+        ->middleware('check.permission:commission_invoices.print')
+        ->name('commission_invoices.print_customer');
+
+    // ─────────────────────────────────────────────────────────────
     // Commission Return — always starts from a specific Delivered invoice.
     // ─────────────────────────────────────────────────────────────
     Route::get('commission_returns', [CommissionReturnController::class, 'index'])

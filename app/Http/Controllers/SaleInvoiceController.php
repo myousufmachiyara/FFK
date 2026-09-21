@@ -19,6 +19,8 @@ use Carbon\Carbon;
 
 class SaleInvoiceController extends Controller
 {
+    use \App\Http\Controllers\Concerns\RendersInvoicePdf;
+
     private function resolveAccount(string $configKey, string $label): ChartOfAccounts
     {
         $code = config("sale_accounts.{$configKey}");
@@ -230,10 +232,11 @@ class SaleInvoiceController extends Controller
             $wtPerPacking = (float) $itemData['wt_per_packing'];
             $netOverride  = isset($itemData['net_weight']) && $itemData['net_weight'] !== ''
                 ? (float) $itemData['net_weight'] : null;
-            $ratePer40kg  = (float) $itemData['rate_per_40kg'];
-            $discountPct  = (float) ($itemData['discount'] ?? 0);
+            $ratePer40kg  = (float) ($itemData['rate_per_40kg'] ?? 0);
+            $ratePerKgIn  = isset($itemData['rate_per_kg']) && $itemData['rate_per_kg'] !== ''
+                ? (float) $itemData['rate_per_kg'] : null;
 
-            $calc = SaleInvoiceItem::computeLine($wtPerPacking, $qty, $netOverride, $ratePer40kg, $discountPct, $kgPerMaund);
+            $calc = SaleInvoiceItem::computeLine($wtPerPacking, $qty, $netOverride, $ratePer40kg, $kgPerMaund, $ratePerKgIn);
 
             $unitCost = $this->resolveUnitCost((int) $itemData['product_id'], $itemData['variation_id'] ?? null, $calc['ratePerKg']);
 
@@ -245,9 +248,8 @@ class SaleInvoiceController extends Controller
                 'quantity'        => $qty,
                 'gross_weight'    => $calc['grossWeight'],
                 'net_weight'      => $calc['netWeight'],
-                'rate_per_40kg'   => $ratePer40kg,
+                'rate_per_40kg'   => $calc['ratePer40kg'],
                 'sale_price'      => $calc['ratePerKg'],
-                'discount'        => $discountPct,
                 'total'           => $calc['total'],
                 'unit_cost'       => $unitCost,
             ]);
@@ -296,7 +298,8 @@ class SaleInvoiceController extends Controller
             'type'                        => 'required|in:cash,credit',
             'credit_days'                 => 'required_if:type,credit|nullable|integer|min:1',
             'remarks'                     => 'nullable|string',
-            'discount'                    => 'nullable|numeric|min:0',
+            'bilty_no'                    => 'nullable|string|max:255',
+            'transport_name'              => 'nullable|string|max:255',
             'payment_account_id'          => 'nullable|exists:chart_of_accounts,id',
             'amount_received'             => 'nullable|numeric|min:0',
             'items'                       => 'required|array|min:1',
@@ -306,8 +309,8 @@ class SaleInvoiceController extends Controller
             'items.*.wt_per_packing'      => 'required|numeric|min:0.001',
             'items.*.quantity'            => 'required|numeric|min:0.01',
             'items.*.net_weight'          => 'nullable|numeric|min:0',
-            'items.*.rate_per_40kg'       => 'required|numeric|min:0',
-            'items.*.discount'            => 'nullable|numeric|min:0|max:100',
+            'items.*.rate_per_40kg'       => 'required_without:items.*.rate_per_kg|nullable|numeric|min:0',
+            'items.*.rate_per_kg'         => 'nullable|numeric|min:0',
             'expenses'                    => 'nullable|array',
             'expenses.*.expense_type'     => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'      => 'nullable|string|max:255',
@@ -341,7 +344,8 @@ class SaleInvoiceController extends Controller
                 'type'       => $request->type,
                 'credit_days'=> $request->type === 'credit' ? $request->credit_days : null,
                 'remarks'    => $request->remarks,
-                'discount'   => (float) ($request->discount ?? 0),
+                'bilty_no'       => $request->bilty_no,
+                'transport_name' => $request->transport_name,
                 'created_by' => auth()->id(),
             ]);
 
@@ -349,7 +353,7 @@ class SaleInvoiceController extends Controller
             $totals = $result['totals'];
             $totalCost = $result['total_cost'];
 
-            $netAmount = max(0, round($totals['net_amount'] - (float) ($request->discount ?? 0), 2));
+            $netAmount = round($totals['net_amount'], 2);
             $totals['net_amount'] = $netAmount;
 
             $totalBillAmount = round($netAmount + $totals['total_other_expenses'], 2);
@@ -454,7 +458,8 @@ class SaleInvoiceController extends Controller
             'type'                        => 'required|in:cash,credit',
             'credit_days'                 => 'required_if:type,credit|nullable|integer|min:1',
             'remarks'                     => 'nullable|string',
-            'discount'                    => 'nullable|numeric|min:0',
+            'bilty_no'                    => 'nullable|string|max:255',
+            'transport_name'              => 'nullable|string|max:255',
             'payment_account_id'          => 'nullable|exists:chart_of_accounts,id',
             'amount_received'             => 'nullable|numeric|min:0', // incremental new payment
             'items'                       => 'required|array|min:1',
@@ -464,8 +469,8 @@ class SaleInvoiceController extends Controller
             'items.*.wt_per_packing'      => 'required|numeric|min:0.001',
             'items.*.quantity'            => 'required|numeric|min:0.01',
             'items.*.net_weight'          => 'nullable|numeric|min:0',
-            'items.*.rate_per_40kg'       => 'required|numeric|min:0',
-            'items.*.discount'            => 'nullable|numeric|min:0|max:100',
+            'items.*.rate_per_40kg'       => 'required_without:items.*.rate_per_kg|nullable|numeric|min:0',
+            'items.*.rate_per_kg'         => 'nullable|numeric|min:0',
             'expenses'                    => 'nullable|array',
             'expenses.*.expense_type'     => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'      => 'nullable|string|max:255',
@@ -498,15 +503,16 @@ class SaleInvoiceController extends Controller
                 'account_id'  => $request->account_id,
                 'type'        => $request->type,
                 'credit_days' => $request->type === 'credit' ? $request->credit_days : null,
-                'remarks'     => $request->remarks,
-                'discount'    => (float) ($request->discount ?? 0),
+                'remarks'        => $request->remarks,
+                'bilty_no'       => $request->bilty_no,
+                'transport_name' => $request->transport_name,
             ]);
 
             $result = $this->syncItemsAndExpenses($invoice, $request->items, $request->expenses ?? []);
             $totals = $result['totals'];
             $totalCost = $result['total_cost'];
 
-            $netAmount = max(0, round($totals['net_amount'] - (float) ($request->discount ?? 0), 2));
+            $netAmount = round($totals['net_amount'], 2);
             $totals['net_amount'] = $netAmount;
 
             $totalBillAmount = round($netAmount + $totals['total_other_expenses'], 2);
@@ -642,95 +648,54 @@ class SaleInvoiceController extends Controller
 
     public function print($id)
     {
-        $invoice = SaleInvoice::with(['account', 'items.product', 'items.variation', 'expenses.payeeAccount'])->findOrFail($id);
+        $invoice = SaleInvoice::with(['account', 'items.product', 'items.variation', 'expenses'])->findOrFail($id);
 
-        $pdf = new \TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
-        $pdf->SetCreator('Farooq Fulara (Karachi)');
-        $pdf->SetAuthor('Farooq Fulara (Karachi)');
-        $pdf->SetTitle('Sale Invoice #' . $invoice->invoice_no);
-        $pdf->setPrintHeader(false);
-        $pdf->setPrintFooter(false);
-        $pdf->SetMargins(10, 10, 10);
-        $pdf->SetAutoPageBreak(true, 25);
-        $pdf->AddPage();
+        $pdf = $this->newInvoicePdf('Sale Invoice #' . $invoice->invoice_no);
+        $this->pdfCompanyHeader($pdf);
 
-        // ── Header band (navy, full width) ─────────────────────────
-        $pdf->SetFillColor(27, 58, 92);
-        $pdf->Rect(0, 0, 210, 32, 'F');
-
-        $logoPath = public_path('assets/img/ff-logo.jpg');
-        $nameX = 12;
-        if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 12, 5, 22);
-            $nameX = 38;
-        }
-
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetFont('helvetica', 'B', 19);
-        $pdf->SetXY($nameX, 8);
-        $pdf->Cell(120, 8, 'FAROOQ FULARA', 0, 1, 'L');
-        $pdf->SetFont('helvetica', '', 11);
-        $pdf->SetXY($nameX, 17);
-        $pdf->SetTextColor(201, 162, 75);
-        $pdf->Cell(120, 6, '(KARACHI)', 0, 1, 'L');
-
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetXY(120, 8);
-        $pdf->Cell(80, 5, 'Farooq Fulara: 0320-2788117', 0, 1, 'R');
-        $pdf->SetX(120);
-        $pdf->Cell(80, 5, 'Hamiz Farooq Fulara: 0335-0023574', 0, 1, 'R');
-        $pdf->SetTextColor(0, 0, 0);
-
-        // ── Title bar: gold chevron-style label + invoice info box ──
-        $pdf->SetFillColor(201, 162, 75);
-        $pdf->Rect(10, 38, 90, 12, 'F');
-        $pdf->SetFont('helvetica', 'B', 15);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetXY(10, 40.5);
-        $pdf->Cell(90, 7, '  SALE INVOICE', 0, 0, 'L');
-        $pdf->SetTextColor(0, 0, 0);
-
-        $typeLine = ucfirst($invoice->type);
+        $paymentTermsLine = ucfirst($invoice->type);
         if ($invoice->isCredit() && $invoice->credit_days) {
-            $typeLine .= ' (' . $invoice->credit_days . ' days)';
+            $paymentTermsLine .= ' (' . $invoice->credit_days . ' days)';
         }
         $dueDateLine = ($invoice->isCredit() && $invoice->dueDate()) ? $invoice->dueDate()->format('d-M-Y') : '—';
 
         $infoHtml = '<table width="100%" cellpadding="1" style="font-size:9px;">
             <tr><td width="40%"><b>Invoice No</b></td><td width="5%">:</td><td width="55%">SI-' . $invoice->invoice_no . '</td></tr>
             <tr><td><b>Date</b></td><td>:</td><td>' . Carbon::parse($invoice->date)->format('d-m-Y') . '</td></tr>
-            <tr><td><b>Type</b></td><td>:</td><td>' . $typeLine . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
             <tr><td><b>Due Date</b></td><td>:</td><td>' . $dueDateLine . '</td></tr>
         </table>';
-        $pdf->SetXY(105, 38);
-        $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
+        $this->pdfTitleBar($pdf, 'SALE INVOICE', $infoHtml);
 
-        // ── Boxed detail section: Customer ──────────────────────────
+        // ── Two boxed detail sections: Customer | Transport ─────────
         $boxY = 55;
-        $pdf->SetFillColor(27, 58, 92);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetFont('helvetica', 'B', 10);
-        $pdf->SetXY(10, $boxY);
-        $pdf->Cell(190, 7, '  Customer Details', 1, 1, 'L', true);
-        $pdf->SetTextColor(0, 0, 0);
+        $this->pdfSectionHeading($pdf, 10, $boxY, 90, 'Customer Details');
+        $this->pdfSectionHeading($pdf, 105, $boxY, 95, 'Transport Details', true);
 
         $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td width="15%"><b>Customer</b></td><td width="3%">:</td><td width="82%">' . e($invoice->account->name ?? 'N/A') . '</td></tr>
+            <tr><td width="35%"><b>Customer</b></td><td width="5%">:</td><td width="60%">' . e($invoice->account->name ?? 'N/A') . '</td></tr>
         </table>';
-        $pdf->SetXY(10, $boxY + 7);
-        $pdf->writeHTMLCell(190, 10, 10, $boxY + 7, $custHtml, 1, 1);
+        $transportHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
+            <tr><td width="35%"><b>Bilti No</b></td><td width="5%">:</td><td width="60%">' . ($invoice->bilty_no ?: '-') . '</td></tr>
+            <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?: '-') . '</td></tr>
+        </table>';
 
-        $pdf->SetY($boxY + 20);
+        $pdf->SetXY(10, $boxY + 7);
+        $pdf->writeHTMLCell(90, 16, 10, $boxY + 7, $custHtml, 1, 0);
+        $pdf->SetXY(105, $boxY + 7);
+        $pdf->writeHTMLCell(95, 16, 105, $boxY + 7, $transportHtml, 1, 1);
+
+        $pdf->SetY($boxY + 26);
 
         // ── Items table ─────────────────────────────────────────────
         $html = '
         <table border="1" cellpadding="3" style="font-size:9px;">
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
-                    <th width="22%">Item</th><th width="9%">Qty</th><th width="11%">Net Wt</th>
-                    <th width="14%">Rate (40kg)</th><th width="12%">Rate (kg)</th>
-                    <th width="10%">Disc %</th><th width="22%">Total</th>
+                    <th width="26%">Description</th><th width="8%">Qty</th>
+                    <th width="12%">Gross Wt</th><th width="12%">Net Wt</th>
+                    <th width="13%">Rate (40kg)</th><th width="12%">Rate (kg)</th>
+                    <th width="17%">Total</th>
                 </tr>
             </thead>
             <tbody>';
@@ -739,13 +704,13 @@ class SaleInvoiceController extends Controller
             $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="22%">' . e($item->product->name ?? '-') . '</td>
-                    <td width="9%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
-                    <td width="11%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
-                    <td width="14%" style="text-align:right;">' . number_format($item->rate_per_40kg, 2) . '</td>
+                    <td width="26%">' . e($this->itemDescription($item)) . '</td>
+                    <td width="8%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
+                    <td width="12%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
+                    <td width="12%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
+                    <td width="13%" style="text-align:right;">' . number_format($item->rate_per_40kg, 2) . '</td>
                     <td width="12%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
-                    <td width="10%" style="text-align:center;">' . number_format($item->discount, 2) . '</td>
-                    <td width="22%" style="text-align:right;">' . number_format($item->total, 2) . '</td>
+                    <td width="17%" style="text-align:right;">' . number_format($item->total, 2) . '</td>
                 </tr>';
         }
 
@@ -759,22 +724,23 @@ class SaleInvoiceController extends Controller
         $pdf->Ln(4);
 
         // ── Additional Info (expenses) | Totals — side by side ──────
+        // Only the expense type and its amount are printed; which account
+        // it was booked against is internal and not the customer's business.
         $sideY = $pdf->GetY();
 
         $expRows = '';
         foreach ($invoice->expenses as $exp) {
-            $payTo = $exp->payeeAccount->name ?? '-';
-            $expRows .= '<tr><td width="45%">' . $exp->typeLabel() . '</td><td width="30%">' . $payTo . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+            $expRows .= '<tr><td width="65%">' . $exp->typeLabel() . '</td><td width="35%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
         }
         if (!$invoice->expenses->count()) {
-            $expRows = '<tr><td colspan="3" style="color:#888;">No Other Expenses</td></tr>';
+            $expRows = '<tr><td colspan="2" style="color:#888;">No Other Expenses</td></tr>';
         }
 
         $leftHtml = '
         <table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="3">  Additional Information — Expenses</td></tr>
+            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="2">  Additional Information — Expenses</td></tr>
             ' . $expRows . '
-            <tr style="font-weight:bold;background-color:#F5EFDF;"><td colspan="2">Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#F5EFDF;"><td>Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
         </table>';
 
         $rightRows = '
@@ -810,27 +776,8 @@ class SaleInvoiceController extends Controller
             $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->remarks, 0, 'L');
         }
 
-        // ── Signature ───────────────────────────────────────────────
-        $pdf->SetFont('helvetica', '', 10);
-        $ySign = $pdf->GetY() + 20;
-        if ($ySign > 250) { $pdf->AddPage(); $ySign = 30; }
-
-        $pdf->Line(140, $ySign, 195, $ySign);
-        $pdf->SetXY(140, $ySign + 1);
-        $pdf->Cell(55, 5, 'Authorized Signature', 0, 1, 'C');
-        $pdf->SetFont('helvetica', 'B', 9);
-        $pdf->SetX(140);
-        $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
-
-        // ── Footer band ───────────────────────────────────────────────
-        $footY = 282;
-        $pdf->SetFillColor(27, 58, 92);
-        $pdf->Rect(0, $footY, 210, 15, 'F');
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetXY(10, $footY + 4);
-        $pdf->Cell(190, 5, 'Farooq Fulara: 0320-2788117   |   Hamiz Farooq Fulara: 0335-0023574   |   Karachi, Pakistan', 0, 1, 'C');
-        $pdf->SetTextColor(0, 0, 0);
+        $this->pdfSignature($pdf);
+        $this->pdfFooterBand($pdf);
 
         return $pdf->Output('SI_' . $invoice->invoice_no . '.pdf', 'I');
     }

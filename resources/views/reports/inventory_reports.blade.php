@@ -297,7 +297,7 @@
                 <table class="table table-sm table-bordered">
                     <thead class="table-dark">
                         <tr>
-                            <th>PI #</th><th>Date</th><th>Vendor</th><th>Vendor Bill #</th><th>Bilty #</th>
+                            <th>PI #</th><th>Date</th><th>Vendor</th><th>Vendor Bill #</th><th>Bilti #</th>
                             <th>Product</th><th>Variation</th>
                             <th class="text-end">Dispatched Qty (bags)</th>
                             <th class="text-end">Dispatched Net Wt (kg)</th>
@@ -383,7 +383,7 @@
                 <table class="table table-sm table-bordered">
                     <thead class="table-dark">
                         <tr>
-                            <th>CI #</th><th>Date</th><th>Vendor</th><th>Customer</th><th>Transport</th><th>Bilty #</th>
+                            <th>CI #</th><th>Date</th><th>Vendor</th><th>Customer</th><th>Transport</th><th>Bilti #</th>
                             <th>Product</th><th>Variation</th>
                             <th class="text-end">Qty</th><th class="text-end">Weight</th>
                             <th class="text-end">Purchase Value</th>

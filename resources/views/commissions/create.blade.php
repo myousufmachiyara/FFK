@@ -43,7 +43,7 @@
               </select>
             </div>
             <div class="col-md-2"><label>Transport <small class="text-muted">(optional now)</small></label><input type="text" name="transport_name" class="form-control"></div>
-            <div class="col-md-2"><label>Bilty # <small class="text-muted">(optional now)</small></label><input type="text" name="bilty_no" class="form-control"></div>
+            <div class="col-md-2"><label>Bilti # <small class="text-muted">(optional now)</small></label><input type="text" name="bilty_no" class="form-control"></div>
             <div class="col-md-2"><label>Vendor Bill # <small class="text-muted">(optional now)</small></label><input type="text" name="vendor_bill_no" class="form-control"></div>
             <div class="col-md-2"><label>Payment Terms</label>
               <select name="payment_terms" id="paymentTerms" class="form-control" required>
@@ -164,11 +164,11 @@ function addItemRow() {
         <td><input type="number" step="any" min="0" name="items[${idx}][quantity]" class="form-control qty" oninput="calcRow(${idx})" required></td>
         <td><input type="text" class="form-control readonly-calc gross-weight" readonly value="0.00"></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][net_weight]" class="form-control net-weight" placeholder="auto" oninput="calcRow(${idx})"></td>
-        <td><input type="number" step="any" min="0" name="items[${idx}][purchase_rate_per_40kg]" class="form-control pur-rate40" oninput="calcRow(${idx})" required></td>
-        <td><input type="text" class="form-control readonly-calc pur-rate-kg" readonly value="0.0000"></td>
+        <td><input type="number" step="any" min="0" name="items[${idx}][purchase_rate_per_40kg]" class="form-control pur-rate40" oninput="onPurRateInput(${idx}, 'maund')" required></td>
+        <td><input type="number" step="any" min="0" name="items[${idx}][purchase_rate_per_kg]" class="form-control pur-rate-kg" oninput="onPurRateInput(${idx}, 'kg')"></td>
         <td><input type="text" class="form-control readonly-calc pur-total" readonly value="0.00"></td>
-        <td><input type="number" step="any" min="0" name="items[${idx}][sale_rate_per_40kg]" class="form-control sale-rate40" oninput="calcRow(${idx})" required></td>
-        <td><input type="text" class="form-control readonly-calc sale-rate-kg" readonly value="0.0000"></td>
+        <td><input type="number" step="any" min="0" name="items[${idx}][sale_rate_per_40kg]" class="form-control sale-rate40" oninput="onSaleRateInput(${idx}, 'maund')" required></td>
+        <td><input type="number" step="any" min="0" name="items[${idx}][sale_rate_per_kg]" class="form-control sale-rate-kg" oninput="onSaleRateInput(${idx}, 'kg')"></td>
         <td><input type="text" class="form-control readonly-calc sale-total" readonly value="0.00"></td>
         <td><input type="number" step="any" min="0" max="100" name="items[${idx}][vendor_commission_percentage]" class="form-control vendor-comm-pct" oninput="calcRow(${idx})" value="0"></td>
         <td><input type="text" class="form-control readonly-calc vendor-comm-amt" readonly value="0.00"></td>
@@ -199,29 +199,53 @@ function onProductChange(sel, idx) {
     }).catch(() => variationSelect.html('<option value="">Error</option>').trigger('change.select2'));
 }
 
+
+// ── Two-way rate entry ───────────────────────────────────────────────
+// Both the 40 kg box and the per-kg box are live on each rate pair —
+// type into either and the other fills itself in. Per-kg is what the
+// line totals are actually calculated from.
+function linkRate($row, sel40, selKg, source) {
+    const $r40 = $row.find(sel40);
+    const $rKg = $row.find(selKg);
+
+    if (source === 'kg') {
+        const kg = parseFloat($rKg.val());
+        $r40.val(isNaN(kg) ? '' : +(kg * KG_PER_MAUND).toFixed(2));
+    } else {
+        const r40 = parseFloat($r40.val());
+        $rKg.val((isNaN(r40) || KG_PER_MAUND <= 0) ? '' : +(r40 / KG_PER_MAUND).toFixed(4));
+    }
+}
+
+function onPurRateInput(idx, source) {
+    linkRate($(`#itemBody tr[data-row="${idx}"]`), '.pur-rate40', '.pur-rate-kg', source);
+    calcRow(idx);
+}
+
+function onSaleRateInput(idx, source) {
+    linkRate($(`#itemBody tr[data-row="${idx}"]`), '.sale-rate40', '.sale-rate-kg', source);
+    calcRow(idx);
+}
+
 function calcRow(idx) {
     const $row = $(`#itemBody tr[data-row="${idx}"]`);
     const wtPacking = parseFloat($row.find('.wt-packing').val()) || 0;
     const qty = parseFloat($row.find('.qty').val()) || 0;
-    const purRate40 = parseFloat($row.find('.pur-rate40').val()) || 0;
-    const saleRate40 = parseFloat($row.find('.sale-rate40').val()) || 0;
+    const purRateKg = parseFloat($row.find('.pur-rate-kg').val()) || 0;
+    const saleRateKg = parseFloat($row.find('.sale-rate-kg').val()) || 0;
     const vendorPct = parseFloat($row.find('.vendor-comm-pct').val()) || 0;
     const custPct = parseFloat($row.find('.cust-comm-pct').val()) || 0;
     let netInput = $row.find('.net-weight').val();
 
     const grossWeight = wtPacking * qty;
     const netWeight = (netInput !== '' && !isNaN(parseFloat(netInput))) ? parseFloat(netInput) : grossWeight;
-    const purRateKg = KG_PER_MAUND > 0 ? (purRate40 / KG_PER_MAUND) : 0;
-    const saleRateKg = KG_PER_MAUND > 0 ? (saleRate40 / KG_PER_MAUND) : 0;
     const purTotal = purRateKg * netWeight;
     const saleTotal = saleRateKg * netWeight;
     const vendorCommAmt = purTotal * vendorPct / 100;
     const custCommAmt = saleTotal * custPct / 100;
 
     $row.find('.gross-weight').val(grossWeight.toFixed(2));
-    $row.find('.pur-rate-kg').val(purRateKg.toFixed(4));
     $row.find('.pur-total').val(purTotal.toFixed(2));
-    $row.find('.sale-rate-kg').val(saleRateKg.toFixed(4));
     $row.find('.sale-total').val(saleTotal.toFixed(2));
     $row.find('.vendor-comm-amt').val(vendorCommAmt.toFixed(2));
     $row.find('.cust-comm-amt').val(custCommAmt.toFixed(2));

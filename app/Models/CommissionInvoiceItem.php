@@ -86,8 +86,16 @@ class CommissionInvoiceItem extends Model
         $purchaseRate40 = (float) ($in['purchase_rate_per_40kg'] ?? 0);
         $saleRate40      = (float) ($in['sale_rate_per_40kg'] ?? 0);
 
-        $purchasePriceKg = $kgPerMaund > 0 ? round($purchaseRate40 / $kgPerMaund, 4) : 0;
-        $salePriceKg     = $kgPerMaund > 0 ? round($saleRate40 / $kgPerMaund, 4) : 0;
+        // Two-way rate entry — the per-kg box on the form is live, so if the
+        // user typed into it, that figure is authoritative and the 40 kg one
+        // is re-derived from it (and vice versa).
+        $purchaseRateKgIn = isset($in['purchase_rate_per_kg']) && $in['purchase_rate_per_kg'] !== ''
+            ? (float) $in['purchase_rate_per_kg'] : null;
+        $saleRateKgIn     = isset($in['sale_rate_per_kg']) && $in['sale_rate_per_kg'] !== ''
+            ? (float) $in['sale_rate_per_kg'] : null;
+
+        [$purchaseRate40, $purchasePriceKg] = PurchaseInvoiceItem::resolveRates($purchaseRate40, $purchaseRateKgIn, $kgPerMaund);
+        [$saleRate40, $salePriceKg]          = PurchaseInvoiceItem::resolveRates($saleRate40, $saleRateKgIn, $kgPerMaund);
 
         $purchaseTotal = round($purchasePriceKg * $netWeight, 2);
         $saleTotal     = round($salePriceKg * $netWeight, 2);
@@ -101,6 +109,8 @@ class CommissionInvoiceItem extends Model
         return [
             'grossWeight'               => $grossWeight,
             'netWeight'                 => $netWeight,
+            'purchaseRate40'            => $purchaseRate40,
+            'saleRate40'                => $saleRate40,
             'purchasePriceKg'           => $purchasePriceKg,
             'purchaseTotal'             => $purchaseTotal,
             'salePriceKg'               => $salePriceKg,

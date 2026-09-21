@@ -52,6 +52,14 @@
               <label>Credit Days</label>
               <input type="number" min="1" name="credit_days" id="creditDays" class="form-control" value="{{ $invoice->credit_days }}">
             </div>
+            <div class="col-md-2">
+              <label>Bilti #</label>
+              <input type="text" name="bilty_no" class="form-control" value="{{ $invoice->bilty_no }}">
+            </div>
+            <div class="col-md-3">
+              <label>Transport Name</label>
+              <input type="text" name="transport_name" class="form-control" value="{{ $invoice->transport_name }}">
+            </div>
           </div>
           <div class="row">
             <div class="col-md-12">
@@ -73,8 +81,8 @@
                 <th width="14%">Item</th><th width="9%">Variation</th><th width="8%">Packing</th>
                 <th width="7%">Wt./Packing (kg)</th><th width="5%">Qty</th>
                 <th width="8%">Gross Weight</th><th width="8%">Net Weight</th>
-                <th width="9%">Rate (40 kg)</th><th width="7%">Rate (kg)</th>
-                <th width="6%">Disc %</th><th width="8%">Total</th><th width="30px"></th>
+                <th width="10%">Rate (40 kg)</th><th width="9%">Rate (kg)</th>
+                <th width="11%">Total</th><th width="30px"></th>
               </tr>
             </thead>
             <tbody id="itemBody"></tbody>
@@ -113,7 +121,6 @@
             <div class="col"><small class="text-muted d-block">Net Wt. (kg)</small><strong id="sumNetWeight">0.00</strong></div>
             <div class="col"><small class="text-muted d-block">Total Bill Amount</small><strong class="text-danger" id="sumBillAmount">0.00</strong></div>
           </div>
-          <input type="hidden" name="discount" id="discountInput" value="{{ $invoice->discount }}">
 
           <div class="mt-2 p-2 bg-light border rounded d-inline-block">
             <small class="text-muted d-block">Already Received (all-time):</small>
@@ -175,7 +182,7 @@ function addItemRow(existing = null) {
     const qty = existing ? existing.quantity : '';
     const netWeight = existing ? existing.net_weight : '';
     const rate40 = existing ? existing.rate_per_40kg : '';
-    const disc = existing ? existing.discount : 0;
+    const rateKgVal = existing ? existing.sale_price : '';
     const packingUnitId = existing ? existing.packing_unit_id : null;
 
     const row = `
@@ -193,9 +200,8 @@ function addItemRow(existing = null) {
         <td><input type="number" step="any" min="0" name="items[${idx}][quantity]" class="form-control qty" value="${qty}" oninput="calcRow(${idx})" required></td>
         <td><input type="text" class="form-control readonly-calc gross-weight" readonly value="0.00"></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][net_weight]" class="form-control net-weight" value="${netWeight}" placeholder="= gross wt" oninput="calcRow(${idx})"></td>
-        <td><input type="number" step="any" min="0" name="items[${idx}][rate_per_40kg]" class="form-control rate-40kg" value="${rate40}" oninput="calcRow(${idx})" required></td>
-        <td><input type="text" class="form-control readonly-calc rate-kg" readonly value="0.0000"></td>
-        <td><input type="number" step="any" min="0" max="100" name="items[${idx}][discount]" class="form-control disc-pct" value="${disc}" oninput="calcRow(${idx})"></td>
+        <td><input type="number" step="any" min="0" name="items[${idx}][rate_per_40kg]" class="form-control rate-40kg" value="${rate40}" oninput="onRateInput(${idx}, 'maund')" required></td>
+        <td><input type="number" step="any" min="0" name="items[${idx}][rate_per_kg]" class="form-control rate-kg" value="${rateKgVal}" oninput="onRateInput(${idx}, 'kg')"></td>
         <td><input type="text" class="form-control readonly-calc total" readonly value="0.00"></td>
         <td><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button></td>
     </tr>`;
@@ -236,22 +242,41 @@ function loadVariationsForRow(productId, idx, selectedId) {
         .catch(() => variationSelect.html('<option value="">Error loading</option>').trigger('change.select2'));
 }
 
+
+// ── Two-way rate entry ───────────────────────────────────────────────
+// Type into either the 40 kg box or the per-kg box; the other one fills
+// itself in. Per-kg is what the line total is actually calculated from,
+// so typing it directly is never rounded away by a round-trip.
+function linkRate($row, sel40, selKg, source) {
+    const $r40 = $row.find(sel40);
+    const $rKg = $row.find(selKg);
+
+    if (source === 'kg') {
+        const kg = parseFloat($rKg.val());
+        $r40.val(isNaN(kg) ? '' : +(kg * KG_PER_MAUND).toFixed(2));
+    } else {
+        const r40 = parseFloat($r40.val());
+        $rKg.val((isNaN(r40) || KG_PER_MAUND <= 0) ? '' : +(r40 / KG_PER_MAUND).toFixed(4));
+    }
+}
+
+function onRateInput(idx, source) {
+    linkRate($(`#itemBody tr[data-row="${idx}"]`), '.rate-40kg', '.rate-kg', source);
+    calcRow(idx);
+}
+
 function calcRow(idx) {
     const $row = $(`#itemBody tr[data-row="${idx}"]`);
     const wtPacking = parseFloat($row.find('.wt-packing').val()) || 0;
     const qty = parseFloat($row.find('.qty').val()) || 0;
-    const rate40 = parseFloat($row.find('.rate-40kg').val()) || 0;
-    const discPct = parseFloat($row.find('.disc-pct').val()) || 0;
+    const rateKg = parseFloat($row.find('.rate-kg').val()) || 0;
     let netInput = $row.find('.net-weight').val();
 
     const grossWeight = wtPacking * qty;
     const netWeight = (netInput !== '' && !isNaN(parseFloat(netInput))) ? parseFloat(netInput) : grossWeight;
-    const rateKg = KG_PER_MAUND > 0 ? (rate40 / KG_PER_MAUND) : 0;
-    const discountedRate = rateKg - (rateKg * discPct / 100);
-    const total = discountedRate * netWeight;
+    const total = rateKg * netWeight;
 
     $row.find('.gross-weight').val(grossWeight.toFixed(2));
-    $row.find('.rate-kg').val(rateKg.toFixed(4));
     $row.find('.total').val(total.toFixed(2));
 
     calcSummary();

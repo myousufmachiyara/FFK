@@ -42,7 +42,7 @@
                                 <th>Invoice #</th>
                                 <th>Vendor</th>
                                 <th>Vendor Bill #</th>
-                                <th>Bilty #</th>
+                                <th>Bilti #</th>
                                 <th>Status</th>
                                 <th>Attachments</th>
                                 <th width="12%">Actions</th>

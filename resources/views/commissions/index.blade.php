@@ -76,7 +76,9 @@
                     <a href="{{ route('commission_invoices.edit', $invoice->id) }}" class="text-primary me-1" title="Edit"><i class="fas fa-edit"></i></a>
                   @endif
 
-                  <a href="{{ route('commission_invoices.print', $invoice->id) }}" target="_blank" class="text-success me-1" title="Print"><i class="fas fa-print"></i></a>
+                  <a href="{{ route('commission_invoices.print', $invoice->id) }}" target="_blank" class="text-success me-1" title="Print — Full Detail"><i class="fas fa-print"></i></a>
+                  <a href="{{ route('commission_invoices.print_vendor', $invoice->id) }}" target="_blank" class="text-primary me-1" title="Print — Vendor Copy"><i class="fas fa-truck"></i></a>
+                  <a href="{{ route('commission_invoices.print_customer', $invoice->id) }}" target="_blank" class="text-warning me-1" title="Print — Customer Copy"><i class="fas fa-user-tie"></i></a>
 
                   @if($invoice->status === 'pending' && !$invoice->trashed())
                     <form action="{{ route('commission_invoices.destroy', $invoice->id) }}" method="POST" style="display:inline;">

@@ -21,7 +21,9 @@
           <span class="{{ $invoice->statusBadgeClass() }} ms-2">{{ $invoice->statusLabel() }}</span>
         </h2>
         <div>
-          <a href="{{ route('commission_invoices.print', $invoice->id) }}" target="_blank" class="btn btn-outline-success"><i class="fas fa-print"></i> Print</a>
+          <a href="{{ route('commission_invoices.print', $invoice->id) }}" target="_blank" class="btn btn-outline-success"><i class="fas fa-print"></i> Print Detail</a>
+          <a href="{{ route('commission_invoices.print_vendor', $invoice->id) }}" target="_blank" class="btn btn-outline-primary"><i class="fas fa-truck"></i> Vendor Copy</a>
+          <a href="{{ route('commission_invoices.print_customer', $invoice->id) }}" target="_blank" class="btn btn-outline-warning"><i class="fas fa-user-tie"></i> Customer Copy</a>
           @if($invoice->isPending())
             <a href="{{ route('commission_invoices.edit', $invoice->id) }}" class="btn btn-outline-primary"><i class="fas fa-edit"></i> Edit</a>
             <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#inTransitModal"><i class="fas fa-truck"></i> Move to In Transit</button>
@@ -48,7 +50,7 @@
           <div class="col-md-2"><strong>Vendor:</strong><br>{{ $invoice->vendor->name ?? 'N/A' }}</div>
           <div class="col-md-2"><strong>Customer:</strong><br>{{ $invoice->customer->name ?? 'N/A' }}</div>
           <div class="col-md-2"><strong>Transport:</strong><br>{{ $invoice->transport_name ?? '—' }}</div>
-          <div class="col-md-2"><strong>Bilty #:</strong><br>{{ $invoice->bilty_no ?? '—' }}</div>
+          <div class="col-md-2"><strong>Bilti #:</strong><br>{{ $invoice->bilty_no ?? '—' }}</div>
           <div class="col-md-2"><strong>Vendor Bill #:</strong><br>{{ $invoice->vendor_bill_no ?? '—' }}</div>
         </div>
         <div class="row mb-3">
@@ -215,7 +217,7 @@
         <div class="modal-header"><h5 class="modal-title">Move to In Transit</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
           <div class="mb-3"><label>Vendor Bill Number *</label><input type="text" name="vendor_bill_no" class="form-control" value="{{ $invoice->vendor_bill_no }}" required></div>
-          <div class="mb-3"><label>Bilty Number *</label><input type="text" name="bilty_no" class="form-control" value="{{ $invoice->bilty_no }}" required></div>
+          <div class="mb-3"><label>Bilti Number *</label><input type="text" name="bilty_no" class="form-control" value="{{ $invoice->bilty_no }}" required></div>
           <div class="mb-3"><label>Transport Name *</label><input type="text" name="transport_name" class="form-control" value="{{ $invoice->transport_name }}" required></div>
           <div class="mb-3">
             <label>Attachment (dispatch proof) *</label>

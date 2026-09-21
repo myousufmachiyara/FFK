@@ -59,6 +59,35 @@ class PurchaseReturnController extends Controller
         return view('purchase_returns.create', compact('invoice', 'items'));
     }
 
+
+    /**
+     * The rate the line is reversed at. Both rate boxes on the form are
+     * live and arrive pre-filled with the original booked rate, so the
+     * usual case reverses exactly what was booked — but an operator can
+     * override either box when the return is genuinely settled at a
+     * different rate. Per-kg wins when both arrive, being the finer of
+     * the two.
+     */
+    private function resolveReturnRate(array $itemInput, float $originalRatePerKg): float
+    {
+        $kgPerMaund = (int) config('purchase_settings.kg_per_maund', 40);
+
+        $ratePerKg = isset($itemInput['rate_per_kg']) && $itemInput['rate_per_kg'] !== ''
+            ? (float) $itemInput['rate_per_kg'] : null;
+        $ratePer40 = isset($itemInput['rate_per_40kg']) && $itemInput['rate_per_40kg'] !== ''
+            ? (float) $itemInput['rate_per_40kg'] : null;
+
+        if ($ratePerKg !== null && $ratePerKg > 0) {
+            return round($ratePerKg, 4);
+        }
+
+        if ($ratePer40 !== null && $ratePer40 > 0 && $kgPerMaund > 0) {
+            return round($ratePer40 / $kgPerMaund, 4);
+        }
+
+        return round($originalRatePerKg, 4);
+    }
+
     public function store(Request $request)
     {
         $request->validate([
@@ -69,6 +98,8 @@ class PurchaseReturnController extends Controller
             'items.*.purchase_invoice_item_id' => 'required|exists:purchase_invoice_items,id',
             'items.*.quantity'    => 'required|numeric|min:0.01',
             'items.*.net_weight'  => 'required|numeric|min:0.01',
+            'items.*.rate_per_40kg' => 'nullable|numeric|min:0',
+            'items.*.rate_per_kg'   => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -118,7 +149,7 @@ class PurchaseReturnController extends Controller
                 // Same per-kg rate as the original purchase — a return
                 // doesn't renegotiate price, it reverses what was actually
                 // booked.
-                $rate   = (float) $originalItem->price;
+                $rate   = $this->resolveReturnRate($itemInput, (float) $originalItem->price);
                 $amount = round($wt * $rate, 2);
 
                 PurchaseReturnItem::create([
@@ -229,6 +260,8 @@ class PurchaseReturnController extends Controller
             'items.*.purchase_invoice_item_id' => 'required|exists:purchase_invoice_items,id',
             'items.*.quantity'   => 'required|numeric|min:0.01',
             'items.*.net_weight' => 'required|numeric|min:0.01',
+            'items.*.rate_per_40kg' => 'nullable|numeric|min:0',
+            'items.*.rate_per_kg'   => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -283,7 +316,7 @@ class PurchaseReturnController extends Controller
                     throw new \Exception("Cannot return {$wt} kg for item #{$originalItem->id} — only {$remainingWt} kg remain returnable.");
                 }
 
-                $rate   = (float) $originalItem->price;
+                $rate   = $this->resolveReturnRate($itemInput, (float) $originalItem->price);
                 $amount = round($wt * $rate, 2);
 
                 PurchaseReturnItem::create([

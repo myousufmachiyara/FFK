@@ -58,7 +58,7 @@
           <div class="col-md-2"><strong>Invoice Date:</strong><br>{{ $invoice->invoice_date->format('d-M-Y') }}</div>
           <div class="col-md-2"><strong>Vendor:</strong><br>{{ $invoice->vendor->name ?? 'N/A' }}</div>
           <div class="col-md-2"><strong>Vendor Bill #:</strong><br>{{ $invoice->bill_no ?? '—' }}</div>
-          <div class="col-md-2"><strong>Bilty #:</strong><br>{{ $invoice->bilty_no ?? '—' }}</div>
+          <div class="col-md-2"><strong>Bilti #:</strong><br>{{ $invoice->bilty_no ?? '—' }}</div>
           <div class="col-md-2"><strong>Transport:</strong><br>{{ $invoice->transport_name ?? '—' }}</div>
           <div class="col-md-2"><strong>Ref #:</strong><br>{{ $invoice->ref_no ?? '—' }}</div>
         </div>
@@ -234,7 +234,7 @@
             <input type="text" name="bill_no" class="form-control" value="{{ $invoice->bill_no }}" required>
           </div>
           <div class="mb-3">
-            <label>Bilty Number *</label>
+            <label>Bilti Number *</label>
             <input type="text" name="bilty_no" class="form-control" value="{{ $invoice->bilty_no }}" required>
           </div>
           <div class="mb-3">

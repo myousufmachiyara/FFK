@@ -56,6 +56,34 @@ class CommissionReturnController extends Controller
         return view('commission_returns.create', compact('invoice', 'items'));
     }
 
+
+    /**
+     * The rates the line is reversed at. Both boxes of each pair on the
+     * form are live and arrive pre-filled with the original booked rates,
+     * so the usual case reverses exactly what was booked — but either can
+     * be overridden when the return is genuinely settled differently.
+     * Per-kg wins when both arrive, being the finer of the two.
+     */
+    private function resolveReturnRate(array $itemInput, string $field, float $originalRatePerKg): float
+    {
+        $kgPerMaund = (int) config('purchase_settings.kg_per_maund', 40);
+
+        $perKg = isset($itemInput["{$field}_rate_per_kg"]) && $itemInput["{$field}_rate_per_kg"] !== ''
+            ? (float) $itemInput["{$field}_rate_per_kg"] : null;
+        $per40 = isset($itemInput["{$field}_rate_per_40kg"]) && $itemInput["{$field}_rate_per_40kg"] !== ''
+            ? (float) $itemInput["{$field}_rate_per_40kg"] : null;
+
+        if ($perKg !== null && $perKg > 0) {
+            return round($perKg, 4);
+        }
+
+        if ($per40 !== null && $per40 > 0 && $kgPerMaund > 0) {
+            return round($per40 / $kgPerMaund, 4);
+        }
+
+        return round($originalRatePerKg, 4);
+    }
+
     public function store(Request $request)
     {
         $request->validate([
@@ -66,6 +94,10 @@ class CommissionReturnController extends Controller
             'items.*.commission_invoice_item_id' => 'required|exists:commission_invoice_items,id',
             'items.*.qty'        => 'required|numeric|min:0.01',
             'items.*.net_weight' => 'required|numeric|min:0.01',
+            'items.*.purchase_rate_per_40kg' => 'nullable|numeric|min:0',
+            'items.*.purchase_rate_per_kg'   => 'nullable|numeric|min:0',
+            'items.*.sale_rate_per_40kg'     => 'nullable|numeric|min:0',
+            'items.*.sale_rate_per_kg'       => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -110,15 +142,20 @@ class CommissionReturnController extends Controller
                     throw new \Exception("Cannot return {$qty} bags for item #{$originalItem->id} — only {$remainingQty} bags remain returnable.");
                 }
 
-                // Proportional share of this item's original commission
-                // figures, based on the fraction of weight being returned.
-                $fraction = (float) $originalItem->net_weight > 0
-                    ? $wt / (float) $originalItem->net_weight
-                    : 0;
+                // Value the returned weight at the rates on the form. These
+                // default to the rates the original line was booked at, so
+                // the usual case is identical to a straight proportional
+                // reversal — but an edited rate is honoured.
+                $purchaseRateKg = $this->resolveReturnRate($itemInput, 'purchase', (float) $originalItem->purchase_price);
+                $saleRateKg     = $this->resolveReturnRate($itemInput, 'sale', (float) $originalItem->sale_price);
 
-                $saleValue = round((float) $originalItem->sale_total * $fraction, 2);
-                $vendorCommission = round((float) $originalItem->vendor_commission_amount * $fraction, 2);
-                $customerCommission = round((float) $originalItem->customer_commission_amount * $fraction, 2);
+                $purchaseValue = round($purchaseRateKg * $wt, 2);
+                $saleValue     = round($saleRateKg * $wt, 2);
+
+                // Commission percentages are the ones agreed on the invoice —
+                // only the base they apply to moves with the returned weight.
+                $vendorCommission   = round($purchaseValue * (float) $originalItem->vendor_commission_percentage / 100, 2);
+                $customerCommission = round($saleValue * (float) $originalItem->customer_commission_percentage / 100, 2);
 
                 CommissionReturnItem::create([
                     'commission_return_id'       => $return->id,
@@ -239,6 +276,10 @@ class CommissionReturnController extends Controller
             'items.*.commission_invoice_item_id' => 'required|exists:commission_invoice_items,id',
             'items.*.qty'        => 'required|numeric|min:0.01',
             'items.*.net_weight' => 'required|numeric|min:0.01',
+            'items.*.purchase_rate_per_40kg' => 'nullable|numeric|min:0',
+            'items.*.purchase_rate_per_kg'   => 'nullable|numeric|min:0',
+            'items.*.sale_rate_per_40kg'     => 'nullable|numeric|min:0',
+            'items.*.sale_rate_per_kg'       => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -282,16 +323,18 @@ class CommissionReturnController extends Controller
                     throw new \Exception("Cannot return {$qty} bags for item #{$originalItem->id} — only {$remainingQty} bags remain returnable.");
                 }
 
-                // Proportional share, always computed against the
-                // ORIGINAL item's totals — never against a prior return's
-                // amounts, so editing never compounds rounding drift.
-                $fraction = (float) $originalItem->net_weight > 0
-                    ? $wt / (float) $originalItem->net_weight
-                    : 0;
+                // Always valued off the ORIGINAL item's rates (or whatever
+                // rate the form carries) times the returned weight — never
+                // off a prior return's amounts, so editing never compounds
+                // rounding drift.
+                $purchaseRateKg = $this->resolveReturnRate($itemInput, 'purchase', (float) $originalItem->purchase_price);
+                $saleRateKg     = $this->resolveReturnRate($itemInput, 'sale', (float) $originalItem->sale_price);
 
-                $saleValue = round((float) $originalItem->sale_total * $fraction, 2);
-                $vendorCommission = round((float) $originalItem->vendor_commission_amount * $fraction, 2);
-                $customerCommission = round((float) $originalItem->customer_commission_amount * $fraction, 2);
+                $purchaseValue = round($purchaseRateKg * $wt, 2);
+                $saleValue     = round($saleRateKg * $wt, 2);
+
+                $vendorCommission   = round($purchaseValue * (float) $originalItem->vendor_commission_percentage / 100, 2);
+                $customerCommission = round($saleValue * (float) $originalItem->customer_commission_percentage / 100, 2);
 
                 CommissionReturnItem::create([
                     'commission_return_id'       => $return->id,

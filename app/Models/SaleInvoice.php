@@ -13,7 +13,8 @@ class SaleInvoice extends Model
         'type',              // cash | credit
         'credit_days',
         'remarks',
-        'discount',          // flat invoice-level discount
+        'bilty_no',          // transport / goods-forwarding receipt no
+        'transport_name',
         'net_amount',        // items only
         'total_weight',
         'total_gross_weight',
@@ -24,7 +25,6 @@ class SaleInvoice extends Model
 
     protected $casts = [
         'date'                  => 'date',
-        'discount'              => 'decimal:2',
         'net_amount'            => 'decimal:2',
         'total_weight'          => 'decimal:3',
         'total_gross_weight'    => 'decimal:3',

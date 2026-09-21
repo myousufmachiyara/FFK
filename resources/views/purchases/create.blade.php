@@ -56,7 +56,7 @@
             </div>
 
             <div class="col-md-2 mb-3">
-              <label>Bilty # <small class="text-muted">(optional now)</small></label>
+              <label>Bilti # <small class="text-muted">(optional now)</small></label>
               <input type="text" name="bilty_no" class="form-control">
             </div>
 
@@ -207,8 +207,8 @@ function addItemRow() {
         <td><input type="number" step="any" min="0" name="items[${idx}][quantity]" class="form-control qty" oninput="calcRow(${idx})" required></td>
         <td><input type="text" class="form-control readonly-calc gross-weight" readonly value="0.00"></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][net_weight]" class="form-control net-weight" placeholder="= gross wt" oninput="calcRow(${idx})"></td>
-        <td><input type="number" step="any" min="0" name="items[${idx}][rate_per_40kg]" class="form-control rate-40kg" oninput="calcRow(${idx})" required></td>
-        <td><input type="text" class="form-control readonly-calc rate-kg" readonly value="0.0000"></td>
+        <td><input type="number" step="any" min="0" name="items[${idx}][rate_per_40kg]" class="form-control rate-40kg" oninput="onRateInput(${idx}, 'maund')" required></td>
+        <td><input type="number" step="any" min="0" name="items[${idx}][rate_per_kg]" class="form-control rate-kg" oninput="onRateInput(${idx}, 'kg')"></td>
         <td><input type="text" class="form-control readonly-calc amount" readonly value="0.00"></td>
         <td><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button></td>
     </tr>`;
@@ -243,20 +243,41 @@ function onProductChange(sel, idx) {
         .catch(() => variationSelect.html('<option value="">Error loading</option>').trigger('change.select2'));
 }
 
+
+// ── Two-way rate entry ───────────────────────────────────────────────
+// Type into either the 40 kg box or the per-kg box; the other one fills
+// itself in. Per-kg is what the line amount is actually calculated from,
+// so typing it directly is never rounded away by a round-trip.
+function linkRate($row, sel40, selKg, source) {
+    const $r40 = $row.find(sel40);
+    const $rKg = $row.find(selKg);
+
+    if (source === 'kg') {
+        const kg = parseFloat($rKg.val());
+        $r40.val(isNaN(kg) ? '' : +(kg * KG_PER_MAUND).toFixed(2));
+    } else {
+        const r40 = parseFloat($r40.val());
+        $rKg.val((isNaN(r40) || KG_PER_MAUND <= 0) ? '' : +(r40 / KG_PER_MAUND).toFixed(4));
+    }
+}
+
+function onRateInput(idx, source) {
+    linkRate($(`#itemBody tr[data-row="${idx}"]`), '.rate-40kg', '.rate-kg', source);
+    calcRow(idx);
+}
+
 function calcRow(idx) {
     const $row = $(`#itemBody tr[data-row="${idx}"]`);
     const wtPacking = parseFloat($row.find('.wt-packing').val()) || 0;
     const qty = parseFloat($row.find('.qty').val()) || 0;
-    const rate40 = parseFloat($row.find('.rate-40kg').val()) || 0;
+    const rateKg = parseFloat($row.find('.rate-kg').val()) || 0;
     let netInput = $row.find('.net-weight').val();
 
     const grossWeight = wtPacking * qty;
     const netWeight = (netInput !== '' && !isNaN(parseFloat(netInput))) ? parseFloat(netInput) : grossWeight;
-    const rateKg = KG_PER_MAUND > 0 ? (rate40 / KG_PER_MAUND) : 0;
     const amount = rateKg * netWeight;
 
     $row.find('.gross-weight').val(grossWeight.toFixed(2));
-    $row.find('.rate-kg').val(rateKg.toFixed(4));
     $row.find('.amount').val(amount.toFixed(2));
 
     calcSummary();
