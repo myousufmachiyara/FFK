@@ -61,7 +61,7 @@ trait RendersInvoicePdf
 
         // ── Contact block ───────────────────────────────────────────
         $pdf->SetTextColor(255, 255, 255);
-        $this->pdfContactIcon($pdf, 113, 10.5, 11);
+        $this->pdfContactIcon($pdf, 150, 10.5, 11);
 
         $pdf->SetFont('helvetica', '', 8);
         $y = 8;
