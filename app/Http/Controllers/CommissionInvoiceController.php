@@ -915,7 +915,6 @@ class CommissionInvoiceController extends Controller
         }
 
         $this->pdfSignature($pdf);
-        $this->pdfFooterBand($pdf);
     }
 
     /** Side-by-side expense list and totals panel. */

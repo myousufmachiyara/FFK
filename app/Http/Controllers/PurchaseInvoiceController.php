@@ -1038,7 +1038,6 @@ class PurchaseInvoiceController extends Controller
         }
 
         $this->pdfSignature($pdf);
-        $this->pdfFooterBand($pdf);
 
         return $pdf->Output('PI_' . $invoice->invoice_no . '.pdf', 'I');
     }
