@@ -28,9 +28,9 @@ trait RendersInvoicePdf
      */
     protected function pdfContactIcon(\TCPDF $pdf, float $x, float $y, float $size = 9): void
     {
-        $pdf->SetFont('your_emoji_font', '', $size);
+        $pdf->SetFont('dejavusans', '', $size);
         $pdf->SetXY($x, $y);
-        $pdf->Cell(6, 5, "\u{1F4DE}", 0, 0, 'C');
+        $pdf->Cell(6, 5, "\u{260E}", 0, 0, 'C');
     }
 
     /**
