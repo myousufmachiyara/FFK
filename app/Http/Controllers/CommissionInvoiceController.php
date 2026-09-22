@@ -952,9 +952,9 @@ class CommissionInvoiceController extends Controller
         <table border="1" cellpadding="2.5" style="font-size:7.5px;">
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
-                    <th width="15%">Item</th><th width="5%">Qty</th><th width="7%">G.Wt</th><th width="7%">N.Wt</th>
-                    <th width="8%">P.Rate/kg</th><th width="9%">P.Total</th>
-                    <th width="8%">S.Rate/kg</th><th width="9%">S.Total</th>
+                    <th width="16%">Item</th><th width="5%">Qty</th><th width="7%">G.Wt</th><th width="7%">N.Wt</th>
+                    <th width="8%">P.Rate/kg</th><th width="10%">P.Total</th>
+                    <th width="8%">S.Rate/kg</th><th width="10%">S.Total</th>
                     <th width="5%">V.C %</th><th width="9%">V.C</th>
                     <th width="5%">C.C %</th><th width="9%">C.C</th>
                 </tr>
@@ -965,14 +965,14 @@ class CommissionInvoiceController extends Controller
             $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="15%">' . e($item->product->name ?? '-') . '</td>
+                    <td width="16%">' . e($item->product->name ?? '-') . '</td>
                     <td width="5%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="7%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="7%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
                     <td width="8%" style="text-align:right;">' . number_format($item->purchase_price, 2) . '</td>
-                    <td width="9%" style="text-align:right;">' . number_format($item->purchase_total, 2) . '</td>
+                    <td width="10%" style="text-align:right;">' . number_format($item->purchase_total, 2) . '</td>
                     <td width="8%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
-                    <td width="9%" style="text-align:right;">' . number_format($item->sale_total, 2) . '</td>
+                    <td width="10%" style="text-align:right;">' . number_format($item->sale_total, 2) . '</td>
                     <td width="5%" style="text-align:center;">' . number_format($item->vendor_commission_percentage, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->vendor_commission_amount, 2) . '</td>
                     <td width="5%" style="text-align:center;">' . number_format($item->customer_commission_percentage, 2) . '</td>
