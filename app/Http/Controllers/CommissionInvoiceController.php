@@ -913,6 +913,8 @@ class CommissionInvoiceController extends Controller
             <tr><td><b>Date</b></td><td>:</td><td>' . Carbon::parse($invoice->invoice_date)->format('d-m-Y') . '</td></tr>
             <tr><td><b>Due Date</b></td><td>:</td><td>' . $dueDateLine . '</td></tr>
             <tr><td><b>Status</b></td><td>:</td><td>' . $invoice->statusLabel() . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
+
         </table>';
         $pdf->SetXY(105, 38);
         $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
@@ -923,20 +925,19 @@ class CommissionInvoiceController extends Controller
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
         $pdf->SetXY(10, $boxY);
-        $pdf->Cell(90, 7, '  Vendor Details', 1, 0, 'L', true);
+        $pdf->Cell(90, 7, '  Vendor & Customers Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Customer Details', 1, 0, 'L', true);
+        $pdf->Cell(95, 7, '  Transport Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
 
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Vendor</b></td><td width="5%">:</td><td width="65%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->vendor_bill_no ?? '-') . '</td></tr>
-            <tr><td><b>Bilty No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td width="30%"><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
         </table>';
         $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td width="30%"><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
-            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
+            <tr><td><b>Bilti No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
         </table>';
 
         $pdf->SetXY(10, $boxY + 7);
