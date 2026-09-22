@@ -885,7 +885,7 @@ class CommissionInvoiceController extends Controller
         $pdf->SetTextColor(201, 162, 75);
         $pdf->Cell(120, 6, '(KARACHI)', 0, 1, 'L');
 
-        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetFont('helvetica', '', 12);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetXY(120, 8);
         $pdf->Cell(80, 5, 'Farooq Fulara: 0320-2788117', 0, 1, 'R');
