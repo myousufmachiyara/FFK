@@ -936,8 +936,8 @@ class CommissionInvoiceController extends Controller
             <tr><td><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
         </table>';
         $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td width="30%"><b>Transport:</b></td><td width="5%">:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
-            <tr><td width="30%"><b>Bilti No:</b></td><td width="5%">:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td width="30%"><b>Transport</b></td><td width="5%">:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
+            <tr><td width="30%"><b>Bilti No</b></td><td width="5%">:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
         </table>';
 
         $pdf->SetXY(10, $boxY + 7);
