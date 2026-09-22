@@ -944,12 +944,12 @@ class PurchaseInvoiceController extends Controller
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
                     <th width="25%">Description</th>
-                    <th width="9%">Wt/Packing</th>
+                    <th width="11%">Wt/Packing</th>
                     <th width="6%">Qty</th>
                     <th width="10%">Gross Wt</th>
-                    <th width="10%">Net Wt</th>
+                    <th width="9%">Net Wt</th>
                     <th width="12%">Rate/40kg</th>
-                    <th width="11%">Rate/kg</th>
+                    <th width="10%">Rate/kg</th>
                     <th width="17%">Amount</th>
                 </tr>
             </thead>
@@ -961,12 +961,12 @@ class PurchaseInvoiceController extends Controller
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
                     <td width="25%">' . e($this->itemDescription($item)) . '</td>
-                    <td width="9%" style="text-align:right;">' . number_format($item->wt_per_packing, 2) . '</td>
+                    <td width="11%" style="text-align:right;">' . number_format($item->wt_per_packing, 2) . '</td>
                     <td width="6%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="10%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
-                    <td width="10%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
+                    <td width="9%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
                     <td width="12%" style="text-align:right;">' . number_format($item->rate_per_40kg, 2) . '</td>
-                    <td width="11%" style="text-align:right;">' . number_format($item->price, 2) . '</td>
+                    <td width="10%" style="text-align:right;">' . number_format($item->price, 2) . '</td>
                     <td width="17%" style="text-align:right;">' . number_format($item->amount, 2) . '</td>
                 </tr>';
         }
