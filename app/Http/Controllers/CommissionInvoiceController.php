@@ -1096,7 +1096,7 @@ class CommissionInvoiceController extends Controller
         $commAmtW = 100 - $descW - $qtyW - ($wtW * 2) - $rate40W - $rateKgW - $totalW - $commPctW;
 
         $html = '
-        <table border="1" style="font-size:8px;">
+        <table border="1" cellpadding="2.5" style="font-size:8px;">
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
                     <th width="' . $descW . '%">Description</th>
