@@ -47,8 +47,9 @@
                     {{ number_format($invoice->remainingBalance(), 2) }}
                 </td>
                 <td>
-                  <a href="{{ route('sale_invoices.edit', $invoice->id) }}" class="text-primary"><i class="fas fa-edit"></i></a>
-                  <a href="{{ route('sale_invoices.print', $invoice->id) }}" target="_blank" class="text-success"><i class="fas fa-print"></i></a>
+                  <a href="{{ route('sale_invoices.show', $invoice->id) }}" class="text-secondary" title="View"><i class="fas fa-eye"></i></a>
+                  <a href="{{ route('sale_invoices.edit', $invoice->id) }}" class="text-primary" title="Edit"><i class="fas fa-edit"></i></a>
+                  <a href="{{ route('sale_invoices.print', $invoice->id) }}" target="_blank" class="text-success" title="Print"><i class="fas fa-print"></i></a>
                   <form action="{{ route('sale_invoices.destroy', $invoice->id) }}" method="POST" style="display:inline;">
                     @csrf
                     @method('DELETE')
