@@ -952,11 +952,11 @@ class CommissionInvoiceController extends Controller
         <table border="1" cellpadding="2.5" style="font-size:7.5px;">
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
-                    <th width="13%">Item</th><th width="6%">Qty</th><th width="8%">Net Wt</th>
+                    <th width="13%">Item</th><th width="6%">Qty</th><th width="8%">Gross Wt</th><th width="8%">Net Wt</th>
                     <th width="9%">Pur Rate/kg</th><th width="9%">Pur Total</th>
                     <th width="9%">Sale Rate/kg</th><th width="9%">Sale Total</th>
-                    <th width="9%">Vendor Comm %</th><th width="9%">Vendor Comm</th>
-                    <th width="9%">Cust Comm %</th><th width="10%">Cust Comm</th>
+                    <th width="9%">V.Comm %</th><th width="9%">V.Comm</th>
+                    <th width="9%">C.Comm %</th><th width="10%">C.Comm</th>
                 </tr>
             </thead>
             <tbody>';
@@ -967,6 +967,7 @@ class CommissionInvoiceController extends Controller
                 <tr style="background-color:' . $rowBg . ';">
                     <td width="13%">' . e($item->product->name ?? '-') . '</td>
                     <td width="6%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
+                    <td width="8%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="8%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->purchase_price, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->purchase_total, 2) . '</td>
