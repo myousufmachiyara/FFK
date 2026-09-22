@@ -956,7 +956,7 @@ class CommissionInvoiceController extends Controller
                     <th width="7%">P.Rate/kg</th><th width="9%">P.Total</th>
                     <th width="7%">S.Rate/kg</th><th width="9%">S.Total</th>
                     <th width="5%">V.C %</th><th width="9%">V.C</th>
-                    <th width="5%">C.C %</th><th width="10%">C.C</th>
+                    <th width="5%">C.C %</th><th width="9%">C.C</th>
                 </tr>
             </thead>
             <tbody>';
@@ -972,11 +972,11 @@ class CommissionInvoiceController extends Controller
                     <td width="7%" style="text-align:right;">' . number_format($item->purchase_price, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->purchase_total, 2) . '</td>
                     <td width="7%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
-                    <td width="9%" style="text-align:right;">' . number_format($item->sale_total, 2) . '</td>
+                    <td width="8%" style="text-align:right;">' . number_format($item->sale_total, 2) . '</td>
                     <td width="5%" style="text-align:center;">' . number_format($item->vendor_commission_percentage, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->vendor_commission_amount, 2) . '</td>
                     <td width="5%" style="text-align:center;">' . number_format($item->customer_commission_percentage, 2) . '</td>
-                    <td width="10%" style="text-align:right;">' . number_format($item->customer_commission_amount, 2) . '</td>
+                    <td width="9%" style="text-align:right;">' . number_format($item->customer_commission_amount, 2) . '</td>
                 </tr>';
         }
         $html .= '</tbody></table>';
