@@ -248,6 +248,21 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('check.permission:commission_invoices.add_customer_receipt')
         ->name('commission_invoices.addCustomerReceipt');
 
+    Route::get('commission_invoices/{id}/print-customer-kg', [CommissionInvoiceController::class, 'printCustomerKgOnly'])
+    ->middleware('check.permission:commission_invoices.print')
+    ->name('commission_invoices.printCustomerKgOnly');
+ 
+    Route::get('commission_invoices/{id}/print-customer-both', [CommissionInvoiceController::class, 'printCustomerBoth'])
+        ->middleware('check.permission:commission_invoices.print')
+        ->name('commission_invoices.printCustomerBoth');
+    
+    Route::get('commission_invoices/{id}/print-vendor-kg', [CommissionInvoiceController::class, 'printVendorKgOnly'])
+        ->middleware('check.permission:commission_invoices.print')
+        ->name('commission_invoices.printVendorKgOnly');
+    
+    Route::get('commission_invoices/{id}/print-vendor-both', [CommissionInvoiceController::class, 'printVendorBoth'])
+        ->middleware('check.permission:commission_invoices.print')
+        ->name('commission_invoices.printVendorBoth');
     // ─────────────────────────────────────────────────────────────
     // Sale Return — always starts from a specific Sale invoice.
     // ─────────────────────────────────────────────────────────────
