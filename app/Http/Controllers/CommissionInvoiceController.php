@@ -925,7 +925,7 @@ class CommissionInvoiceController extends Controller
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
         $pdf->SetXY(10, $boxY);
-        $pdf->Cell(90, 7, '  Vendor & Customers Details', 1, 0, 'L', true);
+        $pdf->Cell(90, 7, '  Vendor & Customer Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
         $pdf->Cell(95, 7, '  Transport Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
@@ -933,10 +933,10 @@ class CommissionInvoiceController extends Controller
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Vendor</b></td><td width="5%">:</td><td width="65%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->vendor_bill_no ?? '-') . '</td></tr>
-            <tr><td width="30%"><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
+            <tr><td><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
         </table>';
         $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
+            <tr><td><b>Transport</b></td><td>:</td><td style="text-align: left">' . ($invoice->transport_name ?? '-') . '</td></tr>
             <tr><td><b>Bilti No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
         </table>';
 
