@@ -1234,6 +1234,10 @@ class CommissionInvoiceController extends Controller
         $pdf->AddPage();
 
         $this->commissionPartyHeaderAndTitle($pdf, $invoice);
+        $paymentTermsLine = ucfirst($invoice->payment_terms ?? 'cash');
+        if ($invoice->isCredit() && $invoice->credit_days) {
+            $paymentTermsLine .= ' (' . $invoice->credit_days . ' days)';
+        }
 
         $boxY = 60;
         $pdf->SetFillColor(27, 58, 92);
@@ -1242,11 +1246,12 @@ class CommissionInvoiceController extends Controller
         $pdf->SetXY(10, $boxY);
         $pdf->Cell(90, 7, '  Customer Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Shipment Details', 1, 0, 'L', true);
+        $pdf->Cell(95, 7, '  Transport Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
 
         $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
+            <tr><td width="30%"><b>Payment Terms</b></td><td width="5%">:</td><td width="65%">' . $paymentTermsLine . '</td></tr>
         </table>';
         $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Bilty No</b></td><td width="5%">:</td><td width="65%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
