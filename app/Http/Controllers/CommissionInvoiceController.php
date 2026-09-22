@@ -953,8 +953,8 @@ class CommissionInvoiceController extends Controller
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
                     <th width="15%">Item</th><th width="5%">Qty</th><th width="7%">G.Wt</th><th width="7%">N.Wt</th>
-                    <th width="9%">Pur Rate/kg</th><th width="9%">Pur Total</th>
-                    <th width="9%">Sale Rate/kg</th><th width="9%">Sale Total</th>
+                    <th width="7%">P.Rate/kg</th><th width="9%">P.Total</th>
+                    <th width="7%">S.Rate/kg</th><th width="9%">S.Total</th>
                     <th width="9%">V.Comm %</th><th width="9%">V.Comm</th>
                     <th width="9%">C.Comm %</th><th width="10%">C.Comm</th>
                 </tr>
@@ -969,9 +969,9 @@ class CommissionInvoiceController extends Controller
                     <td width="5%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="7%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="7%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
-                    <td width="9%" style="text-align:right;">' . number_format($item->purchase_price, 2) . '</td>
+                    <td width="7%" style="text-align:right;">' . number_format($item->purchase_price, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->purchase_total, 2) . '</td>
-                    <td width="9%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
+                    <td width="7%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->sale_total, 2) . '</td>
                     <td width="9%" style="text-align:center;">' . number_format($item->vendor_commission_percentage, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->vendor_commission_amount, 2) . '</td>
