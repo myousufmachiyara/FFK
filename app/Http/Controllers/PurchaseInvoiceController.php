@@ -897,23 +897,72 @@ class PurchaseInvoiceController extends Controller
     public function print($id)
     {
         $invoice = PurchaseInvoice::with(['vendor', 'items.product', 'items.variation', 'expenses'])->findOrFail($id);
-
-        $pdf = $this->newInvoicePdf('Purchase Invoice #' . $invoice->invoice_no);
-        $this->pdfCompanyHeader($pdf);
-
+ 
+        $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+        $pdf->SetCreator('Farooq Fulara (Karachi)');
+        $pdf->SetAuthor('Farooq Fulara (Karachi)');
+        $pdf->SetTitle('Purchase Invoice #' . $invoice->invoice_no);
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        $pdf->SetMargins(10, 10, 10);
+        $pdf->SetAutoPageBreak(true, 25);
+        $pdf->AddPage();
+ 
+        $navy = '#1B3A5C';
+        $gold = '#C9A24B';
+        $lightGold = '#F5EFDF';
+ 
+        // ── Header band (navy, full width) ─────────────────────────
+        $pdf->SetFillColor(27, 58, 92);
+        $pdf->Rect(0, 0, 210, 32, 'F');
+ 
+        $logoPath = public_path('assets/img/ff-logo.jpg');
+        $nameX = 12;
+        if (file_exists($logoPath)) {
+            $pdf->Image($logoPath, 12, 5, 22);
+            $nameX = 38;
+        }
+ 
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('helvetica', 'B', 19);
+        $pdf->SetXY($nameX, 8);
+        $pdf->Cell(120, 8, 'FAROOQ FULARA', 0, 1, 'L');
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->SetXY($nameX, 17);
+        $pdf->SetTextColor(201, 162, 75);
+        $pdf->Cell(120, 6, '(KARACHI)', 0, 1, 'L');
+ 
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetXY(120, 8);
+        $pdf->Cell(80, 5, 'Farooq Fulara: 0320-2788117', 0, 1, 'R');
+        $pdf->SetX(120);
+        $pdf->Cell(80, 5, 'Hamiz Farooq Fulara: 0335-0023574', 0, 1, 'R');
+        $pdf->SetTextColor(0, 0, 0);
+ 
+        // ── Title bar: gold chevron-style label + invoice info box ──
+        $pdf->SetFillColor(201, 162, 75);
+        $pdf->Rect(10, 38, 90, 12, 'F');
+        $pdf->SetFont('helvetica', 'B', 15);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetXY(10, 40.5);
+        $pdf->Cell(90, 7, '  PURCHASE INVOICE', 0, 0, 'L');
+        $pdf->SetTextColor(0, 0, 0);
+ 
         $paymentTermsLine = ucfirst($invoice->payment_terms ?? 'cash');
         if ($invoice->isCredit() && $invoice->credit_days) {
             $paymentTermsLine .= ' (' . $invoice->credit_days . ' days)';
         }
         $dueDateLine = ($invoice->isCredit() && $invoice->dueDate()) ? $invoice->dueDate()->format('d-M-Y') : '—';
-
+ 
         $infoHtml = '<table width="100%" cellpadding="1" style="font-size:9px;">
             <tr><td width="40%"><b>Invoice No</b></td><td width="5%">:</td><td width="55%">PI-' . $invoice->invoice_no . '</td></tr>
             <tr><td><b>Date</b></td><td>:</td><td>' . Carbon::parse($invoice->invoice_date)->format('d-m-Y') . '</td></tr>
             <tr><td><b>Due Date</b></td><td>:</td><td>' . $dueDateLine . '</td></tr>
             <tr><td><b>Status</b></td><td>:</td><td>' . $invoice->statusLabel() . '</td></tr>
         </table>';
-        $this->pdfTitleBar($pdf, 'PURCHASE INVOICE', $infoHtml);
+        $pdf->SetXY(105, 38);
+        $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
 
         // ── Two boxed detail sections: Vendor | Transport ───────────
         $boxY = 60;
