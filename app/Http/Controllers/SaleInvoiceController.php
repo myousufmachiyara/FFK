@@ -780,4 +780,145 @@ class SaleInvoiceController extends Controller
 
         return $pdf->Output('SI_' . $invoice->invoice_no . '.pdf', 'I');
     }
+
+    /**
+     * Second print variant — identical layout/design to print(), reusing
+     * the exact same shared trait helpers (header, title bar, section
+     * boxes, signature, number-to-words) so both stay visually in sync
+     * automatically if those shared pieces ever change. The ONLY
+     * difference is the items table: this version shows just Rate (kg)
+     * and drops Rate (40kg) entirely, redistributing that column's width
+     * across Description/Total for balance.
+     */
+    public function printKgOnly($id)
+    {
+        $invoice = SaleInvoice::with(['account', 'items.product', 'items.variation', 'expenses'])->findOrFail($id);
+
+        $pdf = $this->newInvoicePdf('Sale Invoice #' . $invoice->invoice_no);
+        $this->pdfCompanyHeader($pdf);
+
+        $paymentTermsLine = ucfirst($invoice->type);
+        if ($invoice->isCredit() && $invoice->credit_days) {
+            $paymentTermsLine .= ' (' . $invoice->credit_days . ' days)';
+        }
+        $dueDateLine = ($invoice->isCredit() && $invoice->dueDate()) ? $invoice->dueDate()->format('d-M-Y') : '—';
+
+        $infoHtml = '<table width="100%" cellpadding="1" style="font-size:9px;">
+            <tr><td width="40%"><b>Invoice No</b></td><td width="5%">:</td><td width="55%">SI-' . $invoice->invoice_no . '</td></tr>
+            <tr><td><b>Date</b></td><td>:</td><td>' . Carbon::parse($invoice->date)->format('d-m-Y') . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
+            <tr><td><b>Due Date</b></td><td>:</td><td>' . $dueDateLine . '</td></tr>
+        </table>';
+        $this->pdfTitleBar($pdf, 'SALE INVOICE', $infoHtml);
+
+        // ── Two boxed detail sections: Customer | Transport ─────────
+        $boxY = 60;
+        $this->pdfSectionHeading($pdf, 10, $boxY, 90, 'Customer Details');
+        $this->pdfSectionHeading($pdf, 105, $boxY, 95, 'Transport Details', true);
+
+        $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
+            <tr><td width="35%"><b>Customer</b></td><td width="5%">:</td><td width="60%">' . e($invoice->account->name ?? 'N/A') . '</td></tr>
+        </table>';
+        $transportHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
+            <tr><td width="35%"><b>Bilti No</b></td><td width="5%">:</td><td width="60%">' . ($invoice->bilty_no ?: '-') . '</td></tr>
+            <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?: '-') . '</td></tr>
+        </table>';
+
+        $pdf->SetXY(10, $boxY + 7);
+        $pdf->writeHTMLCell(90, 16, 10, $boxY + 7, $custHtml, 1, 0);
+        $pdf->SetXY(105, $boxY + 7);
+        $pdf->writeHTMLCell(95, 16, 105, $boxY + 7, $transportHtml, 1, 1);
+
+        $pdf->SetY($boxY + 26);
+
+        // ── Items table — Rate (kg) only, Rate (40kg) dropped ────────
+        $html = '
+        <table border="1" cellpadding="3" style="font-size:9px;">
+            <thead>
+                <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
+                    <th width="30%">Description</th><th width="9%">Qty</th>
+                    <th width="14%">Gross Wt</th><th width="14%">Net Wt</th>
+                    <th width="13%">Rate (kg)</th>
+                    <th width="20%">Total</th>
+                </tr>
+            </thead>
+            <tbody>';
+
+        foreach ($invoice->items as $index => $item) {
+            $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
+            $html .= '
+                <tr style="background-color:' . $rowBg . ';">
+                    <td width="30%">' . e($this->itemDescription($item)) . '</td>
+                    <td width="9%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
+                    <td width="14%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
+                    <td width="14%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
+                    <td width="13%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
+                    <td width="20%" style="text-align:right;">' . number_format($item->total, 2) . '</td>
+                </tr>';
+        }
+
+        $html .= '
+                <tr style="font-weight:bold;background-color:#F5EFDF;">
+                    <td colspan="5" style="text-align:right;">Total Item Amount</td>
+                    <td style="text-align:right;">' . number_format($invoice->net_amount, 2) . '</td>
+                </tr>
+            </tbody></table>';
+        $pdf->writeHTML($html, true, false, false, false, '');
+        $pdf->Ln(4);
+
+        // ── Additional Info (expenses) | Totals — side by side ──────
+        $sideY = $pdf->GetY();
+
+        $expRows = '';
+        foreach ($invoice->expenses as $exp) {
+            $expRows .= '<tr><td width="65%">' . $exp->typeLabel() . '</td><td width="35%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+        }
+        if (!$invoice->expenses->count()) {
+            $expRows = '<tr><td colspan="2" style="color:#888;">No Other Expenses</td></tr>';
+        }
+
+        $leftHtml = '
+        <table width="100%" cellpadding="2" style="font-size:9px;">
+            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="2">  Additional Information — Expenses</td></tr>
+            ' . $expRows . '
+            <tr style="font-weight:bold;background-color:#F5EFDF;"><td>Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+        </table>';
+
+        $rightRows = '
+            <tr><td width="55%">Sub Total (Items)</td><td width="45%" style="text-align:right;">' . number_format($invoice->net_amount, 2) . '</td></tr>
+            <tr><td>Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#C9A24B;color:#ffffff;font-size:11px;"><td>GRAND TOTAL</td><td style="text-align:right;">' . number_format($invoice->totalBillAmount(), 2) . '</td></tr>
+            <tr><td>Amount Received</td><td style="text-align:right;">' . number_format($invoice->amount_received, 2) . '</td></tr>
+            <tr style="font-weight:bold;color:#b30000;"><td>Balance Due</td><td style="text-align:right;">' . number_format($invoice->remainingBalance(), 2) . '</td></tr>';
+
+        $rightHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">' . $rightRows . '</table>';
+
+        $pdf->SetXY(10, $sideY);
+        $pdf->writeHTMLCell(90, 0, 10, $sideY, $leftHtml, 1, 0);
+        $leftEndY = $pdf->GetY();
+
+        $pdf->SetXY(105, $sideY);
+        $pdf->writeHTMLCell(95, 0, 105, $sideY, $rightHtml, 1, 1);
+        $rightEndY = $pdf->GetY();
+
+        $pdf->SetY(max($leftEndY, $rightEndY) + 4);
+
+        // ── Amount in Words ──────────────────────────────────────────
+        $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
+            <tr style="background-color:#F5EFDF;">
+                <td><b>Rupees in Words:</b> ' . $this->numberToWords($invoice->totalBillAmount()) . ' Only.</td>
+            </tr>
+        </table>';
+        $pdf->writeHTML($wordsHtml, true, false, false, false, '');
+        $pdf->Ln(2);
+
+        if ($invoice->remarks) {
+            $pdf->SetFont('helvetica', 'I', 9);
+            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->remarks, 0, 'L');
+        }
+
+        $this->pdfSignature($pdf);
+
+        return $pdf->Output('SI_' . $invoice->invoice_no . '_kgrate.pdf', 'I');
+    }
 }

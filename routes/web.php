@@ -169,6 +169,10 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('check.permission:purchase_invoices.add_payment')
         ->name('purchase_invoices.addPayment');
 
+
+    Route::get('sale_invoices/{id}/print-kg-only', [SaleInvoiceController::class, 'printKgOnly'])
+    ->middleware('check.permission:sale_invoices.print')
+    ->name('sale_invoices.printKgOnly');
     // ─────────────────────────────────────────────────────────────
     // Purchase Return — always starts from a specific Received invoice.
     // ─────────────────────────────────────────────────────────────
