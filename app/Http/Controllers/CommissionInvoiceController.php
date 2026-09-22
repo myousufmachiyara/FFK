@@ -972,7 +972,7 @@ class CommissionInvoiceController extends Controller
                     <td width="8%" style="text-align:right;">' . number_format($item->purchase_price, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->purchase_total, 2) . '</td>
                     <td width="8%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
-                    <td width="8%" style="text-align:right;">' . number_format($item->sale_total, 2) . '</td>
+                    <td width="9%" style="text-align:right;">' . number_format($item->sale_total, 2) . '</td>
                     <td width="5%" style="text-align:center;">' . number_format($item->vendor_commission_percentage, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->vendor_commission_amount, 2) . '</td>
                     <td width="5%" style="text-align:center;">' . number_format($item->customer_commission_percentage, 2) . '</td>
