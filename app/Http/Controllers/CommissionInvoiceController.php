@@ -1086,14 +1086,27 @@ class CommissionInvoiceController extends Controller
             $grandTotal  = (float) $invoice->total_purchase_amount;
         }
 
-        $descW = $show40 ? 24 : 28;
-        $qtyW  = 8;
-        $wtW   = 11;
-        $rate40W = $show40 ? 11 : 0;
-        $rateKgW = $show40 ? 11 : 13;
-        $totalW  = $show40 ? 14 : 16;
-        $commPctW = $show40 ? 10 : 11;
-        $commAmtW = 100 - $descW - $qtyW - ($wtW * 2) - $rate40W - $rateKgW - $totalW - $commPctW;
+        if ($show40) {
+            $descW    = 20;
+            $qtyW     = 6;
+            $wtW      = 10;   // used twice (Gross Wt + Net Wt) = 20 total
+            $rate40W  = 10;
+            $rateKgW  = 10;
+            $totalW   = 13;
+            $commPctW = 7;
+            $commAmtW = 14;
+            // 20 + 6 + 10 + 10 + 10 + 10 + 13 + 7 + 14 = 100
+        } else {
+            $descW    = 24;
+            $qtyW     = 7;
+            $wtW      = 11;   // used twice (Gross Wt + Net Wt) = 22 total
+            $rate40W  = 0;
+            $rateKgW  = 12;
+            $totalW   = 15;
+            $commPctW = 8;
+            $commAmtW = 12;
+            // 24 + 7 + 11 + 11 + 12 + 15 + 8 + 12 = 100
+        }
 
         $html = '
         <table border="1" cellpadding="2.5" style="font-size:8px;">
