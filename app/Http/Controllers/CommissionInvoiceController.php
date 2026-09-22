@@ -1119,8 +1119,7 @@ class CommissionInvoiceController extends Controller
             $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="' . $descW . '%">' . e($item->product->name ?? '-')
-                        . ($item->variation->sku ?? null ? ' (' . e($item->variation->sku) . ')' : '') . '</td>
+                    <td width="' . $descW . '%">' . ($item->variation->sku). '</td>
                     <td width="' . $qtyW . '%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="' . $wtW . '%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="' . $wtW . '%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>';
@@ -1363,7 +1362,7 @@ class CommissionInvoiceController extends Controller
         $pdf->SetXY(10, $boxY);
         $pdf->Cell(90, 7, '  Vendor Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Shipment Details', 1, 0, 'L', true);
+        $pdf->Cell(95, 7, '  Transport Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
 
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
@@ -1371,7 +1370,7 @@ class CommissionInvoiceController extends Controller
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->vendor_bill_no ?? '-') . '</td></tr>
             <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
         </table>';
-        
+
         $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Transport</b></td><td width="5%">:</td><td width="65%">' . ($invoice->transport_name ?? '-') . '</td></tr>
             <tr><td><b>Bilti No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
