@@ -1013,9 +1013,9 @@ class CommissionInvoiceController extends Controller
         if ($invoice->isDelivered()) {
             $rightRows .= '
             <tr><td>Paid to Vendor</td><td style="text-align:right;">' . number_format($invoice->amount_paid_to_vendor, 2) . '</td></tr>
-            <tr style="color:#b30000;font-size:12px"><td>Vendor Balance Remaining</td><td style="text-align:right;">' . number_format($invoice->vendorRemainingBalance(), 2) . '</td></tr>
+            <tr style="color:#b30000;font-size:10px"><td>Vendor Balance Remaining</td><td style="text-align:right;">' . number_format($invoice->vendorRemainingBalance(), 2) . '</td></tr>
             <tr><td>Received from Customer</td><td style="text-align:right;">' . number_format($invoice->amount_received_from_customer, 2) . '</td></tr>
-            <tr style="color:#b30000;font-size:12px"><td>Customer Balance Remaining</td><td style="text-align:right;">' . number_format($invoice->customerRemainingBalance(), 2) . '</td></tr>';
+            <tr style="color:#b30000;font-size:10px"><td>Customer Balance Remaining</td><td style="text-align:right;">' . number_format($invoice->customerRemainingBalance(), 2) . '</td></tr>';
         }
 
         $rightHtml = '<table width="100%" cellpadding="2" style="font-size:8.5px;">' . $rightRows . '</table>';
