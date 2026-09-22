@@ -74,7 +74,7 @@
             <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#vendorPaymentModal"><i class="fas fa-money-bill-wave"></i> Pay Vendor</button>
             @endif
             @if($invoice->customerRemainingBalance() > 0.01)
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#customerReceiptModal"><i class="fas fa-hand-holding-usd"></i> Receive from Customer</button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#customerReceiptModal"><i class="fas fa-hand-holding-usd"></i> Received from Customer</button>
             @endif
             <a href="{{ route('commission_returns.create', $invoice->id) }}" class="btn btn-outline-warning">
               <i class="fas fa-reply"></i> Return Items
