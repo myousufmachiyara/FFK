@@ -964,7 +964,7 @@ class CommissionInvoiceController extends Controller
         $pdf = $this->commissionPdfPreamble($invoice, 'COMMISSION INVOICE', 'Commission Invoice #' . $invoice->invoice_no);
 
         // ── One merged party box: vendor and customer side by side ──
-        $boxY = 60;
+        $boxY = 65;
         $this->pdfSectionHeading($pdf, 10, $boxY, 190, 'Invoice Details — Vendor & Customer', true);
 
         $detailsHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
