@@ -1254,7 +1254,7 @@ class CommissionInvoiceController extends Controller
             <tr><td width="30%"><b>Payment Terms</b></td><td width="5%">:</td><td width="65%">' . $paymentTermsLine . '</td></tr>
         </table>';
         $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td width="30%"><b>Bilty No</b></td><td width="5%">:</td><td width="65%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td width="30%"><b>bilti No</b></td><td width="5%">:</td><td width="65%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
             <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
         </table>';
 
