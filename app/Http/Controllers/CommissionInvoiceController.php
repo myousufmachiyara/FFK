@@ -920,7 +920,7 @@ class CommissionInvoiceController extends Controller
         $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
 
         // ── Two boxed detail sections: Vendor | Customer ────────────
-        $boxY = 60;
+        $boxY = 65;
         $pdf->SetFillColor(27, 58, 92);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
