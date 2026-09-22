@@ -1369,11 +1369,12 @@ class CommissionInvoiceController extends Controller
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Vendor</b></td><td width="5%">:</td><td width="65%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->vendor_bill_no ?? '-') . '</td></tr>
-            <tr><td><b>Bilty No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
         </table>';
+        
         $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Transport</b></td><td width="5%">:</td><td width="65%">' . ($invoice->transport_name ?? '-') . '</td></tr>
-            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
+            <tr><td><b>Bilti No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
         </table>';
 
         $pdf->SetXY(10, $boxY + 7);
