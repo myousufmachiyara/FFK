@@ -1109,7 +1109,7 @@ class CommissionInvoiceController extends Controller
         $html .= '
                     <th width="' . $rateKgW . '%">Rate (kg)</th>
                     <th width="' . $totalW . '%">Total</th>
-                    <th width="' . $commPctW . '%">Comm %</th>
+                    <th width="' . $commPctW . '%">C %</th>
                     <th width="' . $commAmtW . '%">Commission</th>
                 </tr>
             </thead>
