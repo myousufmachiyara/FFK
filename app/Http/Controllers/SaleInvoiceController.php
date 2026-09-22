@@ -668,7 +668,7 @@ class SaleInvoiceController extends Controller
         $this->pdfTitleBar($pdf, 'SALE INVOICE', $infoHtml);
 
         // ── Two boxed detail sections: Customer | Transport ─────────
-        $boxY = 55;
+        $boxY = 60;
         $this->pdfSectionHeading($pdf, 10, $boxY, 90, 'Customer Details');
         $this->pdfSectionHeading($pdf, 105, $boxY, 95, 'Transport Details', true);
 
