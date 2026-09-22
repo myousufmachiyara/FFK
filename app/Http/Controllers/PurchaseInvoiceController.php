@@ -959,7 +959,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
 
         // ── Two boxed detail sections: Vendor | Shipment ────────────
-        $boxY = 55;
+        $boxY = 60;
         $pdf->SetFillColor(27, 58, 92);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
