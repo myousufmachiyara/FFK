@@ -21,6 +21,8 @@ use Carbon\Carbon;
 
 class PurchaseInvoiceController extends Controller
 {
+    use \App\Http\Controllers\Concerns\RendersInvoicePdf;
+
     private function resolveAccount(string $configKey, string $label): ChartOfAccounts
     {
         $code = config("purchase_accounts.{$configKey}");
@@ -123,9 +125,11 @@ class PurchaseInvoiceController extends Controller
             $wtPerPacking = (float) $itemData['wt_per_packing'];
             $netOverride  = isset($itemData['net_weight']) && $itemData['net_weight'] !== ''
                 ? (float) $itemData['net_weight'] : null;
-            $ratePer40kg  = (float) $itemData['rate_per_40kg'];
+            $ratePer40kg  = (float) ($itemData['rate_per_40kg'] ?? 0);
+            $ratePerKgIn  = isset($itemData['rate_per_kg']) && $itemData['rate_per_kg'] !== ''
+                ? (float) $itemData['rate_per_kg'] : null;
 
-            $calc = PurchaseInvoiceItem::computeLine($wtPerPacking, $qty, $netOverride, $ratePer40kg, $kgPerMaund);
+            $calc = PurchaseInvoiceItem::computeLine($wtPerPacking, $qty, $netOverride, $ratePer40kg, $kgPerMaund, $ratePerKgIn);
 
             $invoice->items()->create([
                 'item_id'         => $itemData['item_id'],
@@ -135,7 +139,7 @@ class PurchaseInvoiceController extends Controller
                 'quantity'        => $qty,
                 'gross_weight'    => $calc['grossWeight'],
                 'net_weight'      => $calc['netWeight'],
-                'rate_per_40kg'   => $ratePer40kg,
+                'rate_per_40kg'   => $calc['ratePer40kg'],
                 'price'           => $calc['ratePerKg'],
                 'amount'          => $calc['amount'],
             ]);
@@ -193,7 +197,8 @@ class PurchaseInvoiceController extends Controller
             'items.*.wt_per_packing'       => 'required|numeric|min:0.001',
             'items.*.quantity'             => 'required|numeric|min:0.01',
             'items.*.net_weight'           => 'nullable|numeric|min:0',
-            'items.*.rate_per_40kg'        => 'required|numeric|min:0',
+            'items.*.rate_per_40kg'        => 'required_without:items.*.rate_per_kg|nullable|numeric|min:0',
+            'items.*.rate_per_kg'          => 'nullable|numeric|min:0',
             'expenses'                     => 'nullable|array',
             'expenses.*.expense_type'      => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'       => 'nullable|string|max:255',
@@ -312,7 +317,8 @@ class PurchaseInvoiceController extends Controller
             'items.*.wt_per_packing'       => 'required|numeric|min:0.001',
             'items.*.quantity'             => 'required|numeric|min:0.01',
             'items.*.net_weight'           => 'nullable|numeric|min:0',
-            'items.*.rate_per_40kg'        => 'required|numeric|min:0',
+            'items.*.rate_per_40kg'        => 'required_without:items.*.rate_per_kg|nullable|numeric|min:0',
+            'items.*.rate_per_kg'          => 'nullable|numeric|min:0',
             'expenses'                     => 'nullable|array',
             'expenses.*.expense_type'      => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'       => 'nullable|string|max:255',
@@ -892,56 +898,8 @@ class PurchaseInvoiceController extends Controller
     {
         $invoice = PurchaseInvoice::with(['vendor', 'items.product', 'items.variation', 'expenses'])->findOrFail($id);
 
-        $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
-        $pdf->SetCreator('Farooq Fulara (Karachi)');
-        $pdf->SetAuthor('Farooq Fulara (Karachi)');
-        $pdf->SetTitle('Purchase Invoice #' . $invoice->invoice_no);
-        $pdf->setPrintHeader(false);
-        $pdf->setPrintFooter(false);
-        $pdf->SetMargins(10, 10, 10);
-        $pdf->SetAutoPageBreak(true, 25);
-        $pdf->AddPage();
-
-        $navy = '#1B3A5C';
-        $gold = '#C9A24B';
-        $lightGold = '#F5EFDF';
-
-        // ── Header band (navy, full width) ─────────────────────────
-        $pdf->SetFillColor(27, 58, 92);
-        $pdf->Rect(0, 0, 210, 32, 'F');
-
-        $logoPath = public_path('assets/img/ff-logo.jpg');
-        $nameX = 12;
-        if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 12, 5, 22);
-            $nameX = 38;
-        }
-
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetFont('helvetica', 'B', 19);
-        $pdf->SetXY($nameX, 8);
-        $pdf->Cell(120, 8, 'FAROOQ FULARA', 0, 1, 'L');
-        $pdf->SetFont('helvetica', '', 11);
-        $pdf->SetXY($nameX, 17);
-        $pdf->SetTextColor(201, 162, 75);
-        $pdf->Cell(120, 6, '(KARACHI)', 0, 1, 'L');
-
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetXY(120, 8);
-        $pdf->Cell(80, 5, 'Farooq Fulara: 0320-2788117', 0, 1, 'R');
-        $pdf->SetX(120);
-        $pdf->Cell(80, 5, 'Hamiz Farooq Fulara: 0335-0023574', 0, 1, 'R');
-        $pdf->SetTextColor(0, 0, 0);
-
-        // ── Title bar: gold chevron-style label + invoice info box ──
-        $pdf->SetFillColor(201, 162, 75);
-        $pdf->Rect(10, 38, 90, 12, 'F');
-        $pdf->SetFont('helvetica', 'B', 15);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetXY(10, 40.5);
-        $pdf->Cell(90, 7, '  PURCHASE INVOICE', 0, 0, 'L');
-        $pdf->SetTextColor(0, 0, 0);
+        $pdf = $this->newInvoicePdf('Purchase Invoice #' . $invoice->invoice_no);
+        $this->pdfCompanyHeader($pdf);
 
         $paymentTermsLine = ucfirst($invoice->payment_terms ?? 'cash');
         if ($invoice->isCredit() && $invoice->credit_days) {
@@ -955,27 +913,20 @@ class PurchaseInvoiceController extends Controller
             <tr><td><b>Due Date</b></td><td>:</td><td>' . $dueDateLine . '</td></tr>
             <tr><td><b>Status</b></td><td>:</td><td>' . $invoice->statusLabel() . '</td></tr>
         </table>';
-        $pdf->SetXY(105, 38);
-        $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
+        $this->pdfTitleBar($pdf, 'PURCHASE INVOICE', $infoHtml);
 
-        // ── Two boxed detail sections: Vendor | Shipment ────────────
+        // ── Two boxed detail sections: Vendor | Transport ───────────
         $boxY = 60;
-        $pdf->SetFillColor(27, 58, 92);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetFont('helvetica', 'B', 10);
-        $pdf->SetXY(10, $boxY);
-        $pdf->Cell(90, 7, '  Vendor Details', 1, 0, 'L', true);
-        $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Shipment Details', 1, 0, 'L', true);
-        $pdf->SetTextColor(0, 0, 0);
+        $this->pdfSectionHeading($pdf, 10, $boxY, 90, 'Vendor Details');
+        $this->pdfSectionHeading($pdf, 105, $boxY, 95, 'Transport Details', true);
 
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="35%"><b>Vendor</b></td><td width="5%">:</td><td width="60%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->bill_no ?? '-') . '</td></tr>
             <tr><td><b>Ref No</b></td><td>:</td><td>' . ($invoice->ref_no ?? '-') . '</td></tr>
         </table>';
-        $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td width="35%"><b>Bilty No</b></td><td width="5%">:</td><td width="60%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
+        $transportHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
+            <tr><td width="35%"><b>Bilti No</b></td><td width="5%">:</td><td width="60%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
             <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
             <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
         </table>';
@@ -983,7 +934,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetXY(10, $boxY + 7);
         $pdf->writeHTMLCell(90, 22, 10, $boxY + 7, $vendorHtml, 1, 0);
         $pdf->SetXY(105, $boxY + 7);
-        $pdf->writeHTMLCell(95, 22, 105, $boxY + 7, $shipHtml, 1, 1);
+        $pdf->writeHTMLCell(95, 22, 105, $boxY + 7, $transportHtml, 1, 1);
 
         $pdf->SetY($boxY + 32);
 
@@ -992,8 +943,7 @@ class PurchaseInvoiceController extends Controller
         <table border="1" cellpadding="3" style="font-size:9px;">
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
-                    <th width="16%">Item</th>
-                    <th width="9%">Variation</th>
+                    <th width="25%">Description</th>
                     <th width="9%">Wt/Packing</th>
                     <th width="6%">Qty</th>
                     <th width="10%">Gross Wt</th>
@@ -1006,13 +956,11 @@ class PurchaseInvoiceController extends Controller
             <tbody>';
 
         foreach ($invoice->items as $index => $item) {
-            $variationName = $item->variation->sku ?? '-';
             $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
 
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="16%">' . e($item->product->name ?? '-') . '</td>
-                    <td width="9%" style="text-align:center;">' . e($variationName) . '</td>
+                    <td width="25%">' . e($this->itemDescription($item)) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->wt_per_packing, 2) . '</td>
                     <td width="6%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="10%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
@@ -1025,7 +973,7 @@ class PurchaseInvoiceController extends Controller
 
         $html .= '
                 <tr style="font-weight:bold;background-color:#F5EFDF;">
-                    <td colspan="8" style="text-align:right;">Total Item Amount</td>
+                    <td colspan="7" style="text-align:right;">Total Item Amount</td>
                     <td style="text-align:right;">' . number_format($invoice->total_amount, 2) . '</td>
                 </tr>
             </tbody>
@@ -1089,27 +1037,7 @@ class PurchaseInvoiceController extends Controller
             $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->remarks, 0, 'L');
         }
 
-        // ── Signature ───────────────────────────────────────────────
-        $pdf->SetFont('helvetica', '', 10);
-        $ySign = $pdf->GetY() + 20;
-        if ($ySign > 250) { $pdf->AddPage(); $ySign = 30; }
-
-        $pdf->Line(140, $ySign, 195, $ySign);
-        $pdf->SetXY(140, $ySign + 1);
-        $pdf->Cell(55, 5, 'Authorized Signature', 0, 1, 'C');
-        $pdf->SetFont('helvetica', 'B', 9);
-        $pdf->SetX(140);
-        $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
-
-        // ── Footer band ───────────────────────────────────────────────
-        $footY = 282;
-        $pdf->SetFillColor(27, 58, 92);
-        $pdf->Rect(0, $footY, 210, 15, 'F');
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetXY(10, $footY + 4);
-        $pdf->Cell(190, 5, 'Farooq Fulara: 0320-2788117   |   Hamiz Farooq Fulara: 0335-0023574   |   Karachi, Pakistan', 0, 1, 'C');
-        $pdf->SetTextColor(0, 0, 0);
+        $this->pdfSignature($pdf);
 
         return $pdf->Output('PI_' . $invoice->invoice_no . '.pdf', 'I');
     }
