@@ -26,6 +26,9 @@
           <a href="{{ route('sale_invoices.edit', $invoice->id) }}" class="btn btn-outline-primary">
             <i class="fas fa-edit"></i> Edit
           </a>
+          <a href="{{ route('sale_returns.create', $invoice->id) }}" class="btn btn-outline-warning">
+            <i class="fas fa-reply"></i> Return Items
+          </a>
           @if($invoice->remainingBalance() <= 0.01)
             <span class="badge bg-success p-2">Fully Paid</span>
           @endif
@@ -47,8 +50,6 @@
             {{ ucfirst($invoice->type) }}
             @if($invoice->isCredit() && $invoice->credit_days) ({{ $invoice->credit_days }} days) @endif
           </div>
-          <div class="col-md-3"><strong>Bilti #:</strong><br>{{ $invoice->bilty_no ?: '-' }}</div>
-          <div class="col-md-3"><strong>Transport:</strong><br>{{ $invoice->transport_name ?: '-' }}</div>
           @if($invoice->isCredit() && $invoice->dueDate())
           <div class="col-md-3">
             <strong>Due Date:</strong><br>
@@ -66,7 +67,7 @@
               <tr>
                 <th>#</th><th>Item</th><th>Variation</th><th>Packing</th>
                 <th>Wt/Packing</th><th>Qty</th><th>Gross Wt</th><th>Net Wt</th>
-                <th>Rate (40 kg)</th><th>Rate (kg)</th><th>Total</th>
+                <th>Rate (40 kg)</th><th>Rate (kg)</th><th>Disc %</th><th>Total</th>
               </tr>
             </thead>
             <tbody>
@@ -82,6 +83,7 @@
                 <td>{{ number_format($item->net_weight, 2) }}</td>
                 <td>{{ number_format($item->rate_per_40kg, 2) }}</td>
                 <td>{{ number_format($item->sale_price, 4) }}</td>
+                <td>{{ number_format($item->discount, 2) }}</td>
                 <td>{{ number_format($item->total, 2) }}</td>
               </tr>
               @endforeach
@@ -89,7 +91,7 @@
                 <td colspan="6" class="text-end">Totals</td>
                 <td>{{ number_format($invoice->total_gross_weight, 2) }}</td>
                 <td>{{ number_format($invoice->total_weight, 2) }}</td>
-                <td colspan="2"></td>
+                <td colspan="3"></td>
                 <td>{{ number_format($invoice->net_amount, 2) }}</td>
               </tr>
             </tbody>

@@ -129,12 +129,15 @@
           @endif
 
           {{-- Commission / Brokerage Invoices --}}
-          @if(auth()->user()->can('commission_invoices.index'))
+          @if(auth()->user()->can('commission_invoices.index') || auth()->user()->can('commission_return.index'))
           <li class="nav-parent">
             <a class="nav-link" href="#"><i class="fa fa-handshake"></i> <span>Commission</span></a>
             <ul class="nav nav-children">
               @can('commission_invoices.index')
               <li><a class="nav-link" href="{{ route('commission_invoices.index') }}">Invoices</a></li>
+              @endcan
+              @can('commission_return.index')
+              <li><a class="nav-link" href="{{ route('commission_return.index') }}">Returns</a></li>
               @endcan
             </ul>
           </li>
@@ -187,7 +190,9 @@
               @can('reports.accounts')
                 <li><a class="nav-link" href="{{ route('reports.accounts') }}">Accounts</a></li>
               @endcan
-              {{-- Commission report route not built yet — link intentionally omitted until it exists. --}}
+              @can('reports.commission')
+                <li><a class="nav-link" href="{{ route('reports.commission') }}">Commission</a></li>
+              @endcan
             </ul>
           </li>
           @endif

@@ -33,7 +33,7 @@
 
           @if($invoice->isInTransit())
             <a href="{{ route('purchase_invoices.receiveForm', $invoice->id) }}" class="btn btn-success">
-              <i class="fas fa-box-open"></i> Received Goods
+              <i class="fas fa-box-open"></i> Receive Goods
             </a>
             <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#revertModal">
               <i class="fas fa-undo"></i> Revert Dispatch
@@ -49,6 +49,9 @@
               <i class="fas fa-money-bill-wave"></i> Record Payment
             </button>
             @endif
+            <a href="{{ route('purchase_returns.create', $invoice->id) }}" class="btn btn-outline-warning">
+              <i class="fas fa-reply"></i> Return Items
+            </a>
           @endif
         </div>
       </header>
@@ -58,7 +61,7 @@
           <div class="col-md-2"><strong>Invoice Date:</strong><br>{{ $invoice->invoice_date->format('d-M-Y') }}</div>
           <div class="col-md-2"><strong>Vendor:</strong><br>{{ $invoice->vendor->name ?? 'N/A' }}</div>
           <div class="col-md-2"><strong>Vendor Bill #:</strong><br>{{ $invoice->bill_no ?? '—' }}</div>
-          <div class="col-md-2"><strong>Bilti #:</strong><br>{{ $invoice->bilty_no ?? '—' }}</div>
+          <div class="col-md-2"><strong>Bilty #:</strong><br>{{ $invoice->bilty_no ?? '—' }}</div>
           <div class="col-md-2"><strong>Transport:</strong><br>{{ $invoice->transport_name ?? '—' }}</div>
           <div class="col-md-2"><strong>Ref #:</strong><br>{{ $invoice->ref_no ?? '—' }}</div>
         </div>
@@ -84,8 +87,8 @@
             <thead>
               <tr>
                 <th>#</th><th>Item</th><th>Variation</th><th>Packing</th>
-                <th>Wt/Packing</th><th>Qty</th><th>Gross Wt</th><th>Net Wt</th>
-                <th>Rec. Net Wt</th><th>Short Wt</th>
+                <th>Wt/Packing</th><th>Qty (bags)</th><th>Gross Wt</th><th>Net Wt</th>
+                <th>Rec. Bags</th><th>Rec. Net Wt</th><th>Short Wt</th>
                 <th>Rate (40 kg)</th><th>Rate (kg)</th><th>Amount</th><th>Landed/kg</th>
               </tr>
             </thead>
@@ -100,6 +103,7 @@
                 <td>{{ number_format($item->quantity, 0) }}</td>
                 <td>{{ number_format($item->gross_weight, 2) }}</td>
                 <td>{{ number_format($item->net_weight, 2) }}</td>
+                <td>{{ $item->received_packing_qty !== null ? number_format($item->received_packing_qty, 0) : '—' }}</td>
                 <td>{{ $item->received_net_weight !== null ? number_format($item->received_net_weight, 2) : '—' }}</td>
                 <td>{{ $item->short_weight > 0 ? number_format($item->short_weight, 2) : '—' }}</td>
                 <td>{{ number_format($item->rate_per_40kg, 2) }}</td>
@@ -112,7 +116,7 @@
                 <td colspan="6" class="text-end">Totals</td>
                 <td>{{ number_format($invoice->total_gross_weight, 2) }}</td>
                 <td>{{ number_format($invoice->total_weight, 2) }}</td>
-                <td colspan="4"></td>
+                <td colspan="5"></td>
                 <td>{{ number_format($invoice->total_amount, 2) }}</td>
                 <td></td>
               </tr>
@@ -234,7 +238,7 @@
             <input type="text" name="bill_no" class="form-control" value="{{ $invoice->bill_no }}" required>
           </div>
           <div class="mb-3">
-            <label>Bilti Number *</label>
+            <label>Bilty Number *</label>
             <input type="text" name="bilty_no" class="form-control" value="{{ $invoice->bilty_no }}" required>
           </div>
           <div class="mb-3">
