@@ -21,7 +21,45 @@
           <span class="{{ $invoice->statusBadgeClass() }} ms-2">{{ $invoice->statusLabel() }}</span>
         </h2>
         <div>
-          <a href="{{ route('commission_invoices.print', $invoice->id) }}" target="_blank" class="btn btn-outline-success"><i class="fas fa-print"></i> Print</a>
+          <div class="btn-group">
+            <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+              <i class="fas fa-print"></i> Print
+            </button>
+            <ul class="dropdown-menu">
+              <li><h6 class="dropdown-header">Full Detail</h6></li>
+              <li>
+                <a class="dropdown-item" href="{{ route('commission_invoices.print', $invoice->id) }}" target="_blank">
+                  Detailed (Vendor + Customer)
+                </a>
+              </li>
+          
+              <li><hr class="dropdown-divider"></li>
+              <li><h6 class="dropdown-header">Customer Copy</h6></li>
+              <li>
+                <a class="dropdown-item" href="{{ route('commission_invoices.printCustomerKgOnly', $invoice->id) }}" target="_blank">
+                  Customer — Rate (kg) only
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="{{ route('commission_invoices.printCustomerBoth', $invoice->id) }}" target="_blank">
+                  Customer — Rate (40kg) &amp; (kg)
+                </a>
+              </li>
+          
+              <li><hr class="dropdown-divider"></li>
+              <li><h6 class="dropdown-header">Vendor Copy</h6></li>
+              <li>
+                <a class="dropdown-item" href="{{ route('commission_invoices.printVendorKgOnly', $invoice->id) }}" target="_blank">
+                  Vendor — Rate (kg) only
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="{{ route('commission_invoices.printVendorBoth', $invoice->id) }}" target="_blank">
+                  Vendor — Rate (40kg) &amp; (kg)
+                </a>
+              </li>
+            </ul>
+          </div>
           @if($invoice->isPending())
             <a href="{{ route('commission_invoices.edit', $invoice->id) }}" class="btn btn-outline-primary"><i class="fas fa-edit"></i> Edit</a>
             <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#inTransitModal"><i class="fas fa-truck"></i> Move to In Transit</button>
