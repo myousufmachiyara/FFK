@@ -23,6 +23,9 @@
           <a href="{{ route('sale_invoices.print', $invoice->id) }}" target="_blank" class="btn btn-outline-success">
             <i class="fas fa-print"></i> Print
           </a>
+          <a href="{{ route('sale_invoices.printKgOnly', $invoice->id) }}" target="_blank" class="btn btn-outline-success" title="Print — Rate/kg only">
+              <i class="fas fa-print"></i> Print (kg rate)
+          </a>
           <a href="{{ route('sale_invoices.edit', $invoice->id) }}" class="btn btn-outline-primary">
             <i class="fas fa-edit"></i> Edit
           </a>
