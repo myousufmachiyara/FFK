@@ -1132,7 +1132,7 @@ class CommissionInvoiceController extends Controller
             $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="' . $descW . '%">' . ($item->variation->sku). '</td>
+                    <td width="' . $descW . '%">' . $item->variation?->sku ?? $item->product->sku ?? '-'. '</td>
                     <td width="' . $qtyW . '%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="' . $wtW . '%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="' . $wtW . '%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>';
