@@ -1122,7 +1122,7 @@ class CommissionInvoiceController extends Controller
         $html .= '
                     <th width="' . $rateKgW . '%">Rate (kg)</th>
                     <th width="' . $totalW . '%">Total</th>
-                    <th width="' . $commPctW . '%">C %</th>
+                    <th width="' . $commPctW . '%">Comm %</th>
                     <th width="' . $commAmtW . '%">Commission</th>
                 </tr>
             </thead>
@@ -1130,9 +1130,14 @@ class CommissionInvoiceController extends Controller
 
         foreach ($invoice->items as $index => $item) {
             $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
+
+            // Null-safe: some items have a variation, some don't. If no
+            // variation, fall back to the product's own SKU, then '-'.
+            $skuLabel = $item->variation?->sku ?? $item->product->sku ?? '-';
+
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="' . $descW . '%">' . $item->variation?->sku ?? $item->product->sku ?? '-'. '</td>
+                    <td width="' . $descW . '%">' . e($item->product->name ?? '-') . ' (' . e($skuLabel) . ')</td>
                     <td width="' . $qtyW . '%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="' . $wtW . '%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="' . $wtW . '%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>';
