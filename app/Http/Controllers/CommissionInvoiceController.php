@@ -1040,10 +1040,15 @@ class CommissionInvoiceController extends Controller
         $pdf->writeHTML($wordsHtml, true, false, false, false, '');
         $pdf->Ln(2);
 
-        if ($invoice->delivery_remarks) {
+        if ($invoice->remarks) {
             $pdf->SetFont('helvetica', 'I', 9);
-            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->delivery_remarks, 0, 'L');
+            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->remarks, 0, 'L');
         }
+
+        // if ($invoice->delivery_remarks) {
+        //     $pdf->SetFont('helvetica', 'I', 9);
+        //     $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->delivery_remarks, 0, 'L');
+        // }
 
         // ── Signature ───────────────────────────────────────────────
         $pdf->SetFont('helvetica', '', 10);
