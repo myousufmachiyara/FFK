@@ -1133,7 +1133,7 @@ class CommissionInvoiceController extends Controller
             </thead>
             <tbody>';
 
-            foreach ($invoice->items as $index => $item) {
+                foreach ($invoice->items as $index => $item) {
             $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
     
             // Show ONLY the SKU, not name + SKU combined. If the item has a

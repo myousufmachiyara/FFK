@@ -123,10 +123,7 @@ trait RendersInvoicePdf
      */
     protected function itemDescription($item): string
     {
-        $name = $item->product->name ?? '-';
-        $sku  = $item->variation->sku ?? null;
-
-        return $sku;
+        return $item->variation->sku ?? $item->product->sku ?? '-';
     }
 
     /** A fresh A4 portrait document with this app's standard setup. */
