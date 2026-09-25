@@ -1133,16 +1133,17 @@ class CommissionInvoiceController extends Controller
             </thead>
             <tbody>';
 
-        foreach ($invoice->items as $index => $item) {
+            foreach ($invoice->items as $index => $item) {
             $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
-
-            // Null-safe: some items have a variation, some don't. If no
-            // variation, fall back to the product's own SKU, then '-'.
+    
+            // Show ONLY the SKU, not name + SKU combined. If the item has a
+            // variation, that variation's SKU is the identifying one; if
+            // not, fall back to the product's own SKU.
             $skuLabel = $item->variation?->sku ?? $item->product->sku ?? '-';
-
+    
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="' . $descW . '%">' . e($item->product->name ?? '-') . ' (' . e($skuLabel) . ')</td>
+                    <td width="' . $descW . '%">' . e($skuLabel) . '</td>
                     <td width="' . $qtyW . '%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="' . $wtW . '%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="' . $wtW . '%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>';
