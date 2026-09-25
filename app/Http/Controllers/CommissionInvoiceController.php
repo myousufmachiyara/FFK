@@ -1452,6 +1452,7 @@ class CommissionInvoiceController extends Controller
         $pdf->writeHTMLCell(95, 0, 105, $sideY, $rightHtml, 1, 1);
         $rightEndY = $pdf->GetY();
         $pdf->SetY(max($leftEndY, $rightEndY) + 4);
+        $pdf->Ln(4);
 
         $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
             <tr style="background-color:#F5EFDF;">
