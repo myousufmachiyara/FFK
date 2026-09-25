@@ -51,6 +51,8 @@ class ProductSubcategoryController extends Controller
         $productSubcategory = ProductSubcategory::findOrFail($id);
         $productSubcategory->delete();
 
-        return redirect()->route('products.index')->with('success', 'Product deleted successfully.');
+         return redirect()
+            ->route('product_subcategories.index')
+            ->with('success', 'Subcategory deleted successfully.');
     }
 }
