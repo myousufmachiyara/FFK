@@ -24,9 +24,6 @@ use App\Http\Controllers\{
     SalesReportController,
     AccountsReportController,
     CommissionReportController,
-    // PermissionController, // DISABLED: class does not exist in app/Http/Controllers yet.
-                              // Was referenced in the original routes file but never built.
-                              // Re-enable once that controller is actually created.
     ProductSubcategoryController,
 };
 
@@ -367,10 +364,22 @@ Route::middleware(['auth'])->group(function () {
     // Reports (readonly)
     // ─────────────────────────────────────────────────────────────
     Route::prefix('reports')->name('reports.')->group(function () {
-        Route::get('inventory', [InventoryReportController::class, 'inventoryReports'])->name('inventory');
-        Route::get('purchase', [PurchaseReportController::class, 'purchaseReports'])->name('purchase');
-        Route::get('sale', [SalesReportController::class, 'saleReports'])->name('sale');
-        Route::get('accounts', [AccountsReportController::class, 'accounts'])->name('accounts');
+        Route::get('inventory', [InventoryReportController::class, 'inventoryReports'])
+            ->middleware('check.permission:reports.inventory')
+            ->name('inventory');
+ 
+        Route::get('purchase', [PurchaseReportController::class, 'purchaseReports'])
+            ->middleware('check.permission:reports.purchase')
+            ->name('purchase');
+ 
+        Route::get('sale', [SalesReportController::class, 'saleReports'])
+            ->middleware('check.permission:reports.sales')
+            ->name('sale');
+ 
+        Route::get('accounts', [AccountsReportController::class, 'accounts'])
+            ->middleware('check.permission:reports.accounts')
+            ->name('accounts');
+ 
         Route::get('commission', [CommissionReportController::class, 'commissionReports'])
             ->middleware('check.permission:reports.commission')
             ->name('commission');
