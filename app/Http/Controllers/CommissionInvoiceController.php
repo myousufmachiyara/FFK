@@ -1283,7 +1283,7 @@ class CommissionInvoiceController extends Controller
 
         $expRows = '';
         foreach ($invoice->expenses as $exp) {
-            $expRows .= '<tr><td width="65%">' . $exp->typeLabel() . '</td><td width="35%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+            $expRows .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="50%">' . $exp->description . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
         }
         if (!$invoice->expenses->count()) {
             $expRows = '<tr><td colspan="2" style="color:#888;">No Other Expenses</td></tr>';
@@ -1419,7 +1419,7 @@ class CommissionInvoiceController extends Controller
 
         $expRows = '';
         foreach ($invoice->expenses as $exp) {
-            $expRows .= '<tr><td width="65%">' . $exp->typeLabel() . '</td><td width="35%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+            $expRows .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="50%">' . $exp->description . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
         }
         if (!$invoice->expenses->count()) {
             $expRows = '<tr><td colspan="2" style="color:#888;">No Other Expenses</td></tr>';
