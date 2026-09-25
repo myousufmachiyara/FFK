@@ -923,12 +923,12 @@ class PurchaseInvoiceController extends Controller
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="35%"><b>Vendor</b></td><td width="5%">:</td><td width="60%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->bill_no ?? '-') . '</td></tr>
-            <tr><td><b>Ref No</b></td><td>:</td><td>' . ($invoice->ref_no ?? '-') . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
         </table>';
         $transportHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="35%"><b>Bilti No</b></td><td width="5%">:</td><td width="60%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
             <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
-            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
+            <tr><td><b>Ref No</b></td><td>:</td><td>' . ($invoice->ref_no ?? '-') . '</td></tr>
         </table>';
 
         $pdf->SetXY(10, $boxY + 7);
