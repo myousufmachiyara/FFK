@@ -6,7 +6,9 @@
 <div class="row">
   <div class="col">
     <section class="card">
-      <header class="card-header"><h2 class="card-title">Purchase Returns</h2></header>
+      <header class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="card-title">Purchase Returns</h2>
+      </header>
       <div class="card-body">
 
         <form method="GET" class="row g-2 mb-3">
@@ -51,4 +53,4 @@
     </section>
   </div>
 </div>
-@endsections
+@endsection
