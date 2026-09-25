@@ -989,7 +989,7 @@ class CommissionInvoiceController extends Controller
         $expRows = '';
         foreach ($invoice->expenses as $exp) {
             $payTo = $exp->paid_by === 'vendor' ? ($invoice->vendor->name ?? '-') : ($exp->payeeAccount->name ?? '-');
-            $expRows .= '<tr><td width="50%">' . $exp->typeLabel() . '</td><td width="25%">' . $exp->paidByLabel() . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+            $expRows .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="50%">' . $exp->description . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
         }
         if (!$invoice->expenses->count()) {
             $expRows = '<tr><td colspan="3" style="color:#888;">No Other Expenses</td></tr>';
