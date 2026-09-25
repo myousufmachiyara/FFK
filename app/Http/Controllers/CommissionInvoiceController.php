@@ -1029,7 +1029,7 @@ class CommissionInvoiceController extends Controller
         $rightEndY = $pdf->GetY();
 
         $pdf->SetY(max($leftEndY, $rightEndY) + 4);
-
+        $pdf->Ln(4);
         // ── Amount in Words (Customer Receivable — the figure the
         // customer actually needs to know they owe) ──────────────────
         $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
