@@ -109,9 +109,17 @@ class CommissionInvoice extends Model
      * Payable posted at In Transit is total_purchase_amount; if vendor
      * commission applies, it's reduced at Delivered by that amount.
      */
+
     public function totalVendorPayable(): float
     {
-        return round((float) $this->total_purchase_amount - (float) $this->total_vendor_commission_amount, 2);
+        $vendorPaidExpenses = (float) $this->expenses->where('paid_by', 'vendor')->sum('amount');
+ 
+        return round(
+            (float) $this->total_purchase_amount
+            - (float) $this->total_vendor_commission_amount
+            + $vendorPaidExpenses,
+            2
+        );
     }
 
     /** Customer Receivable = Sale Amount + Other Expenses (unaffected by which commission leg applies). */

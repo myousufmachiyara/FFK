@@ -59,35 +59,6 @@ class PurchaseReturnController extends Controller
         return view('purchase_returns.create', compact('invoice', 'items'));
     }
 
-
-    /**
-     * The rate the line is reversed at. Both rate boxes on the form are
-     * live and arrive pre-filled with the original booked rate, so the
-     * usual case reverses exactly what was booked — but an operator can
-     * override either box when the return is genuinely settled at a
-     * different rate. Per-kg wins when both arrive, being the finer of
-     * the two.
-     */
-    private function resolveReturnRate(array $itemInput, float $originalRatePerKg): float
-    {
-        $kgPerMaund = (int) config('purchase_settings.kg_per_maund', 40);
-
-        $ratePerKg = isset($itemInput['rate_per_kg']) && $itemInput['rate_per_kg'] !== ''
-            ? (float) $itemInput['rate_per_kg'] : null;
-        $ratePer40 = isset($itemInput['rate_per_40kg']) && $itemInput['rate_per_40kg'] !== ''
-            ? (float) $itemInput['rate_per_40kg'] : null;
-
-        if ($ratePerKg !== null && $ratePerKg > 0) {
-            return round($ratePerKg, 4);
-        }
-
-        if ($ratePer40 !== null && $ratePer40 > 0 && $kgPerMaund > 0) {
-            return round($ratePer40 / $kgPerMaund, 4);
-        }
-
-        return round($originalRatePerKg, 4);
-    }
-
     public function store(Request $request)
     {
         $request->validate([
@@ -98,8 +69,6 @@ class PurchaseReturnController extends Controller
             'items.*.purchase_invoice_item_id' => 'required|exists:purchase_invoice_items,id',
             'items.*.quantity'    => 'required|numeric|min:0.01',
             'items.*.net_weight'  => 'required|numeric|min:0.01',
-            'items.*.rate_per_40kg' => 'nullable|numeric|min:0',
-            'items.*.rate_per_kg'   => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -149,7 +118,7 @@ class PurchaseReturnController extends Controller
                 // Same per-kg rate as the original purchase — a return
                 // doesn't renegotiate price, it reverses what was actually
                 // booked.
-                $rate   = $this->resolveReturnRate($itemInput, (float) $originalItem->price);
+                $rate   = (float) $originalItem->price;
                 $amount = round($wt * $rate, 2);
 
                 PurchaseReturnItem::create([
@@ -260,8 +229,6 @@ class PurchaseReturnController extends Controller
             'items.*.purchase_invoice_item_id' => 'required|exists:purchase_invoice_items,id',
             'items.*.quantity'   => 'required|numeric|min:0.01',
             'items.*.net_weight' => 'required|numeric|min:0.01',
-            'items.*.rate_per_40kg' => 'nullable|numeric|min:0',
-            'items.*.rate_per_kg'   => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -316,7 +283,7 @@ class PurchaseReturnController extends Controller
                     throw new \Exception("Cannot return {$wt} kg for item #{$originalItem->id} — only {$remainingWt} kg remain returnable.");
                 }
 
-                $rate   = $this->resolveReturnRate($itemInput, (float) $originalItem->price);
+                $rate   = (float) $originalItem->price;
                 $amount = round($wt * $rate, 2);
 
                 PurchaseReturnItem::create([
@@ -367,76 +334,203 @@ class PurchaseReturnController extends Controller
         }
     }
 
+    /** English number-to-words, standard Million/Thousand system, whole rupees. */
+    private function numberToWords(float $number): string
+    {
+        $number = (int) round($number);
+        if ($number == 0) return 'Zero';
+
+        $ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+                 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+                 'Seventeen', 'Eighteen', 'Nineteen'];
+        $tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        $convertHundreds = function ($n) use (&$convertHundreds, $ones, $tens) {
+            $str = '';
+            if ($n >= 100) {
+                $str .= $ones[intdiv($n, 100)] . ' Hundred ';
+                $n %= 100;
+            }
+            if ($n >= 20) {
+                $str .= $tens[intdiv($n, 10)] . ' ';
+                $n %= 10;
+            }
+            if ($n > 0) {
+                $str .= $ones[$n] . ' ';
+            }
+            return $str;
+        };
+
+        $parts = [];
+        $billions = intdiv($number, 1000000000); $number %= 1000000000;
+        $millions = intdiv($number, 1000000);    $number %= 1000000;
+        $thousands = intdiv($number, 1000);       $number %= 1000;
+        $rest = $number;
+
+        if ($billions  > 0) $parts[] = trim($convertHundreds($billions))  . ' Billion';
+        if ($millions  > 0) $parts[] = trim($convertHundreds($millions))  . ' Million';
+        if ($thousands > 0) $parts[] = trim($convertHundreds($thousands)) . ' Thousand';
+        if ($rest      > 0) $parts[] = trim($convertHundreds($rest));
+
+        return trim(implode(' ', $parts));
+    }
+
     public function print($id)
     {
         $return = PurchaseReturn::with(['purchaseInvoice', 'vendor', 'items.item', 'items.variation'])->findOrFail($id);
 
-        $pdf = new \TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+        $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $pdf->SetCreator('Farooq Fulara (Karachi)');
+        $pdf->SetAuthor('Farooq Fulara (Karachi)');
         $pdf->SetTitle('Purchase Return #' . $return->return_no);
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
-        $pdf->SetMargins(15, 15, 15);
-        $pdf->SetAutoPageBreak(true, 20);
+        $pdf->SetMargins(10, 10, 10);
+        $pdf->SetAutoPageBreak(true, 25);
         $pdf->AddPage();
 
+        // ── Header band (navy, full width) ─────────────────────────
+        $pdf->SetFillColor(27, 58, 92);
+        $pdf->Rect(0, 0, 210, 32, 'F');
+
         $logoPath = public_path('assets/img/ff-logo.jpg');
-        $nameX = 15;
+        $nameX = 12;
         if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 15, 10, 24);
-            $nameX = 42;
+            $pdf->Image($logoPath, 12, 5, 22);
+            $nameX = 38;
         }
-        $pdf->SetFont('helvetica', 'B', 18);
-        $pdf->SetXY($nameX, 12);
-        $pdf->Cell(195 - $nameX, 8, 'FAROOQ FULARA (KARACHI)', 0, 1, 'L');
-        $pdf->SetFont('helvetica', 'BI', 9);
-        $pdf->SetXY($nameX, 21);
-        $pdf->Cell(80, 5, 'Farooq Fulara   0320-2788117', 0, 0, 'L');
-        $pdf->Cell(80, 5, 'Hamiz Farooq Fulara   0335-0023574', 0, 1, 'L');
-        $pdf->SetLineWidth(0.4);
-        $pdf->Line(15, 30, 195, 30);
 
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->SetXY(15, 34);
-        $pdf->Cell(90, 5, 'Return #: ' . $return->return_no, 0, 0, 'L');
-        $pdf->Cell(90, 5, 'Date: ' . Carbon::parse($return->return_date)->format('d-M-Y'), 0, 1, 'R');
-        $pdf->SetX(105);
-        $pdf->Cell(90, 5, 'Against: PI-' . $return->purchaseInvoice->invoice_no, 0, 1, 'R');
-        $pdf->Ln(3);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('helvetica', 'B', 19);
+        $pdf->SetXY($nameX, 8);
+        $pdf->Cell(120, 8, 'FAROOQ FULARA', 0, 1, 'L');
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->SetXY($nameX, 17);
+        $pdf->SetTextColor(201, 162, 75);
+        $pdf->Cell(120, 6, '(KARACHI)', 0, 1, 'L');
 
-        $vendorHtml = '<table width="40%" border="1" cellpadding="3" style="font-size:10px;">
-            <tr><td width="40%"><b>Vendor:</b></td><td width="60%">' . ($return->vendor->name ?? 'N/A') . '</td></tr>
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetXY(120, 8);
+        $pdf->Cell(80, 5, 'Farooq Fulara: 0320-2788117', 0, 1, 'R');
+        $pdf->SetX(120);
+        $pdf->Cell(80, 5, 'Hamiz Farooq Fulara: 0335-0023574', 0, 1, 'R');
+        $pdf->SetTextColor(0, 0, 0);
+
+        // ── Title bar: gold label + return info box ─────────────────
+        $pdf->SetFillColor(201, 162, 75);
+        $pdf->Rect(10, 38, 90, 12, 'F');
+        $pdf->SetFont('helvetica', 'B', 14);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetXY(10, 40.5);
+        $pdf->Cell(90, 7, '  PURCHASE RETURN', 0, 0, 'L');
+        $pdf->SetTextColor(0, 0, 0);
+
+        $infoHtml = '<table width="100%" cellpadding="1" style="font-size:9px;">
+            <tr><td width="40%"><b>Return No</b></td><td width="5%">:</td><td width="55%">PR-' . $return->return_no . '</td></tr>
+            <tr><td><b>Date</b></td><td>:</td><td>' . Carbon::parse($return->return_date)->format('d-m-Y') . '</td></tr>
+            <tr><td><b>Against Invoice</b></td><td>:</td><td>PI-' . $return->purchaseInvoice->invoice_no . '</td></tr>
         </table>';
-        $pdf->writeHTML($vendorHtml, true, false, false, false, '');
-        $pdf->Ln(5);
+        $pdf->SetXY(105, 38);
+        $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
 
-        $html = '<table border="1" cellpadding="4" style="font-size:9px;">
-            <thead><tr style="background-color:#f2f2f2;font-weight:bold;text-align:center;">
-                <th width="30%">Item</th><th width="15%">Variation</th>
-                <th width="15%">Qty (bags)</th><th width="15%">Net Wt (kg)</th>
-                <th width="12%">Rate/kg</th><th width="13%">Amount</th>
-            </tr></thead><tbody>';
-        foreach ($return->items as $item) {
-            $html .= '<tr>
-                <td width="30%">' . e($item->item->name ?? '-') . '</td>
-                <td width="15%">' . e($item->variation->sku ?? '-') . '</td>
-                <td width="15%" style="text-align:right;">' . number_format($item->quantity, 2) . '</td>
-                <td width="15%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
-                <td width="12%" style="text-align:right;">' . number_format($item->price, 2) . '</td>
-                <td width="13%" style="text-align:right;">' . number_format($item->amount, 2) . '</td>
-            </tr>';
+        // ── Vendor Details box ───────────────────────────────────────
+        $boxY = 55;
+        $pdf->SetFillColor(27, 58, 92);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('helvetica', 'B', 10);
+        $pdf->SetXY(10, $boxY);
+        $pdf->Cell(190, 7, '  Vendor Details', 1, 1, 'L', true);
+        $pdf->SetTextColor(0, 0, 0);
+
+        $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
+            <tr><td width="15%"><b>Vendor</b></td><td width="3%">:</td><td width="82%">' . e($return->vendor->name ?? 'N/A') . '</td></tr>
+        </table>';
+        $pdf->SetXY(10, $boxY + 7);
+        $pdf->writeHTMLCell(190, 10, 10, $boxY + 7, $vendorHtml, 1, 1);
+
+        $pdf->SetY($boxY + 20);
+
+        // ── Items table ─────────────────────────────────────────────
+        $html = '
+        <table border="1" cellpadding="3" style="font-size:9px;">
+            <thead>
+                <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
+                    <th width="20%">Item</th><th width="17%">Variation</th>
+                    <th width="15%">Qty (bags)</th><th width="15%">Net Wt (kg)</th>
+                    <th width="14%">Rate/kg</th><th width="19%">Amount</th>
+                </tr>
+            </thead>
+            <tbody>';
+
+        foreach ($return->items as $index => $item) {
+            $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
+            $skuLabel = $item->variation?->sku ?? $item->item->sku ?? '-';
+            $html .= '
+                <tr style="background-color:' . $rowBg . ';">
+                    <td width="20%">' . e($item->item->name ?? '-') . '</td>
+                    <td width="17%">' . e($skuLabel) . '</td>
+                    <td width="15%" style="text-align:right;">' . number_format($item->quantity, 2) . '</td>
+                    <td width="15%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
+                    <td width="14%" style="text-align:right;">' . number_format($item->price, 2) . '</td>
+                    <td width="19%" style="text-align:right;">' . number_format($item->amount, 2) . '</td>
+                </tr>';
         }
-        $html .= '<tr style="font-weight:bold;background-color:#fafafa;">
-            <td colspan="5" style="text-align:right;">Total</td>
-            <td style="text-align:right;">' . number_format($return->total_amount, 2) . '</td>
-        </tr></tbody></table>';
+
+        $html .= '
+                <tr style="font-weight:bold;background-color:#F5EFDF;">
+                    <td colspan="5" style="text-align:right;">Total Return Amount</td>
+                    <td style="text-align:right;">' . number_format($return->total_amount, 2) . '</td>
+                </tr>
+            </tbody></table>';
         $pdf->writeHTML($html, true, false, false, false, '');
+        $pdf->Ln(4);
+
+        // ── Summary ────────────────────────────────────────────────
+        $summaryHtml = '<table width="95%" cellpadding="2" style="font-size:9px;" align="right">
+            <tr><td width="70%">Total Net Weight</td><td width="30%" style="text-align:right;">' . number_format($return->total_weight, 2) . ' kg</td></tr>
+            <tr style="font-weight:bold;background-color:#C9A24B;color:#ffffff;font-size:11px;">
+                <td>TOTAL RETURN AMOUNT</td><td style="text-align:right;">' . number_format($return->total_amount, 2) . '</td>
+            </tr>
+        </table>';
+        $pdf->writeHTML($summaryHtml, true, false, false, false, '');
+        $pdf->Ln(4);
+
+        // ── Amount in Words ──────────────────────────────────────────
+        $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
+            <tr style="background-color:#F5EFDF;">
+                <td><b>Rupees in Words:</b> ' . $this->numberToWords($return->total_amount) . ' Only.</td>
+            </tr>
+        </table>';
+        $pdf->writeHTML($wordsHtml, true, false, false, false, '');
+        $pdf->Ln(2);
 
         if ($return->reason) {
-            $pdf->Ln(3);
             $pdf->SetFont('helvetica', 'I', 9);
             $pdf->MultiCell(0, 5, 'Reason: ' . $return->reason, 0, 'L');
         }
+
+        // ── Signature ───────────────────────────────────────────────
+        $pdf->SetFont('helvetica', '', 10);
+        $ySign = $pdf->GetY() + 20;
+        if ($ySign > 250) { $pdf->AddPage(); $ySign = 30; }
+
+        $pdf->Line(140, $ySign, 195, $ySign);
+        $pdf->SetXY(140, $ySign + 1);
+        $pdf->Cell(55, 5, 'Authorized Signature', 0, 1, 'C');
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetX(140);
+        $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
+
+        // ── Footer band ───────────────────────────────────────────────
+        $footY = 282;
+        $pdf->SetFillColor(27, 58, 92);
+        $pdf->Rect(0, $footY, 210, 15, 'F');
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetXY(10, $footY + 4);
+        $pdf->Cell(190, 5, 'Farooq Fulara: 0320-2788117   |   Hamiz Farooq Fulara: 0335-0023574   |   Karachi, Pakistan', 0, 1, 'C');
+        $pdf->SetTextColor(0, 0, 0);
 
         return $pdf->Output('PR_' . $return->return_no . '.pdf', 'I');
     }
@@ -478,12 +572,13 @@ class PurchaseReturnController extends Controller
         if ($amount <= 0) return;
 
         Voucher::create([
-            'date'       => $date,
-            'ac_dr_sid'  => $drAccount->id,
-            'ac_cr_sid'  => $crAccount->id,
-            'amount'     => $amount,
-            'reference'  => $reference,
-            'remarks'    => $remarks,
+            'date'         => $date,
+            'voucher_type' => 'journal',
+            'ac_dr_sid'    => $drAccount->id,
+            'ac_cr_sid'    => $crAccount->id,
+            'amount'       => $amount,
+            'reference'    => $reference,
+            'remarks'      => $remarks,
         ]);
     }
 }

@@ -70,35 +70,6 @@ class SaleReturnController extends Controller
         return view('sale_returns.create', compact('invoice', 'items'));
     }
 
-
-    /**
-     * The rate the line is reversed at. Both rate boxes on the form are
-     * live and arrive pre-filled with the original booked rate, so the
-     * usual case reverses exactly what was booked — but an operator can
-     * override either box when the return is genuinely settled at a
-     * different rate. Per-kg wins when both arrive, being the finer of
-     * the two.
-     */
-    private function resolveReturnRate(array $itemInput, float $originalRatePerKg): float
-    {
-        $kgPerMaund = (int) config('purchase_settings.kg_per_maund', 40);
-
-        $ratePerKg = isset($itemInput['rate_per_kg']) && $itemInput['rate_per_kg'] !== ''
-            ? (float) $itemInput['rate_per_kg'] : null;
-        $ratePer40 = isset($itemInput['rate_per_40kg']) && $itemInput['rate_per_40kg'] !== ''
-            ? (float) $itemInput['rate_per_40kg'] : null;
-
-        if ($ratePerKg !== null && $ratePerKg > 0) {
-            return round($ratePerKg, 4);
-        }
-
-        if ($ratePer40 !== null && $ratePer40 > 0 && $kgPerMaund > 0) {
-            return round($ratePer40 / $kgPerMaund, 4);
-        }
-
-        return round($originalRatePerKg, 4);
-    }
-
     public function store(Request $request)
     {
         $request->validate([
@@ -109,8 +80,6 @@ class SaleReturnController extends Controller
             'items.*.sale_invoice_item_id' => 'required|exists:sale_invoice_items,id',
             'items.*.qty'         => 'required|numeric|min:0.01',
             'items.*.net_weight'  => 'required|numeric|min:0.01',
-            'items.*.rate_per_40kg' => 'nullable|numeric|min:0',
-            'items.*.rate_per_kg'   => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -153,7 +122,7 @@ class SaleReturnController extends Controller
                     throw new \Exception("Cannot return {$wt} kg for item #{$originalItem->id} — only {$remainingWt} kg remain returnable.");
                 }
 
-                $rate      = $this->resolveReturnRate($itemInput, (float) $originalItem->sale_price);
+                $rate      = (float) $originalItem->sale_price;
                 $amount    = round($wt * $rate, 2);
                 $cogsAmount = round($wt * $unitCost, 2);
 
@@ -274,8 +243,6 @@ class SaleReturnController extends Controller
             'items.*.sale_invoice_item_id' => 'required|exists:sale_invoice_items,id',
             'items.*.qty'        => 'required|numeric|min:0.01',
             'items.*.net_weight' => 'required|numeric|min:0.01',
-            'items.*.rate_per_40kg' => 'nullable|numeric|min:0',
-            'items.*.rate_per_kg'   => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -324,7 +291,7 @@ class SaleReturnController extends Controller
                     throw new \Exception("Cannot return {$wt} kg for item #{$originalItem->id} — only {$remainingWt} kg remain returnable.");
                 }
 
-                $rate       = $this->resolveReturnRate($itemInput, (float) $originalItem->sale_price);
+                $rate       = (float) $originalItem->sale_price;
                 $amount     = round($wt * $rate, 2);
                 $cogsAmount = round($wt * $unitCost, 2);
 
@@ -387,7 +354,7 @@ class SaleReturnController extends Controller
     {
         $return = SaleReturn::with(['saleInvoice', 'customer', 'items.product', 'items.variation'])->findOrFail($id);
 
-        $pdf = new \TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+        $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $pdf->SetCreator('Farooq Fulara (Karachi)');
         $pdf->SetTitle('Sale Return #' . $return->return_no);
         $pdf->setPrintHeader(false);
@@ -450,6 +417,18 @@ class SaleReturnController extends Controller
             $pdf->MultiCell(0, 5, 'Reason: ' . $return->reason, 0, 'L');
         }
 
+        // ── Signature ───────────────────────────────────────────────
+        $pdf->SetFont('helvetica', '', 10);
+        $ySign = $pdf->GetY() + 20;
+        if ($ySign > 250) { $pdf->AddPage(); $ySign = 30; }
+
+        $pdf->Line(140, $ySign, 195, $ySign);
+        $pdf->SetXY(140, $ySign + 1);
+        $pdf->Cell(55, 5, 'Authorized Signature', 0, 1, 'C');
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetX(140);
+        $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
+
         return $pdf->Output('SR_' . $return->return_no . '.pdf', 'I');
     }
 
@@ -489,12 +468,13 @@ class SaleReturnController extends Controller
         if ($amount <= 0) return;
 
         Voucher::create([
-            'date'      => $date,
-            'ac_dr_sid' => $drAccount->id,
-            'ac_cr_sid' => $crAccount->id,
-            'amount'    => $amount,
-            'reference' => $reference,
-            'remarks'   => $remarks,
+            'date'         => $date,
+            'voucher_type' => 'journal',
+            'ac_dr_sid'    => $drAccount->id,
+            'ac_cr_sid'    => $crAccount->id,
+            'amount'       => $amount,
+            'reference'    => $reference,
+            'remarks'      => $remarks,
         ]);
     }
 }

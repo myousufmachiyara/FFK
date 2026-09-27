@@ -165,105 +165,178 @@ class VoucherController extends Controller
         }
     }
 
+    /** English number-to-words, standard Million/Thousand system, whole rupees. */
+    private function numberToWords(float $number): string
+    {
+        $number = (int) round($number);
+        if ($number == 0) return 'Zero';
+
+        $ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+                 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+                 'Seventeen', 'Eighteen', 'Nineteen'];
+        $tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        $convertHundreds = function ($n) use (&$convertHundreds, $ones, $tens) {
+            $str = '';
+            if ($n >= 100) {
+                $str .= $ones[intdiv($n, 100)] . ' Hundred ';
+                $n %= 100;
+            }
+            if ($n >= 20) {
+                $str .= $tens[intdiv($n, 10)] . ' ';
+                $n %= 10;
+            }
+            if ($n > 0) {
+                $str .= $ones[$n] . ' ';
+            }
+            return $str;
+        };
+
+        $parts = [];
+        $billions = intdiv($number, 1000000000); $number %= 1000000000;
+        $millions = intdiv($number, 1000000);    $number %= 1000000;
+        $thousands = intdiv($number, 1000);       $number %= 1000;
+        $rest = $number;
+
+        if ($billions  > 0) $parts[] = trim($convertHundreds($billions))  . ' Billion';
+        if ($millions  > 0) $parts[] = trim($convertHundreds($millions))  . ' Million';
+        if ($thousands > 0) $parts[] = trim($convertHundreds($thousands)) . ' Thousand';
+        if ($rest      > 0) $parts[] = trim($convertHundreds($rest));
+
+        return trim(implode(' ', $parts));
+    }
+
     /**
-     * Print a voucher as PDF.
+     * Print a voucher as PDF — rebuilt to match the standard header/footer
+     * used across every other print in this app (navy header band, gold
+     * title bar, boxed details, Amount in Words, single Authorized
+     * Signature). Previously this used placeholder text ("Your App"/
+     * "Your Company") and a plain layout inconsistent with everything else.
      */
     public function print($type, $id)
     {
         $voucher = Voucher::with(['debitAccount', 'creditAccount'])->findOrFail($id);
 
-        $pdf = new \TCPDF();
+        $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+        $pdf->SetCreator('Farooq Fulara (Karachi)');
+        $pdf->SetAuthor('Farooq Fulara (Karachi)');
+        $pdf->SetTitle(ucfirst($type) . ' Voucher #' . $voucher->id);
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
-        $pdf->SetCreator('Your App');
-        $pdf->SetAuthor('Your Company');
-        $pdf->SetTitle(ucfirst($type) . ' Voucher #' . $voucher->id);
         $pdf->SetMargins(10, 10, 10);
+        $pdf->SetAutoPageBreak(true, 25);
         $pdf->AddPage();
-        $pdf->setCellPadding(1.5);
 
-        // --- Company Header ---
-        $logoPath = public_path('assets/img/logo.png');
+        // ── Header band (navy, full width) ─────────────────────────
+        $pdf->SetFillColor(27, 58, 92);
+        $pdf->Rect(0, 0, 210, 32, 'F');
 
-        // Logo (Top Left)
+        $logoPath = public_path('assets/img/ff-logo.jpg');
+        $nameX = 12;
         if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 12, 8, 40);
+            $pdf->Image($logoPath, 12, 5, 22);
+            $nameX = 38;
         }
 
-        // Purchase INVOICE (Top Right)
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('helvetica', 'B', 19);
+        $pdf->SetXY($nameX, 8);
+        $pdf->Cell(120, 8, 'FAROOQ FULARA', 0, 1, 'L');
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->SetXY($nameX, 17);
+        $pdf->SetTextColor(201, 162, 75);
+        $pdf->Cell(120, 6, '(KARACHI)', 0, 1, 'L');
+
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetXY(120, 8);
+        $pdf->Cell(80, 5, 'Farooq Fulara: 0320-2788117', 0, 1, 'R');
+        $pdf->SetX(120);
+        $pdf->Cell(80, 5, 'Hamiz Farooq Fulara: 0335-0023574', 0, 1, 'R');
+        $pdf->SetTextColor(0, 0, 0);
+
+        // ── Title bar: gold label + voucher info box ────────────────
+        $pdf->SetFillColor(201, 162, 75);
+        $pdf->Rect(10, 38, 90, 12, 'F');
         $pdf->SetFont('helvetica', 'B', 14);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetXY(10, 40.5);
+        $pdf->Cell(90, 7, '  ' . strtoupper($type) . ' VOUCHER', 0, 0, 'L');
+        $pdf->SetTextColor(0, 0, 0);
 
-        // Page width = 210 (A4) - margins (10+10)
-        $pdf->SetXY(120, 12);
-        $pdf->Cell(80, 8, ucfirst($type) . ' Voucher', 0, 1, 'R');
-        
-         // --- Customer + Invoice Info ---
-        $pdf->Ln(5);
-        $pdf->SetFont('helvetica', '', 10);
+        $infoHtml = '<table width="100%" cellpadding="1" style="font-size:9px;">
+            <tr><td width="40%"><b>Voucher #</b></td><td width="5%">:</td><td width="55%">' . $voucher->id . '</td></tr>
+            <tr><td><b>Date</b></td><td>:</td><td>' . \Carbon\Carbon::parse($voucher->date)->format('d-m-Y') . '</td></tr>
+            <tr><td><b>Type</b></td><td>:</td><td>' . ucfirst($type) . '</td></tr>
+        </table>';
+        $pdf->SetXY(105, 38);
+        $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
 
-        $infoHtml = '
-        <table cellpadding="3" cellspacing="0" width="40%">
-            <tr>
-                <td>
-                    <table border="1" cellpadding="4" cellspacing="0" style="font-size:10px;">
-                        <tr>
-                            <td width="30%"><b>Voucher #</b></td>
-                            <td width="40%">'.$voucher->id.'</td>
-                        </tr>
-                        <tr>
-                            <td width="30%"><b>Date</b></td>
-                            <td width="40%">'.\Carbon\Carbon::parse($voucher->date)->format('d-m-Y').'</td>
-                        </tr>
-                    </table>
-                </td>
+        $pdf->SetY(55);
+
+        // ── Debit / Credit / Amount table ────────────────────────────
+        $html = '
+        <table border="1" cellpadding="3" style="font-size:9px;">
+            <thead>
+                <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
+                    <th width="8%">S.No</th>
+                    <th width="36%">Debit Account</th>
+                    <th width="36%">Credit Account</th>
+                    <th width="20%">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td width="8%" style="text-align:center;">1</td>
+                    <td width="36%">' . e($voucher->debitAccount->name ?? '-') . '</td>
+                    <td width="36%">' . e($voucher->creditAccount->name ?? '-') . '</td>
+                    <td width="20%" style="text-align:right;">' . number_format($voucher->amount, 2) . '</td>
+                </tr>
+                <tr style="font-weight:bold;background-color:#F5EFDF;">
+                    <td colspan="3" style="text-align:right;">Total</td>
+                    <td style="text-align:right;">' . number_format($voucher->amount, 2) . '</td>
+                </tr>
+            </tbody>
+        </table>';
+        $pdf->writeHTML($html, true, false, false, false, '');
+        $pdf->Ln(4);
+
+        // ── Amount in Words ──────────────────────────────────────────
+        $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
+            <tr style="background-color:#F5EFDF;">
+                <td><b>Rupees in Words:</b> ' . $this->numberToWords((float) $voucher->amount) . ' Only.</td>
             </tr>
         </table>';
+        $pdf->writeHTML($wordsHtml, true, false, false, false, '');
+        $pdf->Ln(2);
 
-        $pdf->writeHTML($infoHtml, true, false, false, false, '');
-
-        // Details Table
-        $html = '<table border="0.3" cellpadding="4" style="text-align:center;font-size:10px;">
-            <tr style="background-color:#f5f5f5; font-weight:bold;">
-                <th width="8%">S.No</th>
-                <th width="36%">Debit Account</th>
-                <th width="36%">Credit Account</th>
-                <th width="20%">Amount</th>
-            </tr>';
-
-        $html .= '<tr>
-            <td>1</td>
-            <td>' . ($voucher->debitAccount->name ?? '-') . '</td>
-            <td>' . ($voucher->creditAccount->name ?? '-') . '</td>
-            <td align="right">' . number_format($voucher->amount, 2) . '</td>
-        </tr>';
-
-        $html .= '
-            <tr style="background-color:#f5f5f5;">
-                <td colspan="3" align="right"><b>Total</b></td>
-                <td align="right"><b>' . number_format($voucher->amount, 2) . '</b></td>
-            </tr>';
-
-        $html .= '</table>';
-        $pdf->writeHTML($html, true, false, true, false, '');
-        $pdf->Ln(5);
-
-        // Remarks
+        // ── Remarks — right before signature ─────────────────────────
         if (!empty($voucher->remarks)) {
-            $pdf->writeHTML('<b>Remarks:</b><br><span style="font-size:12px;">' . nl2br($voucher->remarks) . '</span>', true, false, true, false, '');
+            $pdf->SetFont('helvetica', 'I', 9);
+            $pdf->MultiCell(0, 5, 'Remarks: ' . $voucher->remarks, 0, 'L');
         }
 
-        // Signatures
-        $pdf->Ln(20);
-        $yPos = $pdf->GetY();
-        $lineWidth = 40;
+        // ── Signature ───────────────────────────────────────────────
+        $pdf->SetFont('helvetica', '', 10);
+        $ySign = $pdf->GetY() + 20;
+        if ($ySign > 250) { $pdf->AddPage(); $ySign = 30; }
 
-        $pdf->Line(28, $yPos, 28 + $lineWidth, $yPos);
-        $pdf->Line(130, $yPos, 130 + $lineWidth, $yPos);
+        $pdf->Line(140, $ySign, 195, $ySign);
+        $pdf->SetXY(140, $ySign + 1);
+        $pdf->Cell(55, 5, 'Authorized Signature', 0, 1, 'C');
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetX(140);
+        $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
 
-        $pdf->SetXY(28, $yPos + 2);
-        $pdf->Cell($lineWidth, 6, 'Prepared By', 0, 0, 'C');
-        $pdf->SetXY(130, $yPos + 2);
-        $pdf->Cell($lineWidth, 6, 'Authorized By', 0, 0, 'C');
+        // ── Footer band ───────────────────────────────────────────────
+        $footY = 282;
+        $pdf->SetFillColor(27, 58, 92);
+        $pdf->Rect(0, $footY, 210, 15, 'F');
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetXY(10, $footY + 4);
+        $pdf->Cell(190, 5, 'Farooq Fulara: 0320-2788117   |   Hamiz Farooq Fulara: 0335-0023574   |   Karachi, Pakistan', 0, 1, 'C');
+        $pdf->SetTextColor(0, 0, 0);
 
         return $pdf->Output(strtolower($type) . '_voucher_' . $voucher->id . '.pdf', 'I');
     }
