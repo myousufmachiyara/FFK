@@ -210,7 +210,7 @@ class InventoryReportController extends Controller
                         DB::raw('0 as qty_in'),
                         'purchase_return_items.quantity as qty_out',
                         DB::raw('0 as weight_in'),
-                        DB::raw('0 as weight_out')
+                        'purchase_return_items.net_weight as weight_out'
                     )
                     ->where('purchase_return_items.item_id', $itemId)
                     ->whereBetween('purchase_returns.return_date', [$from, $to]);
@@ -227,7 +227,7 @@ class InventoryReportController extends Controller
                         DB::raw("CONCAT('SR-', sale_returns.id) as description"),
                         'sale_return_items.qty as qty_in',
                         DB::raw('0 as qty_out'),
-                        DB::raw('0 as weight_in'),
+                        'sale_return_items.net_weight as weight_in',
                         DB::raw('0 as weight_out')
                     )
                     ->where('sale_return_items.product_id', $itemId)
