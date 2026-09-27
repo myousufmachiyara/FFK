@@ -77,7 +77,7 @@ class CommissionReturnController extends Controller
                 throw new \Exception('Only Delivered invoices can have items returned.');
             }
 
-            $last = CommissionReturn::orderByDesc('id')->first();
+            $last = CommissionReturn::withTrashed()->orderByDesc('id')->first();
             $returnNo = str_pad($last ? $last->id + 1 : 1, 6, '0', STR_PAD_LEFT);
 
             $return = CommissionReturn::create([

@@ -88,7 +88,7 @@ class SaleReturnController extends Controller
             $invoice = SaleInvoice::with('account')->lockForUpdate()->findOrFail($request->sale_invoice_id);
             $unitCost = $this->resolveOriginalUnitCost($invoice);
 
-            $last = SaleReturn::orderByDesc('id')->first();
+            $last = SaleReturn::withTrashed()->orderByDesc('id')->first();
             $returnNo = str_pad($last ? $last->id + 1 : 1, 6, '0', STR_PAD_LEFT);
 
             $return = SaleReturn::create([

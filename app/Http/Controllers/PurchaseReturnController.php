@@ -80,7 +80,7 @@ class PurchaseReturnController extends Controller
                 throw new \Exception('Only Received invoices can have items returned.');
             }
 
-            $last = PurchaseReturn::orderByDesc('id')->first();
+            $last = PurchaseReturn::withTrashed()->orderByDesc('id')->first();
             $returnNo = str_pad($last ? $last->id + 1 : 1, 6, '0', STR_PAD_LEFT);
 
             $return = PurchaseReturn::create([
