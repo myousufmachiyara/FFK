@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\ProductVariation;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class RecalculateStock extends Command
 {
@@ -28,6 +29,9 @@ class RecalculateStock extends Command
             $this->error('No variations found.');
             return 1;
         }
+
+        $hasPurchaseReturns = Schema::hasTable('purchase_return_items');
+        $hasSaleReturns     = Schema::hasTable('sale_return_items');
 
         $this->info(($dryRun ? '[DRY RUN] ' : '') . "Recalculating stock for {$variations->count()} variation(s)...");
         $this->newLine();
@@ -72,8 +76,31 @@ class RecalculateStock extends Command
                 ->where('sale_invoice_items.variation_id', $variation->id)
                 ->sum('sale_invoice_items.net_weight');
 
-            $newQty = round($purchasedQty - $soldQty, 2);
-            $newWeight = round($purchasedWeight - $soldWeight, 3);
+            // FIX: neither Return type was ever accounted for here — this
+            // command predates both Return modules. Purchase Return
+            // reduces stock (goods went back to the vendor); Sale Return
+            // increases it (goods came back from the customer). Without
+            // these, this command permanently disagreed with Item Ledger
+            // the moment any return was recorded, since Item Ledger's
+            // running balance always included them correctly.
+            $purchaseReturnedQty = $hasPurchaseReturns
+                ? (float) DB::table('purchase_return_items')->where('variation_id', $variation->id)->sum('quantity')
+                : 0.0;
+
+            $purchaseReturnedWeight = $hasPurchaseReturns
+                ? (float) DB::table('purchase_return_items')->where('variation_id', $variation->id)->sum('net_weight')
+                : 0.0;
+
+            $saleReturnedQty = $hasSaleReturns
+                ? (float) DB::table('sale_return_items')->where('variation_id', $variation->id)->sum('qty')
+                : 0.0;
+
+            $saleReturnedWeight = $hasSaleReturns
+                ? (float) DB::table('sale_return_items')->where('variation_id', $variation->id)->sum('net_weight')
+                : 0.0;
+
+            $newQty = round($purchasedQty - $soldQty - $purchaseReturnedQty + $saleReturnedQty, 2);
+            $newWeight = round($purchasedWeight - $soldWeight - $purchaseReturnedWeight + $saleReturnedWeight, 3);
 
             $oldQty = (float) $variation->stock_quantity;
             $oldWeight = (float) $variation->stock_weight;
