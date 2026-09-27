@@ -430,7 +430,7 @@ class InventoryReportController extends Controller
                     'p.name as product_name',
                     'pv.sku as variation_sku',
                     'cii.quantity',
-                    'cii.weight',
+                    'cii.net_weight as weight',
                     'cii.purchase_total',
                     'cii.sale_total'
                 )
