@@ -28,13 +28,18 @@
 
         <table class="table table-bordered table-striped">
           <thead class="table-dark">
-            <tr><th>Return #</th><th>Date</th><th>Against CI</th><th>Vendor</th><th>Customer</th><th class="text-end">Sale Value</th><th class="text-center">Actions</th></tr>
+            <tr><th>Return #</th><th>Date</th><th>Type</th><th>Against CI</th><th>Vendor</th><th>Customer</th><th class="text-end">Sale Value</th><th class="text-center">Actions</th></tr>
           </thead>
           <tbody>
             @forelse($returns as $r)
             <tr>
               <td>CR-{{ $r->return_no }}</td>
               <td>{{ \Carbon\Carbon::parse($r->return_date)->format('d-M-Y') }}</td>
+              <td>
+                <span class="badge {{ $r->isStockInReturn() ? 'bg-info text-dark' : 'bg-warning text-dark' }}">
+                  {{ $r->returnTypeLabel() }}
+                </span>
+              </td>
               <td><a href="{{ route('commission_invoices.show', $r->commission_invoice_id) }}">CI-{{ $r->commissionInvoice->invoice_no ?? '-' }}</a></td>
               <td>{{ $r->vendor->name ?? '' }}</td>
               <td>{{ $r->customer->name ?? '' }}</td>
@@ -45,7 +50,7 @@
               </td>
             </tr>
             @empty
-            <tr><td colspan="7" class="text-center text-muted">No returns recorded yet.</td></tr>
+            <tr><td colspan="8" class="text-center text-muted">No returns recorded yet.</td></tr>
             @endforelse
           </tbody>
         </table>

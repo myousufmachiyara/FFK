@@ -30,9 +30,22 @@
           <div class="col-md-3"><strong>Customer:</strong><br>{{ $return->customer->name ?? '' }}</div>
         </div>
 
+        <div class="mb-3">
+          <strong>Return Type:</strong>
+          <span class="badge {{ $return->isStockInReturn() ? 'bg-info text-dark' : 'bg-warning text-dark' }}">
+            {{ $return->returnTypeLabel() }}
+          </span>
+        </div>
+
         @if($return->reason)<div class="mb-3"><strong>Reason:</strong><br>{{ $return->reason }}</div>@endif
 
         <h5>Returned Items</h5>
+        @if($return->isStockInReturn())
+        <p class="text-muted small mb-1">
+          <i class="fas fa-info-circle"></i> Vendor Comm and Cust Comm columns below show the proportional
+          amounts for reference only — neither was actually reversed for this Stock In return.
+        </p>
+        @endif
         <div class="table-responsive mb-3">
           <table class="table table-bordered table-sm">
             <thead><tr><th>Item</th><th>Variation</th><th class="text-end">Qty</th><th class="text-end">Net Wt</th><th class="text-end">Sale Value</th><th class="text-end">Vendor Comm</th><th class="text-end">Cust Comm</th></tr></thead>
@@ -59,12 +72,21 @@
           </table>
         </div>
 
+        @if($return->isVendorReturn())
         <p class="text-muted small">
           <i class="fas fa-info-circle"></i> Net reduction to Customer's receivable:
           <strong>{{ number_format($return->netCustomerReduction(), 2) }}</strong>
           (goods value reversed). Vendor's payable increases by the vendor commission reversed
           (<strong>{{ number_format($return->total_vendor_commission, 2) }}</strong>) since that commission is no longer earned.
         </p>
+        @else
+        <p class="text-muted small">
+          <i class="fas fa-info-circle"></i> Net reduction to Customer's receivable:
+          <strong>{{ number_format($return->total_sale_value - $return->total_customer_commission, 2) }}</strong>
+          (goods value only). Vendor Payable and Commission Income are unchanged — the vendor still
+          delivered and still earned their commission; this quantity has been added to FFK's own stock instead.
+        </p>
+        @endif
 
         <h5>System-Generated Vouchers</h5>
         <div class="table-responsive">

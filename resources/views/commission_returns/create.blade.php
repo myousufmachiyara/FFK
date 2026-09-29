@@ -31,6 +31,18 @@
             </div>
           </div>
 
+          <div class="mb-3">
+            <label class="fw-bold d-block">Return Type *</label>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="return_type" id="type_vendor" value="vendor" checked required>
+              <label class="form-check-label" for="type_vendor">Return to Vendor — vendor commission, customer commission, and goods value all reverse</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="return_type" id="type_stock_in" value="stock_in" required>
+              <label class="form-check-label" for="type_stock_in">Stock In to FFK — only the goods value reverses; vendor payable and commission stay as they are, and this quantity is added to FFK's own stock</label>
+            </div>
+          </div>
+
           <p class="text-muted small">
             <i class="fas fa-info-circle"></i> This reverses the commission income earned on the returned portion
             (both vendor and customer legs) and reduces the customer's receivable by the goods value — proportional
@@ -45,12 +57,9 @@
                 <th>Delivered (bags)</th><th>Delivered (kg)</th>
                 <th>Remaining Returnable (bags)</th><th>Remaining Returnable (kg)</th>
                 <th>Return Qty (bags)</th><th>Return Wt (kg)</th>
-                <th>Pur Rate (40 kg)</th><th>Pur Rate (kg)</th>
-                <th>Sale Rate (40 kg)</th><th>Sale Rate (kg)</th>
               </tr>
             </thead>
             <tbody>
-              @php $kgPerMaund = (int) config('purchase_settings.kg_per_maund', 40); @endphp
               @foreach($items as $i => $item)
               <tr>
                 <td><input type="checkbox" class="item-check" data-idx="{{ $i }}" onchange="toggleRow({{ $i }})"></td>
@@ -65,30 +74,6 @@
                 <td>{{ number_format($item->remaining_weight, 2) }}</td>
                 <td><input type="number" step="any" min="0" max="{{ $item->remaining_qty }}" name="items[{{ $i }}][qty]" class="form-control" disabled id="qty_{{ $i }}"></td>
                 <td><input type="number" step="any" min="0" max="{{ $item->remaining_weight }}" name="items[{{ $i }}][net_weight]" class="form-control" disabled id="wt_{{ $i }}"></td>
-                <td>
-                  <input type="number" step="any" min="0" name="items[{{ $i }}][purchase_rate_per_40kg]"
-                         class="form-control" value="{{ round($item->purchase_price * $kgPerMaund, 2) }}"
-                         oninput="linkRate('pr', {{ $i }}, 'maund')"
-                         disabled id="pr40_{{ $i }}">
-                </td>
-                <td>
-                  <input type="number" step="any" min="0" name="items[{{ $i }}][purchase_rate_per_kg]"
-                         class="form-control" value="{{ round($item->purchase_price, 4) }}"
-                         oninput="linkRate('pr', {{ $i }}, 'kg')"
-                         disabled id="prkg_{{ $i }}">
-                </td>
-                <td>
-                  <input type="number" step="any" min="0" name="items[{{ $i }}][sale_rate_per_40kg]"
-                         class="form-control" value="{{ round($item->sale_price * $kgPerMaund, 2) }}"
-                         oninput="linkRate('sr', {{ $i }}, 'maund')"
-                         disabled id="sr40_{{ $i }}">
-                </td>
-                <td>
-                  <input type="number" step="any" min="0" name="items[{{ $i }}][sale_rate_per_kg]"
-                         class="form-control" value="{{ round($item->sale_price, 4) }}"
-                         oninput="linkRate('sr', {{ $i }}, 'kg')"
-                         disabled id="srkg_{{ $i }}">
-                </td>
               </tr>
               @endforeach
             </tbody>
@@ -109,34 +94,10 @@ function toggleRow(idx) {
     document.getElementById(`pii_${idx}`).disabled = !checked;
     document.getElementById(`qty_${idx}`).disabled = !checked;
     document.getElementById(`wt_${idx}`).disabled = !checked;
-    ['pr', 'sr'].forEach(p => {
-        document.getElementById(`${p}40_${idx}`).disabled = !checked;
-        document.getElementById(`${p}kg_${idx}`).disabled = !checked;
-    });
     if (!checked) {
         document.getElementById(`qty_${idx}`).value = '';
         document.getElementById(`wt_${idx}`).value = '';
     }
 }
-const KG_PER_MAUND = {{ (int) config('purchase_settings.kg_per_maund', 40) }};
-
-// ── Two-way rate entry ───────────────────────────────────────────────
-// Both boxes of each pair are live: type into either and the other fills
-// itself in. They arrive pre-filled with the rates the original line was
-// booked at, so leaving them alone reverses exactly what was booked.
-function linkRate(prefix, idx, source) {
-    const r40 = document.getElementById(`${prefix}40_${idx}`);
-    const rkg = document.getElementById(`${prefix}kg_${idx}`);
-    if (!r40 || !rkg) return;
-
-    if (source === 'kg') {
-        const kg = parseFloat(rkg.value);
-        r40.value = isNaN(kg) ? '' : +(kg * KG_PER_MAUND).toFixed(2);
-    } else {
-        const v = parseFloat(r40.value);
-        rkg.value = (isNaN(v) || KG_PER_MAUND <= 0) ? '' : +(v / KG_PER_MAUND).toFixed(4);
-    }
-}
-
 </script>
 @endsection
