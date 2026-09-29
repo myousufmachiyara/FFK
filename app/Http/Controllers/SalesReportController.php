@@ -77,24 +77,41 @@ class SalesReportController extends Controller
             });
         }
 
-        /* ================= SALES RETURN ================= */
+        /* ================= SALES RETURN =================
+         * FIX: same class of bug as Purchase Return — $ret->invoice_no
+         * doesn't exist (it's return_no), and $item->qty * $item->price
+         * mixed units (bags × per-kg rate) instead of using the return
+         * item's own 'amount' field. Now itemized like Sales Register,
+         * with COGS Reversed shown (unique to Sale Return) and a proper
+         * customer filter, matching every other tab on this page.
+         */
         if ($tab === 'SRET' && $hasSaleReturns) {
-            $returns = SaleReturn::with(['customer', 'items'])
-                ->whereBetween('return_date', [$from, $to])
-                ->get()
-                ->map(function ($ret) {
+            $query = SaleReturn::with(['saleInvoice', 'customer', 'items.product', 'items.variation'])
+                ->whereBetween('return_date', [$from, $to]);
 
-                    $total = $ret->items->sum(function ($item) {
-                        return $item->qty * $item->price;
-                    });
+            if ($customerId) {
+                $query->where('customer_id', $customerId);
+            }
 
+            $returns = $query->get()->flatMap(function ($ret) {
+                return $ret->items->map(function ($item) use ($ret) {
                     return (object)[
-                        'date'     => $ret->return_date,
-                        'invoice'  => $ret->invoice_no ?? $ret->id,
-                        'customer' => $ret->customer->name ?? '',
-                        'total'    => $total,
+                        'return_id'       => $ret->id,
+                        'return_no'       => $ret->return_no,
+                        'date'            => $ret->return_date,
+                        'sale_invoice_id' => $ret->sale_invoice_id,
+                        'sale_invoice_no' => $ret->saleInvoice->invoice_no ?? '-',
+                        'customer'        => $ret->customer->name ?? '',
+                        'item_name'       => $item->product->name ?? 'N/A',
+                        'variation'       => $item->variation->sku ?? '-',
+                        'qty'             => $item->qty,
+                        'net_weight'      => $item->net_weight,
+                        'rate'            => $item->price,
+                        'total'           => $item->amount,
+                        'cogs_reversed'   => $item->cogs_amount,
                     ];
                 });
+            });
         }
 
         /* ================= CUSTOMER WISE =================

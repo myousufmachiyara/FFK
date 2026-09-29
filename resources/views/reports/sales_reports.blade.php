@@ -205,6 +205,17 @@
                         <label>To Date</label>
                         <input type="date" class="form-control" name="to_date" value="{{ $to }}">
                     </div>
+                    <div class="col-md-3">
+                        <label>Customer</label>
+                        <select name="customer_id" class="select2-report-filter form-control">
+                            <option value="">All Customers</option>
+                            @foreach($customers as $cust)
+                                <option value="{{ $cust->id }}" {{ $customerId == $cust->id ? 'selected' : '' }}>
+                                    {{ $cust->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="col-md-2 d-flex align-items-end gap-2">
                         <button type="submit" class="btn btn-primary w-100">Filter</button>
                         <button type="button" class="btn btn-danger"
@@ -215,31 +226,72 @@
                 </div>
             </form>
 
+            @php
+                $sretTotal = $returns->sum('total');
+                $sretQty   = $returns->sum('qty');
+                $sretNetWt = $returns->sum('net_weight');
+                $sretCogs  = $returns->sum('cogs_reversed');
+            @endphp
+            <div class="mb-3 text-end no-print">
+                <h6>Total Qty Returned: <span class="text-secondary">{{ number_format($sretQty, 2) }}</span> &nbsp; | &nbsp; Total Net Weight: <span class="text-secondary">{{ number_format($sretNetWt, 2) }} kg</span></h6>
+                <h5>Total COGS Reversed: <span class="text-secondary">{{ number_format($sretCogs, 2) }}</span></h5>
+                <h3>Total Returns: <span class="text-danger">{{ number_format($sretTotal, 2) }}</span></h3>
+            </div>
+
             <div id="sret-table">
                 <table class="table table-bordered table-striped">
                     <thead class="table-dark">
                         <tr>
-                            <th>Date</th><th>Return No</th><th>Customer</th>
-                            <th class="text-end">Total Return</th>
+                            <th>Date</th><th>Return #</th><th>Against SI</th><th>Customer</th>
+                            <th>Item</th><th>Variation</th>
+                            <th class="text-end">Qty (bags)</th><th class="text-end">Net Wt (kg)</th>
+                            <th class="text-end">Rate/kg</th><th class="text-end">Total</th>
+                            <th class="text-end">COGS Reversed</th>
+                            <th class="no-print text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                     @forelse($returns as $row)
                         <tr>
                             <td>{{ \Carbon\Carbon::parse($row->date)->format('d-M-Y') }}</td>
-                            <td>SR-{{ $row->invoice }}</td>
+                            <td>
+                                <a href="{{ route('sale_returns.show', $row->return_id) }}" target="_blank" class="ref-link text-info">
+                                    SR-{{ $row->return_no }}
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{{ route('sale_invoices.show', $row->sale_invoice_id) }}" target="_blank" class="ref-link text-primary">
+                                    SI-{{ $row->sale_invoice_no }}
+                                </a>
+                            </td>
                             <td>{{ $row->customer }}</td>
+                            <td>{{ $row->item_name }}</td>
+                            <td>{{ $row->variation }}</td>
+                            <td class="text-end">{{ number_format($row->qty, 2) }}</td>
+                            <td class="text-end">{{ number_format($row->net_weight, 2) }}</td>
+                            <td class="text-end">{{ number_format($row->rate, 2) }}</td>
                             <td class="text-end fw-bold">{{ number_format($row->total, 2) }}</td>
+                            <td class="text-end text-muted">{{ number_format($row->cogs_reversed, 2) }}</td>
+                            <td class="text-center no-print">
+                                <a href="{{ route('sale_returns.print', $row->return_id) }}" target="_blank" class="btn btn-outline-success btn-sm" title="Print">
+                                    <i class="fas fa-print"></i>
+                                </a>
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="text-center text-muted">No returns found.</td></tr>
+                        <tr><td colspan="12" class="text-center text-muted">No returns found.</td></tr>
                     @endforelse
                     </tbody>
                     @if($returns->count() > 0)
                     <tfoot class="table-light fw-bold">
                         <tr>
-                            <td colspan="3" class="text-end">Grand Total:</td>
-                            <td class="text-end">{{ number_format($returns->sum('total'), 2) }}</td>
+                            <td colspan="6" class="text-end">Grand Total:</td>
+                            <td class="text-end">{{ number_format($sretQty, 2) }}</td>
+                            <td class="text-end">{{ number_format($sretNetWt, 2) }}</td>
+                            <td class="text-end">—</td>
+                            <td class="text-end">{{ number_format($sretTotal, 2) }}</td>
+                            <td class="text-end">{{ number_format($sretCogs, 2) }}</td>
+                            <td class="no-print"></td>
                         </tr>
                     </tfoot>
                     @endif

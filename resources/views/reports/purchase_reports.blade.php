@@ -198,11 +198,12 @@
             </form>
 
             @php
-                $returnTotal = $purchaseReturns->sum('total');
-                $returnQty   = $purchaseReturns->sum('quantity');
+                $returnTotal  = $purchaseReturns->sum('total');
+                $returnQty    = $purchaseReturns->sum('quantity');
+                $returnNetWt  = $purchaseReturns->sum('net_weight');
             @endphp
             <div class="mb-3 text-end no-print">
-                <h5>Total Qty Returned: <span class="text-warning">{{ $returnQty }}</span></h5>
+                <h5>Total Qty Returned (bags): <span class="text-warning">{{ number_format($returnQty, 2) }}</span> &nbsp; | &nbsp; Total Net Weight: <span class="text-warning">{{ number_format($returnNetWt, 2) }} kg</span></h5>
                 <h3>Total Returns: <span class="text-danger">{{ number_format($returnTotal, 2) }}</span></h3>
             </div>
 
@@ -210,33 +211,53 @@
                 <table class="table table-bordered table-striped">
                     <thead class="table-dark">
                         <tr>
-                            <th>Date</th><th>Return No</th><th>Vendor</th><th>Item</th>
-                            <th class="text-end">Qty</th><th class="text-end">Rate</th>
-                            <th class="text-end">Total</th>
+                            <th>Date</th><th>Return #</th><th>Against PI</th><th>Vendor</th>
+                            <th>Item</th><th>Variation</th>
+                            <th class="text-end">Qty (bags)</th><th class="text-end">Net Wt (kg)</th>
+                            <th class="text-end">Rate/kg</th><th class="text-end">Total</th>
+                            <th class="no-print text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                     @forelse($purchaseReturns as $pr)
                         <tr>
-                            <td>{{ $pr->date }}</td>
-                            <td>PR-{{ $pr->return_id }}</td>
+                            <td>{{ \Carbon\Carbon::parse($pr->date)->format('d-M-Y') }}</td>
+                            <td>
+                                <a href="{{ route('purchase_returns.show', $pr->return_id) }}" target="_blank" class="ref-link text-warning">
+                                    PR-{{ $pr->return_no }}
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{{ route('purchase_invoices.show', $pr->purchase_invoice_id) }}" target="_blank" class="ref-link text-success">
+                                    PI-{{ $pr->purchase_invoice_no }}
+                                </a>
+                            </td>
                             <td>{{ $pr->vendor_name }}</td>
                             <td>{{ $pr->item_name }}</td>
-                            <td class="text-end">{{ $pr->quantity }}</td>
+                            <td>{{ $pr->variation }}</td>
+                            <td class="text-end">{{ number_format($pr->quantity, 2) }}</td>
+                            <td class="text-end">{{ number_format($pr->net_weight, 2) }}</td>
                             <td class="text-end">{{ number_format($pr->rate, 2) }}</td>
                             <td class="text-end fw-bold">{{ number_format($pr->total, 2) }}</td>
+                            <td class="text-center no-print">
+                                <a href="{{ route('purchase_returns.print', $pr->return_id) }}" target="_blank" class="btn btn-outline-success btn-sm" title="Print">
+                                    <i class="fas fa-print"></i>
+                                </a>
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-center text-muted">No purchase return records found.</td></tr>
+                        <tr><td colspan="11" class="text-center text-muted">No purchase return records found.</td></tr>
                     @endforelse
                     </tbody>
                     @if(count($purchaseReturns))
                     <tfoot class="table-light fw-bold">
                         <tr>
-                            <td colspan="4" class="text-end">Grand Total</td>
-                            <td class="text-end">{{ $returnQty }}</td>
+                            <td colspan="6" class="text-end">Grand Total</td>
+                            <td class="text-end">{{ number_format($returnQty, 2) }}</td>
+                            <td class="text-end">{{ number_format($returnNetWt, 2) }}</td>
                             <td class="text-end">—</td>
                             <td class="text-end">{{ number_format($returnTotal, 2) }}</td>
+                            <td class="no-print"></td>
                         </tr>
                     </tfoot>
                     @endif

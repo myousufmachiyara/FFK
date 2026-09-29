@@ -66,9 +66,18 @@ class PurchaseReportController extends Controller
             });
         }
 
-        /* ================= PURCHASE RETURNS ================= */
+        /* ================= PURCHASE RETURNS =================
+         * FIX: previously used $return->invoice_no (doesn't exist on
+         * PurchaseReturn — it's return_no) and $item->quantity * $item->price
+         * for the total, which multiplies BAGS by a PER-KG rate — a unit
+         * mismatch that produced a meaningless number. The return's own
+         * 'amount' field (net_weight * price, computed correctly at
+         * creation time) is used directly instead. Now itemized with
+         * weight and variation, matching Purchase Register's level of
+         * detail, plus a link back to the original PI for reference.
+         */
         if ($tab === 'PR' && $hasPurchaseReturns) {
-            $query = PurchaseReturn::with(['vendor', 'items.item'])
+            $query = PurchaseReturn::with(['purchaseInvoice', 'vendor', 'items.item', 'items.variation'])
                 ->whereBetween('return_date', [$from, $to]);
 
             if ($request->filled('vendor_id')) {
@@ -78,14 +87,18 @@ class PurchaseReportController extends Controller
             $purchaseReturns = $query->get()->flatMap(function ($return) {
                 return $return->items->map(function ($item) use ($return) {
                     return (object)[
-                        'return_id'   => $return->id,
-                        'date'        => $return->return_date,
-                        'return_no'   => $return->invoice_no,
-                        'vendor_name' => $return->vendor->name ?? '',
-                        'item_name'   => $item->item->name ?? 'N/A',
-                        'quantity'    => $item->quantity,
-                        'rate'        => $item->price,
-                        'total'       => $item->quantity * $item->price,
+                        'return_id'           => $return->id,
+                        'return_no'           => $return->return_no,
+                        'date'                => $return->return_date,
+                        'purchase_invoice_id' => $return->purchase_invoice_id,
+                        'purchase_invoice_no' => $return->purchaseInvoice->invoice_no ?? '-',
+                        'vendor_name'         => $return->vendor->name ?? '',
+                        'item_name'           => $item->item->name ?? 'N/A',
+                        'variation'           => $item->variation->sku ?? '-',
+                        'quantity'            => $item->quantity,
+                        'net_weight'          => $item->net_weight,
+                        'rate'                => $item->price,
+                        'total'               => $item->amount,
                     ];
                 });
             });

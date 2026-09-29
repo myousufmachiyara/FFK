@@ -10,7 +10,7 @@ class CommissionReturn extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'commission_invoice_id', 'return_no', 'return_date', 'vendor_id', 'customer_id',
+        'commission_invoice_id', 'return_no', 'return_date', 'return_type', 'vendor_id', 'customer_id',
         'reason', 'total_weight', 'total_sale_value', 'total_vendor_commission',
         'total_customer_commission', 'created_by',
     ];
@@ -37,5 +37,20 @@ class CommissionReturn extends Model
     public function netCustomerReduction(): float
     {
         return round((float) $this->total_sale_value, 2);
+    }
+
+    public function isVendorReturn(): bool
+    {
+        return $this->return_type === 'vendor';
+    }
+
+    public function isStockInReturn(): bool
+    {
+        return $this->return_type === 'stock_in';
+    }
+
+    public function returnTypeLabel(): string
+    {
+        return $this->isStockInReturn() ? 'Stock In (FFK)' : 'Returned to Vendor';
     }
 }

@@ -360,15 +360,9 @@ class CommissionInvoiceController extends Controller
                 return back()->with('error', 'This invoice is not Pending — no action taken.');
             }
 
-            $hasAttachment = $request->hasFile('attachment')
-                || $invoice->attachments()->where('stage', CommissionInvoice::STATUS_PENDING)->exists()
-                || $invoice->attachments()->exists();
-
-            if (!$hasAttachment) {
-                DB::rollBack();
-                return back()->withErrors(['attachment' => 'An attachment (dispatch proof) is required to move to In Transit.']);
-            }
-
+            // Attachment is now optional at every stage — upload still
+            // works if a file is provided, but it's no longer required
+            // to proceed.
             $invoice->update([
                 'vendor_bill_no' => $request->vendor_bill_no,
                 'bilty_no'       => $request->bilty_no,
@@ -537,14 +531,8 @@ class CommissionInvoiceController extends Controller
                 return back()->with('error', 'This invoice is not In Transit — no action taken.');
             }
 
-            $hasDeliveryProof = $request->hasFile('attachment')
-                || $invoice->attachments()->where('stage', CommissionInvoice::STATUS_DELIVERED)->exists();
-
-            if (!$hasDeliveryProof) {
-                DB::rollBack();
-                return back()->withErrors(['attachment' => 'Delivery proof (signed receipt/attachment) is required to mark as Delivered.']);
-            }
-
+            // Delivery proof is now optional — upload still works if
+            // provided, but it's no longer required to mark as Delivered.
             $invoice->update([
                 'status'                     => CommissionInvoice::STATUS_DELIVERED,
                 'delivered_at'               => $request->delivered_at,
@@ -885,7 +873,7 @@ class CommissionInvoiceController extends Controller
         $pdf->SetTextColor(201, 162, 75);
         $pdf->Cell(120, 6, '(KARACHI)', 0, 1, 'L');
 
-        $pdf->SetFont('helvetica', '', 10);
+        $pdf->SetFont('helvetica', '', 8);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetXY(120, 8);
         $pdf->Cell(80, 5, 'Farooq Fulara: 0320-2788117', 0, 1, 'R');
@@ -913,31 +901,30 @@ class CommissionInvoiceController extends Controller
             <tr><td><b>Date</b></td><td>:</td><td>' . Carbon::parse($invoice->invoice_date)->format('d-m-Y') . '</td></tr>
             <tr><td><b>Due Date</b></td><td>:</td><td>' . $dueDateLine . '</td></tr>
             <tr><td><b>Status</b></td><td>:</td><td>' . $invoice->statusLabel() . '</td></tr>
-            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
-
         </table>';
         $pdf->SetXY(105, 38);
         $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
 
         // ── Two boxed detail sections: Vendor | Customer ────────────
-        $boxY = 65;
+        $boxY = 55;
         $pdf->SetFillColor(27, 58, 92);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
         $pdf->SetXY(10, $boxY);
-        $pdf->Cell(90, 7, '  Vendor & Customer Details', 1, 0, 'L', true);
+        $pdf->Cell(90, 7, '  Vendor Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Transport Details', 1, 0, 'L', true);
+        $pdf->Cell(95, 7, '  Customer Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
 
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Vendor</b></td><td width="5%">:</td><td width="65%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
-            <tr><td><b>Vendor Bill No</b></td><td width="5%">:</td><td>' . ($invoice->vendor_bill_no ?? '-') . '</td></tr>
-            <tr><td><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
+            <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->vendor_bill_no ?? '-') . '</td></tr>
+            <tr><td><b>Bilty No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
         </table>';
         $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td width="30%"><b>Transport</b></td><td width="5%">:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
-            <tr><td width="30%"><b>Bilti No</b></td><td width="5%">:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td width="30%"><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
+            <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
         </table>';
 
         $pdf->SetXY(10, $boxY + 7);
@@ -952,11 +939,11 @@ class CommissionInvoiceController extends Controller
         <table border="1" cellpadding="2.5" style="font-size:7.5px;">
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
-                    <th width="16%">Item</th><th width="5%">Qty</th><th width="7%">G.Wt</th><th width="7%">N.Wt</th>
-                    <th width="8%">P.Rate/kg</th><th width="10%">P.Total</th>
-                    <th width="8%">S.Rate/kg</th><th width="10%">S.Total</th>
-                    <th width="5%">V.C %</th><th width="9.5%">V.C</th>
-                    <th width="5%">C.C %</th><th width="9.5%">C.C</th>
+                    <th width="13%">Item</th><th width="6%">Qty</th><th width="8%">Net Wt</th>
+                    <th width="9%">Pur Rate/kg</th><th width="9%">Pur Total</th>
+                    <th width="9%">Sale Rate/kg</th><th width="9%">Sale Total</th>
+                    <th width="9%">Vendor Comm %</th><th width="9%">Vendor Comm</th>
+                    <th width="9%">Cust Comm %</th><th width="10%">Cust Comm</th>
                 </tr>
             </thead>
             <tbody>';
@@ -965,18 +952,17 @@ class CommissionInvoiceController extends Controller
             $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="16%">' . e($item->product->name ?? '-') . '</td>
-                    <td width="5%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
-                    <td width="7%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
-                    <td width="7%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
-                    <td width="8%" style="text-align:right;">' . number_format($item->purchase_price, 2) . '</td>
-                    <td width="10%" style="text-align:right;">' . number_format($item->purchase_total, 2) . '</td>
-                    <td width="8%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
-                    <td width="10%" style="text-align:right;">' . number_format($item->sale_total, 2) . '</td>
-                    <td width="5%" style="text-align:center;">' . number_format($item->vendor_commission_percentage, 2) . '</td>
-                    <td width="9.5%" style="text-align:right;">' . number_format($item->vendor_commission_amount, 2) . '</td>
-                    <td width="5%" style="text-align:center;">' . number_format($item->customer_commission_percentage, 2) . '</td>
-                    <td width="9.5%" style="text-align:right;">' . number_format($item->customer_commission_amount, 2) . '</td>
+                    <td width="13%">' . e($item->product->name ?? '-') . '</td>
+                    <td width="6%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
+                    <td width="8%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
+                    <td width="9%" style="text-align:right;">' . number_format($item->purchase_price, 2) . '</td>
+                    <td width="9%" style="text-align:right;">' . number_format($item->purchase_total, 2) . '</td>
+                    <td width="9%" style="text-align:right;">' . number_format($item->sale_price, 2) . '</td>
+                    <td width="9%" style="text-align:right;">' . number_format($item->sale_total, 2) . '</td>
+                    <td width="9%" style="text-align:center;">' . number_format($item->vendor_commission_percentage, 2) . '</td>
+                    <td width="9%" style="text-align:right;">' . number_format($item->vendor_commission_amount, 2) . '</td>
+                    <td width="9%" style="text-align:center;">' . number_format($item->customer_commission_percentage, 2) . '</td>
+                    <td width="10%" style="text-align:right;">' . number_format($item->customer_commission_amount, 2) . '</td>
                 </tr>';
         }
         $html .= '</tbody></table>';
@@ -989,7 +975,7 @@ class CommissionInvoiceController extends Controller
         $expRows = '';
         foreach ($invoice->expenses as $exp) {
             $payTo = $exp->paid_by === 'vendor' ? ($invoice->vendor->name ?? '-') : ($exp->payeeAccount->name ?? '-');
-            $expRows .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="50%">' . $exp->description . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+            $expRows .= '<tr><td width="50%">' . $exp->typeLabel() . '</td><td width="25%">' . $exp->paidByLabel() . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
         }
         if (!$invoice->expenses->count()) {
             $expRows = '<tr><td colspan="3" style="color:#888;">No Other Expenses</td></tr>';
@@ -999,7 +985,7 @@ class CommissionInvoiceController extends Controller
         <table width="100%" cellpadding="2" style="font-size:8.5px;">
             <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="3">  Additional Information — Expenses</td></tr>
             ' . $expRows . '
-            <tr style="font-weight:bold;background-color:#F5EFDF;"><td width="30%">Total Expenses</td><td width="70%" colspan="2" style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#F5EFDF;"><td colspan="2">Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
         </table>';
 
         $rightRows = '
@@ -1013,9 +999,9 @@ class CommissionInvoiceController extends Controller
         if ($invoice->isDelivered()) {
             $rightRows .= '
             <tr><td>Paid to Vendor</td><td style="text-align:right;">' . number_format($invoice->amount_paid_to_vendor, 2) . '</td></tr>
-            <tr style="color:#b30000;font-size:10px"><td>Vendor Balance Remaining</td><td style="text-align:right;">' . number_format($invoice->vendorRemainingBalance(), 2) . '</td></tr>
+            <tr style="color:#b30000;"><td>Vendor Balance Remaining</td><td style="text-align:right;">' . number_format($invoice->vendorRemainingBalance(), 2) . '</td></tr>
             <tr><td>Received from Customer</td><td style="text-align:right;">' . number_format($invoice->amount_received_from_customer, 2) . '</td></tr>
-            <tr style="color:#b30000;font-size:10px"><td>Customer Balance Remaining</td><td style="text-align:right;">' . number_format($invoice->customerRemainingBalance(), 2) . '</td></tr>';
+            <tr style="color:#b30000;"><td>Customer Balance Remaining</td><td style="text-align:right;">' . number_format($invoice->customerRemainingBalance(), 2) . '</td></tr>';
         }
 
         $rightHtml = '<table width="100%" cellpadding="2" style="font-size:8.5px;">' . $rightRows . '</table>';
@@ -1029,7 +1015,7 @@ class CommissionInvoiceController extends Controller
         $rightEndY = $pdf->GetY();
 
         $pdf->SetY(max($leftEndY, $rightEndY) + 4);
-        $pdf->Ln(4);
+
         // ── Amount in Words (Customer Receivable — the figure the
         // customer actually needs to know they owe) ──────────────────
         $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
@@ -1040,15 +1026,10 @@ class CommissionInvoiceController extends Controller
         $pdf->writeHTML($wordsHtml, true, false, false, false, '');
         $pdf->Ln(2);
 
-        if ($invoice->remarks) {
+        if ($invoice->delivery_remarks) {
             $pdf->SetFont('helvetica', 'I', 9);
-            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->remarks, 0, 'L');
+            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->delivery_remarks, 0, 'L');
         }
-
-        // if ($invoice->delivery_remarks) {
-        //     $pdf->SetFont('helvetica', 'I', 9);
-        //     $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->delivery_remarks, 0, 'L');
-        // }
 
         // ── Signature ───────────────────────────────────────────────
         $pdf->SetFont('helvetica', '', 10);
@@ -1061,6 +1042,16 @@ class CommissionInvoiceController extends Controller
         $pdf->SetFont('helvetica', 'B', 9);
         $pdf->SetX(140);
         $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
+
+        // ── Footer band ───────────────────────────────────────────────
+        $footY = 282;
+        $pdf->SetFillColor(27, 58, 92);
+        $pdf->Rect(0, $footY, 210, 15, 'F');
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetXY(10, $footY + 4);
+        $pdf->Cell(190, 5, 'Farooq Fulara: 0320-2788117   |   Hamiz Farooq Fulara: 0335-0023574   |   Karachi, Pakistan', 0, 1, 'C');
+        $pdf->SetTextColor(0, 0, 0);
 
         return $pdf->Output('CI_' . $invoice->invoice_no . '.pdf', 'I');
     }
@@ -1091,27 +1082,14 @@ class CommissionInvoiceController extends Controller
             $grandTotal  = (float) $invoice->total_purchase_amount;
         }
 
-        if ($show40) {
-            $descW    = 20;
-            $qtyW     = 6;
-            $wtW      = 10;   // used twice (Gross Wt + Net Wt) = 20 total
-            $rate40W  = 10;
-            $rateKgW  = 10;
-            $totalW   = 13;
-            $commPctW = 7;
-            $commAmtW = 14;
-            // 20 + 6 + 10 + 10 + 10 + 10 + 13 + 7 + 14 = 100
-        } else {
-            $descW    = 24;
-            $qtyW     = 7;
-            $wtW      = 11;   // used twice (Gross Wt + Net Wt) = 22 total
-            $rate40W  = 0;
-            $rateKgW  = 12;
-            $totalW   = 15;
-            $commPctW = 8;
-            $commAmtW = 12;
-            // 24 + 7 + 11 + 11 + 12 + 15 + 8 + 12 = 100
-        }
+        $descW = $show40 ? 24 : 28;
+        $qtyW  = 8;
+        $wtW   = 11;
+        $rate40W = $show40 ? 11 : 0;
+        $rateKgW = $show40 ? 11 : 13;
+        $totalW  = $show40 ? 14 : 16;
+        $commPctW = $show40 ? 10 : 11;
+        $commAmtW = 100 - $descW - $qtyW - ($wtW * 2) - $rate40W - $rateKgW - $totalW - $commPctW;
 
         $html = '
         <table border="1" cellpadding="2.5" style="font-size:8px;">
@@ -1127,23 +1105,18 @@ class CommissionInvoiceController extends Controller
         $html .= '
                     <th width="' . $rateKgW . '%">Rate (kg)</th>
                     <th width="' . $totalW . '%">Total</th>
-                    <th width="' . $commPctW . '%">C %</th>
+                    <th width="' . $commPctW . '%">Comm %</th>
                     <th width="' . $commAmtW . '%">Commission</th>
                 </tr>
             </thead>
             <tbody>';
 
-                foreach ($invoice->items as $index => $item) {
+        foreach ($invoice->items as $index => $item) {
             $rowBg = $index % 2 === 0 ? '#ffffff' : '#F5EFDF';
-    
-            // Show ONLY the SKU, not name + SKU combined. If the item has a
-            // variation, that variation's SKU is the identifying one; if
-            // not, fall back to the product's own SKU.
-            $skuLabel = $item->variation?->sku ?? $item->product->sku ?? '-';
-    
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="' . $descW . '%">' . e($skuLabel) . '</td>
+                    <td width="' . $descW . '%">' . e($item->product->name ?? '-')
+                        . ($item->variation->sku ?? null ? ' (' . e($item->variation->sku) . ')' : '') . '</td>
                     <td width="' . $qtyW . '%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="' . $wtW . '%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="' . $wtW . '%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>';
@@ -1245,27 +1218,22 @@ class CommissionInvoiceController extends Controller
         $pdf->AddPage();
 
         $this->commissionPartyHeaderAndTitle($pdf, $invoice);
-        $paymentTermsLine = ucfirst($invoice->payment_terms ?? 'cash');
-        if ($invoice->isCredit() && $invoice->credit_days) {
-            $paymentTermsLine .= ' (' . $invoice->credit_days . ' days)';
-        }
 
-        $boxY = 60;
+        $boxY = 55;
         $pdf->SetFillColor(27, 58, 92);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
         $pdf->SetXY(10, $boxY);
         $pdf->Cell(90, 7, '  Customer Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Transport Details', 1, 0, 'L', true);
+        $pdf->Cell(95, 7, '  Shipment Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
 
         $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
-            <tr><td width="30%"><b>Payment Terms</b></td><td width="5%">:</td><td width="65%">' . $paymentTermsLine . '</td></tr>
         </table>';
         $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td width="30%"><b>Bilti No</b></td><td width="5%">:</td><td width="65%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td width="30%"><b>Bilty No</b></td><td width="5%">:</td><td width="65%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
             <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
         </table>';
 
@@ -1284,17 +1252,17 @@ class CommissionInvoiceController extends Controller
 
         $expRows = '';
         foreach ($invoice->expenses as $exp) {
-            $expRows .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="50%">' . $exp->description . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+            $expRows .= '<tr><td width="65%">' . $exp->typeLabel() . '</td><td width="35%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
         }
         if (!$invoice->expenses->count()) {
-            $expRows = '<tr><td colspan="3" style="color:#888;">No Other Expenses</td></tr>';
+            $expRows = '<tr><td colspan="2" style="color:#888;">No Other Expenses</td></tr>';
         }
 
         $leftHtml = '
         <table width="100%" cellpadding="2" style="font-size:8.5px;">
-            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="3">  Additional Information — Expenses</td></tr>
+            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="2">  Additional Information — Expenses</td></tr>
             ' . $expRows . '
-            <tr style="font-weight:bold;background-color:#F5EFDF;"><td width="30%" >Total Expenses</td><td width="70%" colspan="2" style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#F5EFDF;"><td>Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
         </table>';
 
         $rightRows = '
@@ -1327,9 +1295,9 @@ class CommissionInvoiceController extends Controller
         $pdf->writeHTML($wordsHtml, true, false, false, false, '');
         $pdf->Ln(2);
 
-        if ($invoice->remarks) {
+        if ($invoice->delivery_remarks) {
             $pdf->SetFont('helvetica', 'I', 9);
-            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->remarks, 0, 'L');
+            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->delivery_remarks, 0, 'L');
         }
 
         $pdf->SetFont('helvetica', '', 10);
@@ -1384,25 +1352,24 @@ class CommissionInvoiceController extends Controller
             $paymentTermsLine .= ' (' . $invoice->credit_days . ' days)';
         }
 
-        $boxY = 60;
+        $boxY = 55;
         $pdf->SetFillColor(27, 58, 92);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
         $pdf->SetXY(10, $boxY);
         $pdf->Cell(90, 7, '  Vendor Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Transport Details', 1, 0, 'L', true);
+        $pdf->Cell(95, 7, '  Shipment Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
 
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Vendor</b></td><td width="5%">:</td><td width="65%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->vendor_bill_no ?? '-') . '</td></tr>
-            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
+            <tr><td><b>Bilty No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
         </table>';
-
         $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Transport</b></td><td width="5%">:</td><td width="65%">' . ($invoice->transport_name ?? '-') . '</td></tr>
-            <tr><td><b>Bilti No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
         </table>';
 
         $pdf->SetXY(10, $boxY + 7);
@@ -1420,17 +1387,17 @@ class CommissionInvoiceController extends Controller
 
         $expRows = '';
         foreach ($invoice->expenses as $exp) {
-            $expRows .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="50%">' . $exp->description . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+            $expRows .= '<tr><td width="65%">' . $exp->typeLabel() . '</td><td width="35%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
         }
         if (!$invoice->expenses->count()) {
-            $expRows = '<tr><td colspan="3" style="color:#888;">No Other Expenses</td></tr>';
+            $expRows = '<tr><td colspan="2" style="color:#888;">No Other Expenses</td></tr>';
         }
 
         $leftHtml = '
         <table width="100%" cellpadding="2" style="font-size:8.5px;">
-            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="3">  Additional Information — Expenses</td></tr>
+            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="2">  Additional Information — Expenses</td></tr>
             ' . $expRows . '
-            <tr style="font-weight:bold;background-color:#F5EFDF;"><td width="30%">Total Expenses</td><td width="70%" colspan="2" style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#F5EFDF;"><td>Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
         </table>';
 
         $rightRows = '
@@ -1453,7 +1420,6 @@ class CommissionInvoiceController extends Controller
         $pdf->writeHTMLCell(95, 0, 105, $sideY, $rightHtml, 1, 1);
         $rightEndY = $pdf->GetY();
         $pdf->SetY(max($leftEndY, $rightEndY) + 4);
-        $pdf->Ln(4);
 
         $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
             <tr style="background-color:#F5EFDF;">
@@ -1463,9 +1429,9 @@ class CommissionInvoiceController extends Controller
         $pdf->writeHTML($wordsHtml, true, false, false, false, '');
         $pdf->Ln(2);
 
-        if ($invoice->remarks) {
+        if ($invoice->delivery_remarks) {
             $pdf->SetFont('helvetica', 'I', 9);
-            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->remarks, 0, 'L');
+            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->delivery_remarks, 0, 'L');
         }
 
         $pdf->SetFont('helvetica', '', 10);
