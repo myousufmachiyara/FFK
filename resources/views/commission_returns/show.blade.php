@@ -48,7 +48,7 @@
         @endif
         <div class="table-responsive mb-3">
           <table class="table table-bordered table-sm">
-            <thead><tr><th>Item</th><th>Variation</th><th class="text-end">Qty</th><th class="text-end">Net Wt</th><th class="text-end">Sale Value</th><th class="text-end">Vendor Comm</th><th class="text-end">Cust Comm</th></tr></thead>
+            <thead><tr><th>Item</th><th>Variation</th><th class="text-end">Qty</th><th class="text-end">Net Wt</th><th class="text-end">Sale Value</th>@if($return->isVendorReturn())<th class="text-end">Purchase Value</th>@endif<th class="text-end">Vendor Comm</th><th class="text-end">Cust Comm</th></tr></thead>
             <tbody>
               @foreach($return->items as $item)
               <tr>
@@ -57,6 +57,9 @@
                 <td class="text-end">{{ number_format($item->qty, 2) }}</td>
                 <td class="text-end">{{ number_format($item->net_weight, 2) }}</td>
                 <td class="text-end">{{ number_format($item->sale_value, 2) }}</td>
+                @if($return->isVendorReturn())
+                <td class="text-end">{{ number_format($item->purchase_value, 2) }}</td>
+                @endif
                 <td class="text-end">{{ number_format($item->vendor_commission, 2) }}</td>
                 <td class="text-end">{{ number_format($item->customer_commission, 2) }}</td>
               </tr>
@@ -65,6 +68,9 @@
                 <td colspan="3"></td>
                 <td class="text-end">{{ number_format($return->total_weight, 2) }}</td>
                 <td class="text-end">{{ number_format($return->total_sale_value, 2) }}</td>
+                @if($return->isVendorReturn())
+                <td class="text-end">{{ number_format($return->total_purchase_value, 2) }}</td>
+                @endif
                 <td class="text-end">{{ number_format($return->total_vendor_commission, 2) }}</td>
                 <td class="text-end">{{ number_format($return->total_customer_commission, 2) }}</td>
               </tr>
@@ -76,8 +82,12 @@
         <p class="text-muted small">
           <i class="fas fa-info-circle"></i> Net reduction to Customer's receivable:
           <strong>{{ number_format($return->netCustomerReduction(), 2) }}</strong>
-          (goods value reversed). Vendor's payable increases by the vendor commission reversed
-          (<strong>{{ number_format($return->total_vendor_commission, 2) }}</strong>) since that commission is no longer earned.
+          (goods value reversed). Net reduction to Vendor's payable:
+          <strong>{{ number_format($return->netVendorReduction(), 2) }}</strong>
+          — purchase value of <strong>{{ number_format($return->total_purchase_value, 2) }}</strong> reversed
+          (goods going back to them, so FFK no longer owes for this portion), offset by
+          <strong>{{ number_format($return->total_vendor_commission, 2) }}</strong> of commission coming back in
+          (they're no longer earning it on goods they're taking back).
         </p>
         @else
         <p class="text-muted small">

@@ -93,7 +93,7 @@ class CommissionReturnController extends Controller
                 'created_by'            => auth()->id(),
             ]);
 
-            $totalWeight = 0; $totalSaleValue = 0; $totalVendorComm = 0; $totalCustComm = 0;
+            $totalWeight = 0; $totalSaleValue = 0; $totalPurchaseValue = 0; $totalVendorComm = 0; $totalCustComm = 0;
 
             foreach ($request->items as $itemInput) {
                 $originalItem = \App\Models\CommissionInvoiceItem::findOrFail($itemInput['commission_invoice_item_id']);
@@ -120,6 +120,7 @@ class CommissionReturnController extends Controller
                     : 0;
 
                 $saleValue = round((float) $originalItem->sale_total * $fraction, 2);
+                $purchaseValue = round((float) $originalItem->purchase_total * $fraction, 2);
                 $vendorCommission = round((float) $originalItem->vendor_commission_amount * $fraction, 2);
                 $customerCommission = round((float) $originalItem->customer_commission_amount * $fraction, 2);
 
@@ -131,12 +132,14 @@ class CommissionReturnController extends Controller
                     'qty'                        => $qty,
                     'net_weight'                 => $wt,
                     'sale_value'                 => $saleValue,
+                    'purchase_value'             => $purchaseValue,
                     'vendor_commission'          => $vendorCommission,
                     'customer_commission'        => $customerCommission,
                 ]);
 
                 $totalWeight     += $wt;
                 $totalSaleValue  += $saleValue;
+                $totalPurchaseValue += $purchaseValue;
                 $totalVendorComm += $vendorCommission;
                 $totalCustComm   += $customerCommission;
 
@@ -158,6 +161,7 @@ class CommissionReturnController extends Controller
             $return->update([
                 'total_weight'               => $totalWeight,
                 'total_sale_value'           => $totalSaleValue,
+                'total_purchase_value'       => $totalPurchaseValue,
                 'total_vendor_commission'    => $totalVendorComm,
                 'total_customer_commission'  => $totalCustComm,
             ]);
@@ -165,10 +169,33 @@ class CommissionReturnController extends Controller
             $residualReversal = round($totalSaleValue - $totalCustComm, 2);
 
             if ($request->return_type === 'vendor') {
-                // ── VENDOR SCENARIO — everything reverses, exactly as before. ──
+                // ── VENDOR SCENARIO ──
+                // FIX: this previously only reversed the vendor's
+                // COMMISSION, which actually INCREASES vendor payable
+                // back (undoing the deduction) — it never touched the
+                // underlying PURCHASE AMOUNT that was credited to Vendor
+                // at In Transit (CI-{id}-INTRANSIT: DR Transit / CR
+                // Vendor, full purchase amount). Since these goods are
+                // physically going back to the vendor, FFK shouldn't owe
+                // them for this portion at all anymore — that purchase
+                // amount needs to reverse too. Net effect on Vendor's
+                // account is now (Purchase Value - Vendor Commission)
+                // DEBITED, correctly reducing payable by the same net
+                // amount that originally made up that portion of it.
                 $commissionIncomeAccount = ChartOfAccounts::where('account_type', 'revenue')->where('name', 'like', '%Commission%')->first()
                     ?? ChartOfAccounts::where('account_type', 'revenue')->firstOrFail();
                 $clearingAccount = ChartOfAccounts::where('account_type', 'clearing')->firstOrFail();
+
+                // Reverse the purchase amount originally credited to
+                // Vendor at In Transit — FFK no longer owes for goods
+                // being taken back.
+                if ($totalPurchaseValue > 0) {
+                    $this->postVoucher(
+                        $request->return_date, $invoice->vendor, $clearingAccount, $totalPurchaseValue,
+                        "CR-{$return->id}-VENDOR-PURCHASE-VALUE",
+                        "Commission Return #{$returnNo} (to Vendor) — purchase value reversal against CI-{$invoice->invoice_no}"
+                    );
+                }
 
                 // Reverse the original DR Vendor / CR Commission Income.
                 if ($totalVendorComm > 0) {
@@ -316,7 +343,7 @@ class CommissionReturnController extends Controller
                 'reason'      => $request->reason,
             ]);
 
-            $totalWeight = 0; $totalSaleValue = 0; $totalVendorComm = 0; $totalCustComm = 0;
+            $totalWeight = 0; $totalSaleValue = 0; $totalPurchaseValue = 0; $totalVendorComm = 0; $totalCustComm = 0;
 
             foreach ($request->items as $itemInput) {
                 $originalItem = \App\Models\CommissionInvoiceItem::findOrFail($itemInput['commission_invoice_item_id']);
@@ -344,6 +371,7 @@ class CommissionReturnController extends Controller
                     : 0;
 
                 $saleValue = round((float) $originalItem->sale_total * $fraction, 2);
+                $purchaseValue = round((float) $originalItem->purchase_total * $fraction, 2);
                 $vendorCommission = round((float) $originalItem->vendor_commission_amount * $fraction, 2);
                 $customerCommission = round((float) $originalItem->customer_commission_amount * $fraction, 2);
 
@@ -355,12 +383,14 @@ class CommissionReturnController extends Controller
                     'qty'                        => $qty,
                     'net_weight'                 => $wt,
                     'sale_value'                 => $saleValue,
+                    'purchase_value'             => $purchaseValue,
                     'vendor_commission'          => $vendorCommission,
                     'customer_commission'        => $customerCommission,
                 ]);
 
                 $totalWeight     += $wt;
                 $totalSaleValue  += $saleValue;
+                $totalPurchaseValue += $purchaseValue;
                 $totalVendorComm += $vendorCommission;
                 $totalCustComm   += $customerCommission;
 
@@ -376,6 +406,7 @@ class CommissionReturnController extends Controller
             $return->update([
                 'total_weight'               => $totalWeight,
                 'total_sale_value'           => $totalSaleValue,
+                'total_purchase_value'       => $totalPurchaseValue,
                 'total_vendor_commission'    => $totalVendorComm,
                 'total_customer_commission'  => $totalCustComm,
             ]);
@@ -386,6 +417,14 @@ class CommissionReturnController extends Controller
                 $commissionIncomeAccount = ChartOfAccounts::where('account_type', 'revenue')->where('name', 'like', '%Commission%')->first()
                     ?? ChartOfAccounts::where('account_type', 'revenue')->firstOrFail();
                 $clearingAccount = ChartOfAccounts::where('account_type', 'clearing')->firstOrFail();
+
+                if ($totalPurchaseValue > 0) {
+                    $this->postVoucher(
+                        $request->return_date, $invoice->vendor, $clearingAccount, $totalPurchaseValue,
+                        "CR-{$return->id}-VENDOR-PURCHASE-VALUE",
+                        "Commission Return #{$return->return_no} (to Vendor) — purchase value reversal against CI-{$invoice->invoice_no} (updated)"
+                    );
+                }
 
                 if ($totalVendorComm > 0) {
                     $this->postVoucher(
