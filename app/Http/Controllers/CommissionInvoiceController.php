@@ -953,6 +953,7 @@ class CommissionInvoiceController extends Controller
                 <tr style="background-color:' . $rowBg . ';">
                     <td width="20%">' . e($item->product->name ?? '-') . '</td>
                     <td width="6%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
+                    <td width="8%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="8%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->purchase_price, 2) . '</td>
                     <td width="9%" style="text-align:right;">' . number_format($item->purchase_total, 2) . '</td>
