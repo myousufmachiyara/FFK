@@ -950,12 +950,14 @@ class PurchaseInvoiceController extends Controller
             <tr><td><b>Date</b></td><td>:</td><td>' . Carbon::parse($invoice->invoice_date)->format('d-m-Y') . '</td></tr>
             <tr><td><b>Due Date</b></td><td>:</td><td>' . $dueDateLine . '</td></tr>
             <tr><td><b>Status</b></td><td>:</td><td>' . $invoice->statusLabel() . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
+
         </table>';
         $pdf->SetXY(105, 38);
         $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
 
         // ── Two boxed detail sections: Vendor | Shipment ────────────
-        $boxY = 60;
+        $boxY = 65;
         $pdf->SetFillColor(27, 58, 92);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
@@ -968,12 +970,10 @@ class PurchaseInvoiceController extends Controller
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="35%"><b>Vendor</b></td><td width="5%">:</td><td width="60%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->bill_no ?? '-') . '</td></tr>
-            <tr><td><b>Ref No</b></td><td>:</td><td>' . ($invoice->ref_no ?? '-') . '</td></tr>
         </table>';
         $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="35%"><b>Bilty No</b></td><td width="5%">:</td><td width="60%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
             <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
-            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
         </table>';
 
         $pdf->SetXY(10, $boxY + 7);
@@ -989,7 +989,7 @@ class PurchaseInvoiceController extends Controller
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
                     <th width="23%">Item</th>
-                    <th width="12%">Wt/Packing</th>
+                    <th width="11%">Wt/Packing</th>
                     <th width="6%">Qty</th>
                     <th width="10%">Gross Wt</th>
                     <th width="10%">Net Wt</th>
@@ -1007,7 +1007,7 @@ class PurchaseInvoiceController extends Controller
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
                     <td width="23%">' . e($item->product->name ?? '-') . '</td>
-                    <td width="12%" style="text-align:right;">' . number_format($item->wt_per_packing, 2) . '</td>
+                    <td width="11%" style="text-align:right;">' . number_format($item->wt_per_packing, 2) . '</td>
                     <td width="6%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="10%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="10%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
