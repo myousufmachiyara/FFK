@@ -988,9 +988,8 @@ class PurchaseInvoiceController extends Controller
         <table border="1" cellpadding="3" style="font-size:9px;">
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
-                    <th width="16%">Item</th>
-                    <th width="9%">Variation</th>
-                    <th width="9%">Wt/Packing</th>
+                    <th width="23%">Item</th>
+                    <th width="12%">Wt/Packing</th>
                     <th width="6%">Qty</th>
                     <th width="10%">Gross Wt</th>
                     <th width="10%">Net Wt</th>
@@ -1007,9 +1006,8 @@ class PurchaseInvoiceController extends Controller
 
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="16%">' . e($item->product->name ?? '-') . '</td>
-                    <td width="9%" style="text-align:center;">' . e($variationName) . '</td>
-                    <td width="9%" style="text-align:right;">' . number_format($item->wt_per_packing, 2) . '</td>
+                    <td width="23%">' . e($item->product->name ?? '-') . '</td>
+                    <td width="12%" style="text-align:right;">' . number_format($item->wt_per_packing, 2) . '</td>
                     <td width="6%" style="text-align:center;">' . number_format($item->quantity, 0) . '</td>
                     <td width="10%" style="text-align:right;">' . number_format($item->gross_weight, 2) . '</td>
                     <td width="10%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
