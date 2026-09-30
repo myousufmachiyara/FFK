@@ -941,8 +941,8 @@ class CommissionInvoiceController extends Controller
                     <th width="13%">Item</th><th width="6%">Qty</th><th width="8%">G.Wt</th><th width="8%">N.Wt</th>
                     <th width="9%">P.Rate/kg</th><th width="9%">P.Total</th>
                     <th width="9%">S.Rate/kg</th><th width="9%">S.Total</th>
-                    <th width="9%">Vendor Comm %</th><th width="9%">Vendor Comm</th>
-                    <th width="9%">V.C%</th><th width="10%">V.C</th>
+                    <th width="9%">V.C%</th><th width="9%">V.C</th>
+                    <th width="9%">C.C%</th><th width="10%">C.C</th>
                 </tr>
             </thead>
             <tbody>';
