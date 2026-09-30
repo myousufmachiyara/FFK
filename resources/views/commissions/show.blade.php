@@ -196,7 +196,7 @@
         <h5>Attachments</h5>
         <div class="mb-3">
           @foreach($invoice->attachments as $file)
-            <a {{ route('attachments.show', $file->file_path) }} target="_blank" class="badge bg-light text-dark border me-1 p-2">
+            <a href="{{ route('attachments.show', $file->file_path) }}" target="_blank" class="badge bg-light text-dark border me-1 p-2">
               <i class="fas fa-file"></i> {{ ucfirst($file->stage) }}: {{ $file->original_name }}
             </a>
           @endforeach
