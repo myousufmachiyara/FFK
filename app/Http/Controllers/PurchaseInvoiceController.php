@@ -1019,7 +1019,7 @@ class PurchaseInvoiceController extends Controller
 
         $html .= '
                 <tr style="font-weight:bold;background-color:#F5EFDF;">
-                    <td colspan="8" style="text-align:right;">Total Item Amount</td>
+                    <td colspan="7" style="text-align:right;">Total Item Amount</td>
                     <td style="text-align:right;">' . number_format($invoice->total_amount, 2) . '</td>
                 </tr>
             </tbody>
