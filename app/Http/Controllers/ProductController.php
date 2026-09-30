@@ -267,21 +267,74 @@ class ProductController extends Controller
 
         $unitId = optional($product->measurementUnit)->id;
 
-        $variations = $product->variations->map(function ($v) use ($unitId) {
-            return [
-                'id'             => $v->id,
-                'sku'            => $v->sku,
-                'barcode'        => $v->barcode,
-                'unit'           => $unitId,
-                'stock_quantity' => (float) $v->stock_quantity,
-                'opening_stock'  => (float) $v->opening_stock,
-                'available_stock'=> round((float) $v->opening_stock + (float) $v->stock_quantity, 3),
-                'opening_weight' => (float) $v->opening_weight,
-                'available_weight'=> round((float) $v->opening_weight + (float) $v->stock_weight, 3),
-                'stock_weight'   => (float) $v->stock_weight,
-                'selling_price'  => $v->selling_price !== null ? (float) $v->selling_price : null,
-            ];
-        });
+        if ($product->variations->isEmpty()) {
+            // FIX: a product with NO variations returned an empty
+            // 'variation' array here, leaving the Sale/Purchase/
+            // Commission create forms nothing to read stock from at
+            // all — Stock In Hand and resolveAvailableStock() already
+            // computed this correctly (purchased - sold + opening
+            // stock, since there's no live stock_quantity column to
+            // read without a variation row), this endpoint just never
+            // did the same for the no-variation case. Now returns one
+            // pseudo-variation entry using that identical formula, so
+            // all three places agree.
+            $purchasedQty = (float) DB::table('purchase_invoice_items')
+                ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
+                ->where('purchase_invoice_items.item_id', $product->id)
+                ->where('purchase_invoices.status', 'received')
+                ->whereNull('purchase_invoices.deleted_at')
+                ->sum(DB::raw('COALESCE(purchase_invoice_items.received_packing_qty, purchase_invoice_items.quantity)'));
+
+            $soldQty = (float) DB::table('sale_invoice_items')
+                ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
+                ->where('sale_invoice_items.product_id', $product->id)
+                ->sum('sale_invoice_items.quantity');
+
+            $purchasedWeight = (float) DB::table('purchase_invoice_items')
+                ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
+                ->where('purchase_invoice_items.item_id', $product->id)
+                ->where('purchase_invoices.status', 'received')
+                ->whereNull('purchase_invoices.deleted_at')
+                ->sum(DB::raw('COALESCE(purchase_invoice_items.received_net_weight, purchase_invoice_items.net_weight)'));
+
+            $soldWeight = (float) DB::table('sale_invoice_items')
+                ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
+                ->where('sale_invoice_items.product_id', $product->id)
+                ->sum('sale_invoice_items.net_weight');
+
+            $stockQty    = round($purchasedQty - $soldQty, 3);
+            $stockWeight = round($purchasedWeight - $soldWeight, 3);
+
+            $variations = collect([[
+                'id'              => null,
+                'sku'             => '—',
+                'barcode'         => null,
+                'unit'            => $unitId,
+                'stock_quantity'  => $stockQty,
+                'opening_stock'   => (float) $product->opening_stock,
+                'available_stock' => round((float) $product->opening_stock + $stockQty, 3),
+                'opening_weight'  => (float) $product->opening_weight,
+                'available_weight'=> round((float) $product->opening_weight + $stockWeight, 3),
+                'stock_weight'    => $stockWeight,
+                'selling_price'   => $product->selling_price !== null ? (float) $product->selling_price : null,
+            ]]);
+        } else {
+            $variations = $product->variations->map(function ($v) use ($unitId) {
+                return [
+                    'id'             => $v->id,
+                    'sku'            => $v->sku,
+                    'barcode'        => $v->barcode,
+                    'unit'           => $unitId,
+                    'stock_quantity' => (float) $v->stock_quantity,
+                    'opening_stock'  => (float) $v->opening_stock,
+                    'available_stock'=> round((float) $v->opening_stock + (float) $v->stock_quantity, 3),
+                    'opening_weight' => (float) $v->opening_weight,
+                    'available_weight'=> round((float) $v->opening_weight + (float) $v->stock_weight, 3),
+                    'stock_weight'   => (float) $v->stock_weight,
+                    'selling_price'  => $v->selling_price !== null ? (float) $v->selling_price : null,
+                ];
+            });
+        }
 
         return response()->json([
             'success'   => true,
