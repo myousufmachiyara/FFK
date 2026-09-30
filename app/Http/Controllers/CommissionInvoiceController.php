@@ -923,7 +923,7 @@ class CommissionInvoiceController extends Controller
         </table>';
         $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="20%"><b>Transport</b></td><td width="5%">:</td><td width="75%">' . ($invoice->transport_name ?? '-') . '</td></tr>
-            <tr><td width="20%"><b>Bilty No</b></td><td width="5%">:</td><td width="75%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td width="20%"><b>Bilti No</b></td><td width="5%">:</td><td width="75%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
         </table>';
 
         $pdf->SetXY(10, $boxY + 7);
@@ -941,8 +941,8 @@ class CommissionInvoiceController extends Controller
                     <th width="20%">Item</th><th width="6%">Qty</th><th width="8%">G.Wt</th><th width="8%">N.Wt</th>
                     <th width="9%">P.Rate/kg</th><th width="9%">P.Total</th>
                     <th width="9%">S.Rate/kg</th><th width="9%">S.Total</th>
-                    <th width="9%">V.C%</th><th width="9%">V.C</th>
-                    <th width="9%">C.C%</th><th width="10%">C.C</th>
+                    <th width="6%">V.C%</th><th width="9%">V.C</th>
+                    <th width="6%">C.C%</th><th width="10%">C.C</th>
                 </tr>
             </thead>
             <tbody>';
