@@ -568,7 +568,7 @@ class CommissionReturnController extends Controller
             <table border="1" cellpadding="3" style="font-size:9px;">
                 <thead>
                     <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
-                        <th width="26%">Item</th><th width="18%">Variation</th>
+                        <th width="44%">Description</th>
                         <th width="14%">Qty (bags)</th><th width="14%">Net Wt (kg)</th>
                         <th width="28%">Goods Value</th>
                     </tr>
@@ -580,8 +580,7 @@ class CommissionReturnController extends Controller
                 $skuLabel = $item->variation?->sku ?? $item->product->sku ?? '-';
                 $html .= '
                     <tr style="background-color:' . $rowBg . ';">
-                        <td width="26%">' . e($item->product->name ?? '-') . '</td>
-                        <td width="18%">' . e($skuLabel) . '</td>
+                        <td width="44%">' . e($skuLabel) . '</td>
                         <td width="14%" style="text-align:right;">' . number_format($item->qty, 2) . '</td>
                         <td width="14%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
                         <td width="28%" style="text-align:right;">' . number_format($item->sale_value - $item->customer_commission, 2) . '</td>
@@ -591,7 +590,7 @@ class CommissionReturnController extends Controller
             $residual = round((float) $return->total_sale_value - (float) $return->total_customer_commission, 2);
             $html .= '
                     <tr style="font-weight:bold;background-color:#F5EFDF;">
-                        <td colspan="4" style="text-align:right;">Total Goods Value (to FFK Stock)</td>
+                        <td colspan="3" style="text-align:right;">Total Goods Value (to FFK Stock)</td>
                         <td style="text-align:right;">' . number_format($residual, 2) . '</td>
                     </tr>
                 </tbody></table>';
@@ -601,7 +600,7 @@ class CommissionReturnController extends Controller
             <table border="1" cellpadding="3" style="font-size:8px;">
                 <thead>
                     <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
-                        <th width="20%">Item</th><th width="12%">Variation</th>
+                        <th width="32%">Description</th>
                         <th width="9%">Qty</th><th width="9%">Net Wt</th>
                         <th width="14%">Sale Value</th><th width="18%">Vendor Comm</th><th width="18%">Cust Comm</th>
                     </tr>
@@ -613,8 +612,7 @@ class CommissionReturnController extends Controller
                 $skuLabel = $item->variation?->sku ?? $item->product->sku ?? '-';
                 $html .= '
                     <tr style="background-color:' . $rowBg . ';">
-                        <td width="20%">' . e($item->product->name ?? '-') . '</td>
-                        <td width="12%">' . e($skuLabel) . '</td>
+                        <td width="32%">' . e($skuLabel) . '</td>
                         <td width="9%" style="text-align:right;">' . number_format($item->qty, 2) . '</td>
                         <td width="9%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
                         <td width="14%" style="text-align:right;">' . number_format($item->sale_value, 2) . '</td>
@@ -625,7 +623,7 @@ class CommissionReturnController extends Controller
 
             $html .= '
                     <tr style="font-weight:bold;background-color:#F5EFDF;">
-                        <td colspan="4" style="text-align:right;">Total</td>
+                        <td colspan="3" style="text-align:right;">Total</td>
                         <td style="text-align:right;">' . number_format($return->total_sale_value, 2) . '</td>
                         <td style="text-align:right;">' . number_format($return->total_vendor_commission, 2) . '</td>
                         <td style="text-align:right;">' . number_format($return->total_customer_commission, 2) . '</td>
@@ -639,7 +637,7 @@ class CommissionReturnController extends Controller
         // ── Summary ────────────────────────────────────────────────
         if ($isStockIn) {
             $residual = round((float) $return->total_sale_value - (float) $return->total_customer_commission, 2);
-            $summaryHtml = '<table width="95%" cellpadding="2" style="font-size:9px;" align="right">
+            $summaryHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
                 <tr><td width="70%">Customer Receivable Reduced By</td><td width="30%" style="text-align:right;">' . number_format($residual, 2) . '</td></tr>
                 <tr><td>Vendor Payable</td><td style="text-align:right;">No Change</td></tr>
                 <tr><td>Commission Income</td><td style="text-align:right;">No Change</td></tr>
@@ -649,7 +647,7 @@ class CommissionReturnController extends Controller
             </table>';
         } else {
             $residual = round((float) $return->total_sale_value - (float) $return->total_customer_commission, 2);
-            $summaryHtml = '<table width="95%" cellpadding="2" style="font-size:9px;" align="right">
+            $summaryHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
                 <tr><td width="70%">Vendor Commission Reversed</td><td width="30%" style="text-align:right;">' . number_format($return->total_vendor_commission, 2) . '</td></tr>
                 <tr><td>Customer Commission Reversed</td><td style="text-align:right;">' . number_format($return->total_customer_commission, 2) . '</td></tr>
                 <tr><td>Goods Value Reversed</td><td style="text-align:right;">' . number_format($residual, 2) . '</td></tr>

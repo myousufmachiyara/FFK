@@ -472,7 +472,7 @@ class SaleReturnController extends Controller
         <table border="1" cellpadding="3" style="font-size:9px;">
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
-                    <th width="20%">Item</th><th width="17%">Variation</th>
+                    <th width="37%">Description</th>
                     <th width="14%">Qty (bags)</th><th width="14%">Net Wt (kg)</th>
                     <th width="13%">Rate/kg</th><th width="22%">Amount</th>
                 </tr>
@@ -484,8 +484,7 @@ class SaleReturnController extends Controller
             $skuLabel = $item->variation?->sku ?? $item->product->sku ?? '-';
             $html .= '
                 <tr style="background-color:' . $rowBg . ';">
-                    <td width="20%">' . e($item->product->name ?? '-') . '</td>
-                    <td width="17%">' . e($skuLabel) . '</td>
+                    <td width="37%">' . e($skuLabel) . '</td>
                     <td width="14%" style="text-align:right;">' . number_format($item->qty, 2) . '</td>
                     <td width="14%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
                     <td width="13%" style="text-align:right;">' . number_format($item->price, 2) . '</td>
@@ -495,7 +494,7 @@ class SaleReturnController extends Controller
 
         $html .= '
                 <tr style="font-weight:bold;background-color:#F5EFDF;">
-                    <td colspan="5" style="text-align:right;">Total Return Amount</td>
+                    <td colspan="4" style="text-align:right;">Total Return Amount</td>
                     <td style="text-align:right;">' . number_format($return->total_amount, 2) . '</td>
                 </tr>
             </tbody></table>';
@@ -503,7 +502,7 @@ class SaleReturnController extends Controller
         $pdf->Ln(4);
 
         // ── Summary ────────────────────────────────────────────────
-        $summaryHtml = '<table width="95%" cellpadding="2" style="font-size:9px;" align="right">
+        $summaryHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="70%">Total Net Weight</td><td width="30%" style="text-align:right;">' . number_format($return->total_weight, 2) . ' kg</td></tr>
             <tr><td>COGS Reversed</td><td style="text-align:right;">' . number_format($return->total_cogs, 2) . '</td></tr>
             <tr style="font-weight:bold;background-color:#C9A24B;color:#ffffff;font-size:11px;">
