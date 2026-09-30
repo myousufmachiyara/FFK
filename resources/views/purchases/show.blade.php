@@ -248,7 +248,7 @@
           <div class="mb-3">
             <label>Attachment (dispatch proof) *</label>
             <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip"
-                   {{ $invoice->attachments->count() ? '' : 'required' }}>
+                   {{ $invoice->attachments->count() ? '' }}>
             @if($invoice->attachments->count())
               <small class="text-muted">An attachment already exists on this invoice; upload a new one only if needed.</small>
             @endif
