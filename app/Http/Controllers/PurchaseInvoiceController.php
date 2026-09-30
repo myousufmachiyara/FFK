@@ -972,7 +972,7 @@ class PurchaseInvoiceController extends Controller
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->bill_no ?? '-') . '</td></tr>
         </table>';
         $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td width="35%"><b>Bilty No</b></td><td width="5%">:</td><td width="60%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td width="35%"><b>Bilti No</b></td><td width="5%">:</td><td width="60%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
             <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
         </table>';
 
