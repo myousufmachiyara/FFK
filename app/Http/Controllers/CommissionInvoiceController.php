@@ -974,8 +974,7 @@ class CommissionInvoiceController extends Controller
 
         $expRows = '';
         foreach ($invoice->expenses as $exp) {
-            $payTo = $exp->paid_by === 'vendor' ? ($invoice->vendor->name ?? '-') : ($exp->payeeAccount->name ?? '-');
-            $expRows .= '<tr><td width="50%">' . $exp->typeLabel() . '</td><td width="25%">' . $exp->paidByLabel() . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+             $expRows .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="50%">' . $exp->description . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
         }
         if (!$invoice->expenses->count()) {
             $expRows = '<tr><td colspan="3" style="color:#888;">No Other Expenses</td></tr>';
@@ -983,9 +982,9 @@ class CommissionInvoiceController extends Controller
 
         $leftHtml = '
         <table width="100%" cellpadding="2" style="font-size:8.5px;">
-            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="3">  Additional Information — Expenses</td></tr>
+            <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="2">  Additional Information — Expenses</td></tr>
             ' . $expRows . '
-            <tr style="font-weight:bold;background-color:#F5EFDF;"><td colspan="2">Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#F5EFDF;"><td width="30%">Total Expenses</td><td width="70%" colspan="2" style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
         </table>';
 
         $rightRows = '
@@ -1026,9 +1025,9 @@ class CommissionInvoiceController extends Controller
         $pdf->writeHTML($wordsHtml, true, false, false, false, '');
         $pdf->Ln(2);
 
-        if ($invoice->delivery_remarks) {
+        if ($invoice->remarks) {
             $pdf->SetFont('helvetica', 'I', 9);
-            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->delivery_remarks, 0, 'L');
+            $pdf->MultiCell(0, 5, 'Remarks: ' . $invoice->remarks, 0, 'L');
         }
 
         // ── Signature ───────────────────────────────────────────────
@@ -1252,17 +1251,17 @@ class CommissionInvoiceController extends Controller
 
         $expRows = '';
         foreach ($invoice->expenses as $exp) {
-            $expRows .= '<tr><td width="65%">' . $exp->typeLabel() . '</td><td width="35%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+             $expRows .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="50%">' . $exp->description . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
         }
         if (!$invoice->expenses->count()) {
-            $expRows = '<tr><td colspan="2" style="color:#888;">No Other Expenses</td></tr>';
+            $expRows = '<tr><td colspan="3" style="color:#888;">No Other Expenses</td></tr>';
         }
 
         $leftHtml = '
         <table width="100%" cellpadding="2" style="font-size:8.5px;">
             <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="2">  Additional Information — Expenses</td></tr>
             ' . $expRows . '
-            <tr style="font-weight:bold;background-color:#F5EFDF;"><td>Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#F5EFDF;"><td width="30%">Total Expenses</td><td width="70%" colspan="2" style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
         </table>';
 
         $rightRows = '
@@ -1387,17 +1386,17 @@ class CommissionInvoiceController extends Controller
 
         $expRows = '';
         foreach ($invoice->expenses as $exp) {
-            $expRows .= '<tr><td width="65%">' . $exp->typeLabel() . '</td><td width="35%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
+             $expRows .= '<tr><td width="25%">' . $exp->typeLabel() . '</td><td width="50%">' . $exp->description . '</td><td width="25%" style="text-align:right;">' . number_format($exp->amount, 2) . '</td></tr>';
         }
         if (!$invoice->expenses->count()) {
-            $expRows = '<tr><td colspan="2" style="color:#888;">No Other Expenses</td></tr>';
+            $expRows = '<tr><td colspan="3" style="color:#888;">No Other Expenses</td></tr>';
         }
 
         $leftHtml = '
         <table width="100%" cellpadding="2" style="font-size:8.5px;">
             <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;"><td colspan="2">  Additional Information — Expenses</td></tr>
             ' . $expRows . '
-            <tr style="font-weight:bold;background-color:#F5EFDF;"><td>Total Expenses</td><td style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
+            <tr style="font-weight:bold;background-color:#F5EFDF;"><td width="30%">Total Expenses</td><td width="70%" colspan="2" style="text-align:right;">' . number_format($invoice->total_other_expenses, 2) . '</td></tr>
         </table>';
 
         $rightRows = '
