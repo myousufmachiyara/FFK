@@ -257,7 +257,7 @@ function onProductChange(sel, idx) {
                 // data-stock — keeps working completely unchanged. Only
                 // the visible dropdown is hidden; a plain label takes its
                 // place.
-                variationSelect.html(`<option value="" data-stock="${stock}" data-weight="${stockWt}" selected></option>`);
+                variationSelect.html(`<option value="none" data-stock="${stock}" data-weight="${stockWt}" selected></option>`);
                 hideVariationDropdown(variationSelect);
                 variationSelect.after(
                     `<div id="noVariationLabel${idx}" class="form-control-plaintext small text-muted">No Variation — Stock: ${stock} bags / ${stockWt} kg</div>`
@@ -284,11 +284,15 @@ function hideVariationDropdown($select) {
     if ($select.hasClass('select2-hidden-accessible')) {
         $select.select2('destroy');
     }
-    $select.hide();
+    // disabled (not just hidden) so this field is never actually
+    // submitted with the form — a plain .hide() alone would still POST
+    // its value, which would send "none" as variation_id and fail the
+    // exists:product_variations,id validation on the backend.
+    $select.prop('disabled', true).hide();
 }
 
 function showVariationDropdown($select) {
-    $select.show();
+    $select.prop('disabled', false).show();
     if (!$select.hasClass('select2-hidden-accessible')) {
         $select.select2({ width: '100%' });
     }

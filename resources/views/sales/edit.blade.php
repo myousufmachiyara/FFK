@@ -208,8 +208,13 @@ function addItemRow(existing = null) {
     $('#itemBody').append(row);
     $(`#itemBody tr[data-row="${idx}"] .select2-js`).select2({ width: '100%' });
 
-    if (existing && existing.variation_id) {
-        loadVariationsForRow(productId, idx, existing.variation_id);
+    // FIX: previously only loaded variations here if existing.variation_id
+    // was set — an existing line with NO variation never got its stock
+    // label initialized on page open at all, only after the product
+    // dropdown was manually touched. Now always loads when there's a
+    // product, same as a fresh row would.
+    if (existing && productId) {
+        loadVariationsForRow(productId, idx, existing.variation_id || null);
     }
     calcRow(idx);
 }
@@ -224,22 +229,74 @@ function onProductChange(sel, idx) {
 
 function loadVariationsForRow(productId, idx, selectedId) {
     const variationSelect = $(`#variation${idx}`);
-    if (!productId) { variationSelect.html('<option value="">—</option>').trigger('change.select2'); return; }
+    $(`#noVariationLabel${idx}`).remove();
+
+    if (!productId) {
+        showVariationDropdown(variationSelect);
+        variationSelect.html('<option value="">—</option>').trigger('change.select2');
+        return;
+    }
+    showVariationDropdown(variationSelect);
     variationSelect.html('<option value="">Loading...</option>').trigger('change.select2');
     fetch(`/product/${productId}/variations`)
         .then(res => res.json())
         .then(data => {
             const variations = data.variation || data.variations || [];
-            let html = '<option value="">—</option>';
-            variations.forEach(v => {
-                const sel = (selectedId == v.id) ? 'selected' : '';
-                const stock = v.stock_quantity ?? 0;
-                const stockWt = v.stock_weight ?? 0;
-                html += `<option value="${v.id}" data-stock="${stock}" ${sel}>${v.sku} (Stock: ${stock} bags / ${stockWt} kg)</option>`;
-            });
-            variationSelect.html(html).trigger('change.select2');
+
+            // A single entry with id === null is the pseudo-variation the
+            // backend returns for a product with no real variations — show
+            // its stock directly instead of a dropdown with one
+            // meaningless option, since there's nothing to actually
+            // choose between.
+            const isNoVariation = variations.length === 1 && variations[0].id === null;
+
+            if (isNoVariation) {
+                const v = variations[0];
+                const stock = v.available_stock ?? v.stock_quantity ?? 0;
+                const stockWt = v.available_weight ?? v.stock_weight ?? 0;
+
+                // Keep the select itself intact (with stock data on its
+                // one option) so anything reading .variation-select
+                // option:selected data-stock keeps working unchanged —
+                // only the visible dropdown is hidden.
+                variationSelect.html(`<option value="none" data-stock="${stock}" data-weight="${stockWt}" selected></option>`);
+                hideVariationDropdown(variationSelect);
+                variationSelect.after(
+                    `<div id="noVariationLabel${idx}" class="form-control-plaintext small text-muted">No Variation — Stock: ${stock} bags / ${stockWt} kg</div>`
+                );
+            } else {
+                let html = '<option value="">—</option>';
+                variations.forEach(v => {
+                    const sel = (selectedId == v.id) ? 'selected' : '';
+                    const stock = v.stock_quantity ?? 0;
+                    const stockWt = v.stock_weight ?? 0;
+                    html += `<option value="${v.id}" data-stock="${stock}" ${sel}>${v.sku} (Stock: ${stock} bags / ${stockWt} kg)</option>`;
+                });
+                variationSelect.html(html).trigger('change.select2');
+            }
         })
         .catch(() => variationSelect.html('<option value="">Error loading</option>').trigger('change.select2'));
+}
+
+// Hides the select2-rendered dropdown while keeping the underlying
+// <select> in the DOM (destroying select2 first, since a hidden select2
+// container can otherwise still intercept layout/clicks).
+function hideVariationDropdown($select) {
+    if ($select.hasClass('select2-hidden-accessible')) {
+        $select.select2('destroy');
+    }
+    // disabled (not just hidden) so this field is never actually
+    // submitted with the form — a plain .hide() alone would still POST
+    // its value, which would send "none" as variation_id and fail the
+    // exists:product_variations,id validation on the backend.
+    $select.prop('disabled', true).hide();
+}
+
+function showVariationDropdown($select) {
+    $select.prop('disabled', false).show();
+    if (!$select.hasClass('select2-hidden-accessible')) {
+        $select.select2({ width: '100%' });
+    }
 }
 
 
