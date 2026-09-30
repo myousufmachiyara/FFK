@@ -913,18 +913,17 @@ class CommissionInvoiceController extends Controller
         $pdf->SetXY(10, $boxY);
         $pdf->Cell(90, 7, '  Vendor Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Customer Details', 1, 0, 'L', true);
+        $pdf->Cell(95, 7, '  Transport Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
 
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Vendor</b></td><td width="5%">:</td><td width="65%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->vendor_bill_no ?? '-') . '</td></tr>
-            <tr><td><b>Bilty No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td width="30%"><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
         </table>';
         $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td width="30%"><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
-            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
+            <tr><td><b>Bilty No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
         </table>';
 
         $pdf->SetXY(10, $boxY + 7);
@@ -939,11 +938,11 @@ class CommissionInvoiceController extends Controller
         <table border="1" cellpadding="2.5" style="font-size:7.5px;">
             <thead>
                 <tr style="background-color:#1B3A5C;color:#ffffff;font-weight:bold;text-align:center;">
-                    <th width="13%">Item</th><th width="6%">Qty</th><th width="8%">Net Wt</th>
-                    <th width="9%">Pur Rate/kg</th><th width="9%">Pur Total</th>
-                    <th width="9%">Sale Rate/kg</th><th width="9%">Sale Total</th>
+                    <th width="13%">Item</th><th width="6%">Qty</th><th width="8%">G.Wt</th><th width="8%">N.Wt</th>
+                    <th width="9%">P.Rate/kg</th><th width="9%">P.Total</th>
+                    <th width="9%">S.Rate/kg</th><th width="9%">S.Total</th>
                     <th width="9%">Vendor Comm %</th><th width="9%">Vendor Comm</th>
-                    <th width="9%">Cust Comm %</th><th width="10%">Cust Comm</th>
+                    <th width="9%">V.C%</th><th width="10%">V.C</th>
                 </tr>
             </thead>
             <tbody>';
@@ -1041,16 +1040,6 @@ class CommissionInvoiceController extends Controller
         $pdf->SetFont('helvetica', 'B', 9);
         $pdf->SetX(140);
         $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
-
-        // ── Footer band ───────────────────────────────────────────────
-        $footY = 282;
-        $pdf->SetFillColor(27, 58, 92);
-        $pdf->Rect(0, $footY, 210, 15, 'F');
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetXY(10, $footY + 4);
-        $pdf->Cell(190, 5, 'Farooq Fulara: 0320-2788117   |   Hamiz Farooq Fulara: 0335-0023574   |   Karachi, Pakistan', 0, 1, 'C');
-        $pdf->SetTextColor(0, 0, 0);
 
         return $pdf->Output('CI_' . $invoice->invoice_no . '.pdf', 'I');
     }
