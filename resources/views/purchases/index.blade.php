@@ -71,7 +71,7 @@
                                 <td>
                                     @if($invoice->attachments && count($invoice->attachments))
                                         @foreach ($invoice->attachments as $file)
-                                            <a href="{{ asset('storage/' . $file->file_path) }}"
+                                            <a {{ route('attachments.show', $attachment->file_path) }}
                                                target="_blank" class="me-1">
                                                 <i class="fas fa-file"></i>
                                             </a>
