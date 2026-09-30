@@ -962,7 +962,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetXY(10, $boxY);
         $pdf->Cell(90, 7, '  Vendor Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Shipment Details', 1, 0, 'L', true);
+        $pdf->Cell(95, 7, '  Transport Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
 
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
