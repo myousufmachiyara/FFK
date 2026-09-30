@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 
 use App\Http\Controllers\{
+    AttachmentController,
     DashboardController,
     SubHeadOfAccController,
     COAController,
@@ -390,4 +391,7 @@ Route::middleware(['auth'])->group(function () {
     // of bug as PermissionController. Re-enable once that controller exists
     // and add it to the use {...} import block above.
     // Route::get('/stock-lots/available', [StockTransferController::class, 'getAvailableLots'])->name('stock.lots.available');
+    Route::get('attachments/{path}', [AttachmentController::class, 'show'])
+    ->where('path', '.*')
+    ->name('attachments.show');
 });
