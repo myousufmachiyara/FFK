@@ -1072,14 +1072,6 @@ class CommissionInvoiceController extends Controller
         $totalW  = $show40 ? 14 : 16;
         $commPctW = $show40 ? 10 : 11;
 
-        $descW    = 24;
-        $qtyW     = 7;
-        $wtW      = 11;   // used twice (Gross Wt + Net Wt) = 22 total
-        $rateKgW  = 12;
-        $totalW   = 15;
-        $commPctW = 8;
-        $commAmtW = 12;
-
         $commAmtW = 100 - $descW - $qtyW - ($wtW * 2) - $rate40W - $rateKgW - $totalW - $commPctW;
 
         $html = '
