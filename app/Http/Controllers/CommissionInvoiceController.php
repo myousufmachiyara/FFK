@@ -901,12 +901,13 @@ class CommissionInvoiceController extends Controller
             <tr><td><b>Date</b></td><td>:</td><td>' . Carbon::parse($invoice->invoice_date)->format('d-m-Y') . '</td></tr>
             <tr><td><b>Due Date</b></td><td>:</td><td>' . $dueDateLine . '</td></tr>
             <tr><td><b>Status</b></td><td>:</td><td>' . $invoice->statusLabel() . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
         </table>';
         $pdf->SetXY(105, 38);
         $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
 
         // ── Two boxed detail sections: Vendor | Customer ────────────
-        $boxY = 60;
+        $boxY = 65;
         $pdf->SetFillColor(27, 58, 92);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
@@ -1193,6 +1194,8 @@ class CommissionInvoiceController extends Controller
             <tr><td><b>Date</b></td><td>:</td><td>' . Carbon::parse($invoice->invoice_date)->format('d-m-Y') . '</td></tr>
             <tr><td><b>Due Date</b></td><td>:</td><td>' . $dueDateLine . '</td></tr>
             <tr><td><b>Status</b></td><td>:</td><td>' . $invoice->statusLabel() . '</td></tr>
+            <tr><td><b>Payment Terms</b></td><td>:</td><td>' . $paymentTermsLine . '</td></tr>
+
         </table>';
         $pdf->SetXY(105, 38);
         $pdf->writeHTMLCell(95, 12, 105, 38, $infoHtml, 1, 1);
