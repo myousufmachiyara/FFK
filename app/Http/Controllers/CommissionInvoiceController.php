@@ -1334,7 +1334,7 @@ class CommissionInvoiceController extends Controller
             $paymentTermsLine .= ' (' . $invoice->credit_days . ' days)';
         }
 
-        $boxY = 55;
+        $boxY = 60;
         $pdf->SetFillColor(27, 58, 92);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
