@@ -1310,15 +1310,6 @@ class CommissionInvoiceController extends Controller
         $pdf->SetX(140);
         $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
 
-        $footY = 282;
-        $pdf->SetFillColor(27, 58, 92);
-        $pdf->Rect(0, $footY, 210, 15, 'F');
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetXY(10, $footY + 4);
-        $pdf->Cell(190, 5, 'Farooq Fulara: 0320-2788117   |   Hamiz Farooq Fulara: 0335-0023574   |   Karachi, Pakistan', 0, 1, 'C');
-        $pdf->SetTextColor(0, 0, 0);
-
         $suffix = $show40 ? '_customer_both' : '_customer_kg';
         return $pdf->Output('CI_' . $invoice->invoice_no . $suffix . '.pdf', 'I');
     }
@@ -1421,6 +1412,8 @@ class CommissionInvoiceController extends Controller
         $rightEndY = $pdf->GetY();
         $pdf->SetY(max($leftEndY, $rightEndY) + 4);
 
+        $pdf->Ln(2);
+
         $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
             <tr style="background-color:#F5EFDF;">
                 <td><b>Vendor Payable in Words:</b> ' . $this->numberToWords($invoice->totalVendorPayable()) . ' Only.</td>
@@ -1443,15 +1436,6 @@ class CommissionInvoiceController extends Controller
         $pdf->SetFont('helvetica', 'B', 9);
         $pdf->SetX(140);
         $pdf->Cell(55, 5, 'FAROOQ FULARA (KARACHI)', 0, 0, 'C');
-
-        $footY = 282;
-        $pdf->SetFillColor(27, 58, 92);
-        $pdf->Rect(0, $footY, 210, 15, 'F');
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetXY(10, $footY + 4);
-        $pdf->Cell(190, 5, 'Farooq Fulara: 0320-2788117   |   Hamiz Farooq Fulara: 0335-0023574   |   Karachi, Pakistan', 0, 1, 'C');
-        $pdf->SetTextColor(0, 0, 0);
 
         $suffix = $show40 ? '_vendor_both' : '_vendor_kg';
         return $pdf->Output('CI_' . $invoice->invoice_no . $suffix . '.pdf', 'I');
