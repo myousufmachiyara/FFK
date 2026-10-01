@@ -1045,14 +1045,7 @@ class CommissionInvoiceController extends Controller
         return $pdf->Output('CI_' . $invoice->invoice_no . '.pdf', 'I');
     }
 
-    /**
-     * Shared items-table builder for the 4 party-specific print variants
-     * below. $side is 'customer' or 'vendor' — determines which rate/
-     * commission columns appear and which grand total is footed. $show40
-     * adds the Rate (40kg) column alongside Rate (kg) when true.
-     * The "Detailed" print() above is untouched and does not use this —
-     * it always shows everything, exactly as it did before.
-     */
+
     private function commissionPartyItemsHtml($invoice, string $side, bool $show40): array
     {
         if ($side === 'customer') {
@@ -1208,7 +1201,7 @@ class CommissionInvoiceController extends Controller
 
         $this->commissionPartyHeaderAndTitle($pdf, $invoice);
 
-        $boxY = 55;
+        $boxY = 60;
         $pdf->SetFillColor(27, 58, 92);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 10);
