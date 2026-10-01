@@ -1226,14 +1226,14 @@ class CommissionInvoiceController extends Controller
         $pdf->SetXY(10, $boxY);
         $pdf->Cell(90, 7, '  Customer Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Shipment Details', 1, 0, 'L', true);
+        $pdf->Cell(95, 7, '  Tranport Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
 
         $custHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Customer</b></td><td width="5%">:</td><td width="65%">' . e($invoice->customer->name ?? 'N/A') . '</td></tr>
         </table>';
         $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
-            <tr><td width="30%"><b>Bilty No</b></td><td width="5%">:</td><td width="65%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td width="30%"><b>Bilti No</b></td><td width="5%">:</td><td width="65%">' . ($invoice->bilty_no ?? '-') . '</td></tr>
             <tr><td><b>Transport</b></td><td>:</td><td>' . ($invoice->transport_name ?? '-') . '</td></tr>
         </table>';
 
@@ -1350,13 +1350,13 @@ class CommissionInvoiceController extends Controller
         $pdf->SetXY(10, $boxY);
         $pdf->Cell(90, 7, '  Vendor Details', 1, 0, 'L', true);
         $pdf->SetXY(105, $boxY);
-        $pdf->Cell(95, 7, '  Shipment Details', 1, 0, 'L', true);
+        $pdf->Cell(95, 7, '  Transport Details', 1, 0, 'L', true);
         $pdf->SetTextColor(0, 0, 0);
 
         $vendorHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Vendor</b></td><td width="5%">:</td><td width="65%">' . e($invoice->vendor->name ?? 'N/A') . '</td></tr>
             <tr><td><b>Vendor Bill No</b></td><td>:</td><td>' . ($invoice->vendor_bill_no ?? '-') . '</td></tr>
-            <tr><td><b>Bilty No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
+            <tr><td><b>Bilti No</b></td><td>:</td><td>' . ($invoice->bilty_no ?? '-') . '</td></tr>
         </table>';
         $shipHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
             <tr><td width="30%"><b>Transport</b></td><td width="5%">:</td><td width="65%">' . ($invoice->transport_name ?? '-') . '</td></tr>
