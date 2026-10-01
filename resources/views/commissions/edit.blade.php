@@ -294,10 +294,13 @@ function togglePayee(idx) {
     const $payee = $(`#payee${idx}`);
     if (paidBy === 'company') { $payee.prop('disabled', false); }
     else { $payee.prop('disabled', true).val('').trigger('change.select2'); }
+    // Vendor Payable now depends on which expenses are paid_by vendor,
+    // so switching this needs to refresh the live summary too.
+    calcSummary();
 }
 
 function calcSummary() {
-    let grossWeight = 0, weight = 0, purchase = 0, sale = 0, vendorComm = 0, custComm = 0, expenses = 0;
+    let grossWeight = 0, weight = 0, purchase = 0, sale = 0, vendorComm = 0, custComm = 0, expenses = 0, vendorPaidExpenses = 0;
     $('#itemBody tr').each(function () {
         grossWeight += parseFloat($(this).find('.gross-weight').val()) || 0;
         weight += parseFloat($(this).find('.net-weight').val()) || (parseFloat($(this).find('.wt-packing').val()) || 0) * (parseFloat($(this).find('.qty').val()) || 0);
@@ -306,7 +309,17 @@ function calcSummary() {
         vendorComm += parseFloat($(this).find('.vendor-comm-amt').val()) || 0;
         custComm += parseFloat($(this).find('.cust-comm-amt').val()) || 0;
     });
-    $('#expenseBody tr').each(function () { expenses += parseFloat($(this).find('.exp-amount').val()) || 0; });
+    $('#expenseBody tr').each(function () {
+        const amt = parseFloat($(this).find('.exp-amount').val()) || 0;
+        expenses += amt;
+        // FIX: a vendor-paid expense means the vendor is advancing that
+        // cost on FFK's behalf — FFK owes it back to them, so it needs
+        // to ADD to Vendor Payable here, matching totalVendorPayable()
+        // server-side. This live summary never included it before.
+        if ($(this).find('.paid-by').val() === 'vendor') {
+            vendorPaidExpenses += amt;
+        }
+    });
 
     $('#sumGrossWeight').text(grossWeight.toFixed(2));
     $('#sumWeight').text(weight.toFixed(2));
@@ -315,7 +328,7 @@ function calcSummary() {
     $('#sumVendorComm').text(vendorComm.toFixed(2));
     $('#sumCustComm').text(custComm.toFixed(2));
     $('#sumExpenses').text(expenses.toFixed(2));
-    $('#sumVendorPayable').text((purchase - vendorComm).toFixed(2));
+    $('#sumVendorPayable').text((purchase - vendorComm + vendorPaidExpenses).toFixed(2));
     $('#sumCustomerReceivable').text((sale + expenses).toFixed(2));
 }
 
