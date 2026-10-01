@@ -1412,7 +1412,7 @@ class CommissionInvoiceController extends Controller
         $rightEndY = $pdf->GetY();
         $pdf->SetY(max($leftEndY, $rightEndY) + 4);
 
-        $pdf->Ln(2);
+        $pdf->Ln(5);
 
         $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
             <tr style="background-color:#F5EFDF;">
