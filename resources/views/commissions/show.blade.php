@@ -260,7 +260,7 @@
           <div class="mb-3"><label>Transport Name *</label><input type="text" name="transport_name" class="form-control" value="{{ $invoice->transport_name }}" required></div>
           <div class="mb-3">
             <label>Attachment (dispatch proof) *</label>
-            <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip" {{ $invoice->attachments->count() ? '' : 'required' }}>
+            <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip" {{ $invoice->attachments->count() ? '' }}>
             @if($invoice->attachments->count())<small class="text-muted">Attachment already exists; upload only if needed.</small>@endif
           </div>
           <div class="mb-3"><label>Remarks</label><textarea name="remarks" class="form-control" rows="2"></textarea></div>
