@@ -284,7 +284,7 @@
         <div class="modal-body">
           <div class="mb-3"><label>Delivery Date *</label><input type="date" name="delivered_at" class="form-control" value="{{ date('Y-m-d') }}" required></div>
           <div class="mb-3"><label>Received By</label><input type="text" name="delivery_received_by_name" class="form-control"></div>
-          <div class="mb-3"><label>Delivery Proof *</label><input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip" required></div>
+          <div class="mb-3"><label>Delivery Proof *</label><input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.zip"></div>
           <div class="mb-3"><label>Remarks</label><textarea name="delivery_remarks" class="form-control" rows="2"></textarea></div>
 
           <hr>
