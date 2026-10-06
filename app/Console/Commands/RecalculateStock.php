@@ -45,14 +45,14 @@ class RecalculateStock extends Command
             // any invoice Received under the old pre-fix logic never had
             // that field populated at all, which was silently zeroing out
             // its contribution to stock.
-            $purchasedQty = (float) DB::table('purchase_invoice_items')
+            $purchasedQty = (float) DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                 ->where('purchase_invoice_items.variation_id', $variation->id)
                 ->where('purchase_invoices.status', 'received')
                 ->whereNull('purchase_invoices.deleted_at')
                 ->sum(DB::raw('COALESCE(purchase_invoice_items.received_packing_qty, purchase_invoice_items.quantity)'));
 
-            $purchasedWeight = (float) DB::table('purchase_invoice_items')
+            $purchasedWeight = (float) DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                 ->where('purchase_invoice_items.variation_id', $variation->id)
                 ->where('purchase_invoices.status', 'received')

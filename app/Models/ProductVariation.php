@@ -89,7 +89,7 @@ class ProductVariation extends Model
      */
     public function averageLandedCost(): float
     {
-        $totals = DB::table('purchase_invoice_items')
+        $totals = DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
             ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
             ->where('purchase_invoice_items.variation_id', $this->id)
             ->where('purchase_invoices.status', 'received')

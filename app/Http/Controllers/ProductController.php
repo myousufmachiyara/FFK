@@ -278,7 +278,7 @@ class ProductController extends Controller
             // did the same for the no-variation case. Now returns one
             // pseudo-variation entry using that identical formula, so
             // all three places agree.
-            $purchasedQty = (float) DB::table('purchase_invoice_items')
+            $purchasedQty = (float) DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                 ->where('purchase_invoice_items.item_id', $product->id)
                 ->where('purchase_invoices.status', 'received')
@@ -290,7 +290,7 @@ class ProductController extends Controller
                 ->where('sale_invoice_items.product_id', $product->id)
                 ->sum('sale_invoice_items.quantity');
 
-            $purchasedWeight = (float) DB::table('purchase_invoice_items')
+            $purchasedWeight = (float) DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                 ->where('purchase_invoice_items.item_id', $product->id)
                 ->where('purchase_invoices.status', 'received')

@@ -85,7 +85,7 @@ class SaleInvoiceController extends Controller
         $product = Product::find($productId);
         if (!$product) return 0;
 
-        $purchased = (float) DB::table('purchase_invoice_items')
+        $purchased = (float) DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
             ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
             ->where('purchase_invoice_items.item_id', $productId)
             ->where('purchase_invoices.status', 'received')
@@ -162,7 +162,7 @@ class SaleInvoiceController extends Controller
     {
         $product = Product::find($productId);
 
-        $totals = DB::table('purchase_invoice_items')
+        $totals = DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
             ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
             ->where('purchase_invoice_items.item_id', $productId)
             ->where('purchase_invoices.status', 'received')

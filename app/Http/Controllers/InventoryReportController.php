@@ -30,7 +30,7 @@ class InventoryReportController extends Controller
 
         $product = Product::find($productId);
 
-        $totals = DB::table('purchase_invoice_items')
+        $totals = DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
             ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
             ->where('purchase_invoice_items.item_id', $productId)
             ->where('purchase_invoices.status', 'received')
@@ -96,7 +96,7 @@ class InventoryReportController extends Controller
         // ================================================================
         if ($tab === 'IL' && $itemId) {
 
-            $opPurchased = DB::table('purchase_invoice_items')
+            $opPurchased = DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                 ->where('purchase_invoice_items.item_id', $itemId)
                 ->where('purchase_invoices.status', 'received')
@@ -143,7 +143,7 @@ class InventoryReportController extends Controller
             // Weight equivalent of the same opening balance — returns have
             // no weight tracking in their schema, so they only factor into
             // the bag-count opening balance above, not this figure.
-            $opPurchasedWeight = DB::table('purchase_invoice_items')
+            $opPurchasedWeight = DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                 ->where('purchase_invoice_items.item_id', $itemId)
                 ->where('purchase_invoices.status', 'received')
@@ -168,7 +168,7 @@ class InventoryReportController extends Controller
                     : (float) $product->opening_weight;
             }
 
-            $purchases = DB::table('purchase_invoice_items')
+            $purchases = DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
                 ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                 ->select(
                     'purchase_invoices.received_at as date',
@@ -282,14 +282,14 @@ class InventoryReportController extends Controller
 
                 if (!$hasVariations) {
 
-                    $purchased = (float) DB::table('purchase_invoice_items')
+                    $purchased = (float) DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
                         ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                         ->where('purchase_invoice_items.item_id', $product->id)
                         ->where('purchase_invoices.status', 'received')
                         ->whereNull('purchase_invoices.deleted_at')
                         ->sum(DB::raw('COALESCE(purchase_invoice_items.received_packing_qty, purchase_invoice_items.quantity)'));
 
-                    $purchasedWeight = (float) DB::table('purchase_invoice_items')
+                    $purchasedWeight = (float) DB::table('purchase_invoice_items')->whereNull('purchase_invoice_items.deleted_at')
                         ->join('purchase_invoices', 'purchase_invoice_items.purchase_invoice_id', '=', 'purchase_invoices.id')
                         ->where('purchase_invoice_items.item_id', $product->id)
                         ->where('purchase_invoices.status', 'received')
@@ -368,7 +368,7 @@ class InventoryReportController extends Controller
         // ================================================================
         if ($tab === 'IT') {
 
-            $query = DB::table('purchase_invoice_items as pii')
+            $query = DB::table('purchase_invoice_items as pii')->whereNull('pii.deleted_at')
                 ->join('purchase_invoices as pi', 'pii.purchase_invoice_id', '=', 'pi.id')
                 ->join('products as p', 'pii.item_id', '=', 'p.id')
                 ->leftJoin('product_variations as pv', 'pii.variation_id', '=', 'pv.id')
