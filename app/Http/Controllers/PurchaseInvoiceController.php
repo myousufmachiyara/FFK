@@ -1054,7 +1054,7 @@ class PurchaseInvoiceController extends Controller
         if ($invoice->isReceived()) {
             $rightRows .= '
             <tr><td>Amount Paid</td><td style="text-align:right;">' . number_format($invoice->amount_paid, 2) . '</td></tr>
-            <tr style="font-weight:bold;color:#b30000;"><td>Remaining Balance</td><td style="text-align:right;">' . number_format($invoice->remainingBalance(), 2) . '</td></tr>';
+            <tr style="font-weight:bold;color:#b30000;font-size:11px;"><td>Remaining Balance</td><td style="text-align:right;">' . number_format($invoice->remainingBalance(), 2) . '</td></tr>';
         }
 
         $rightHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">' . $rightRows . '</table>';
