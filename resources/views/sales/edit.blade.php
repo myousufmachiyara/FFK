@@ -404,7 +404,6 @@ function calcSummary() {
     });
 
     $('#expenseBody tr').each(function () {
-        if ($(this).find('.exp-paid-by').val() === 'customer') return;
         expenseAmount += parseFloat($(this).find('.exp-amount').val()) || 0;
     });
 

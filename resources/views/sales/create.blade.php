@@ -126,7 +126,7 @@
           <p class="text-muted small mt-2 mb-0">
             <i class="fas fa-info-circle"></i> Every expense is always added to the Customer's receivable.
             Pick who it's payable to on each row — any account (Vendor, Company (FFK), etc.). "Paid By" is just a
-            label for reporting. Expenses paid by the Company are owed to the account you select; expenses paid by the Customer need no account and are not added to the bill or posted to any ledger.
+            label for reporting. Expenses paid by the Company are owed to the account you select; expenses paid by the Customer need no account — they are added to the bill and charged to the customer.
           </p>
         </div>
       </section>
@@ -411,7 +411,6 @@ function calcSummary() {
     });
 
     $('#expenseBody tr').each(function () {
-        if ($(this).find('.exp-paid-by').val() === 'customer') return;
         expenseAmount += parseFloat($(this).find('.exp-amount').val()) || 0;
     });
 

@@ -35,6 +35,8 @@ class SaleInvoiceController extends Controller
 
     private function salesRevenueAccount(): ChartOfAccounts { return $this->resolveAccount('sales_revenue', 'Sales Revenue'); }
     private function cogsAccount(): ChartOfAccounts         { return $this->resolveAccount('cogs', 'Cost of Goods Sold'); }
+    // Credit side for customer-borne expenses that have no payee account.
+    private function expenseRecoveryAccount(): ChartOfAccounts  { return $this->resolveAccount('expense_recovery', 'Expense Recovery (Other Income)'); }
     private function inventoryAccount(): ChartOfAccounts    { return $this->resolveAccount('inventory', 'Inventory / Stock in Hand'); }
 
     private function kgPerMaund(): int
@@ -268,11 +270,7 @@ class SaleInvoiceController extends Controller
             if (empty($expenseData['amount'])) continue;
             $amount = (float) $expenseData['amount'];
             $customerPaid = ($expenseData['paid_by'] ?? null) === SaleInvoiceExpense::PAID_BY_CUSTOMER;
-            // Customer-paid expenses are recorded on the invoice only — not billed
-            // to the customer and not posted to any account.
-            if (!$customerPaid) {
-                $totalOtherExpenses += $amount;
-            }
+            $totalOtherExpenses += $amount;
 
             $invoice->expenses()->create([
                 'expense_type'      => $expenseData['expense_type'],
@@ -402,15 +400,17 @@ class SaleInvoiceController extends Controller
             // this expense (paid_by is just a classification label here,
             // since Sale has no single invoice-level vendor to default to).
             foreach ($invoice->expenses as $i => $expense) {
-                if ($expense->paid_by === SaleInvoiceExpense::PAID_BY_CUSTOMER) continue; // no ledger entry
-                if (!$expense->payeeAccount) {
+                $creditAccount = $expense->paid_by === SaleInvoiceExpense::PAID_BY_CUSTOMER
+                    ? $this->expenseRecoveryAccount()
+                    : $expense->payeeAccount;
+                if (!$creditAccount) {
                     throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
                 }
 
                 $this->postVoucher(
-                    $request->date, $invoice->account, $expense->payeeAccount, (float) $expense->amount,
+                    $request->date, $invoice->account, $creditAccount, (float) $expense->amount,
                     "SI-{$invoice->id}-EXPENSE-" . ($i + 1),
-                    "Sale Invoice #{$invoiceNo} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()} ({$expense->payeeAccount->name})"
+                    "Sale Invoice #{$invoiceNo} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()} ({$creditAccount->name})"
                 );
             }
 
@@ -551,15 +551,17 @@ class SaleInvoiceController extends Controller
 
             Voucher::where('reference', 'like', "SI-{$invoice->id}-EXPENSE-%")->delete();
             foreach ($invoice->expenses as $i => $expense) {
-                if ($expense->paid_by === SaleInvoiceExpense::PAID_BY_CUSTOMER) continue; // no ledger entry
-                if (!$expense->payeeAccount) {
+                $creditAccount = $expense->paid_by === SaleInvoiceExpense::PAID_BY_CUSTOMER
+                    ? $this->expenseRecoveryAccount()
+                    : $expense->payeeAccount;
+                if (!$creditAccount) {
                     throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
                 }
 
                 $this->postVoucher(
-                    $request->date, ChartOfAccounts::findOrFail($request->account_id), $expense->payeeAccount, (float) $expense->amount,
+                    $request->date, ChartOfAccounts::findOrFail($request->account_id), $creditAccount, (float) $expense->amount,
                     "SI-{$invoice->id}-EXPENSE-" . ($i + 1),
-                    "Sale Invoice #{$invoice->invoice_no} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()} ({$expense->payeeAccount->name}) (updated)"
+                    "Sale Invoice #{$invoice->invoice_no} — {$expense->typeLabel()}, paid by {$expense->paidByLabel()} ({$creditAccount->name}) (updated)"
                 );
             }
 

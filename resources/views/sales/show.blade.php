@@ -112,7 +112,7 @@
                 <td>{{ $exp->description }}</td>
                 <td>{{ number_format($exp->amount, 2) }}</td>
                 <td><span class="badge {{ $exp->paid_by === 'company' ? 'bg-info text-dark' : 'bg-secondary' }}">{{ $exp->paidByLabel() }}</span></td>
-                <td>{{ $exp->payeeAccount->name ?? '—' }}</td>
+                <td>{{ $exp->payeeAccount->name ?? ($exp->paid_by === 'customer' ? 'Billed to customer' : '—') }}</td>
               </tr>
               @empty
               <tr><td colspan="5" class="text-muted text-center">No Other Expenses.</td></tr>

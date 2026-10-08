@@ -9,6 +9,9 @@ return [
     'sales_revenue' => env('ACC_CODE_SALES_REVENUE', '401001'), // Sales Revenue
     'cogs'          => env('ACC_CODE_COGS', '501001'),          // Cost of Goods Sold
 
+    // Credit side for customer-paid expenses (no payee account) — 402001 = Other Income.
+    'expense_recovery' => env('ACC_CODE_EXPENSE_RECOVERY', '402001'),
+
     'inventory' => env('ACC_CODE_INVENTORY', '104001'), // Stock in Hand
 
     // Cash in Hand (101001) = account_type 'cash', Main Bank Account (102001) = account_type 'bank'.
