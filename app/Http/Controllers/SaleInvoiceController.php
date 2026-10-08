@@ -267,14 +267,19 @@ class SaleInvoiceController extends Controller
         foreach ($expenses as $expenseData) {
             if (empty($expenseData['amount'])) continue;
             $amount = (float) $expenseData['amount'];
-            $totalOtherExpenses += $amount;
+            $customerPaid = ($expenseData['paid_by'] ?? null) === SaleInvoiceExpense::PAID_BY_CUSTOMER;
+            // Customer-paid expenses are recorded on the invoice only — not billed
+            // to the customer and not posted to any account.
+            if (!$customerPaid) {
+                $totalOtherExpenses += $amount;
+            }
 
             $invoice->expenses()->create([
                 'expense_type'      => $expenseData['expense_type'],
                 'description'       => $expenseData['description'] ?? null,
                 'amount'            => $amount,
                 'paid_by'           => $expenseData['paid_by'],
-                'payee_account_id'  => $expenseData['payee_account_id'],
+                'payee_account_id'  => $customerPaid ? null : ($expenseData['payee_account_id'] ?? null),
             ]);
         }
 
@@ -319,7 +324,7 @@ class SaleInvoiceController extends Controller
             // Always required — Sale has no invoice-level vendor to fall
             // back to, so both "Vendor" and "Company" need their own
             // account picked directly on the expense row.
-            'expenses.*.payee_account_id' => 'required_with:expenses|exists:chart_of_accounts,id',
+            'expenses.*.payee_account_id' => 'required_if:expenses.*.paid_by,company,vendor|nullable|exists:chart_of_accounts,id',
         ]);
 
         DB::beginTransaction();
@@ -397,6 +402,7 @@ class SaleInvoiceController extends Controller
             // this expense (paid_by is just a classification label here,
             // since Sale has no single invoice-level vendor to default to).
             foreach ($invoice->expenses as $i => $expense) {
+                if ($expense->paid_by === SaleInvoiceExpense::PAID_BY_CUSTOMER) continue; // no ledger entry
                 if (!$expense->payeeAccount) {
                     throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
                 }
@@ -476,7 +482,7 @@ class SaleInvoiceController extends Controller
             'expenses.*.description'      => 'nullable|string|max:255',
             'expenses.*.amount'           => 'required_with:expenses|numeric|min:0',
             'expenses.*.paid_by'          => 'required_with:expenses|in:company,customer,vendor',
-            'expenses.*.payee_account_id' => 'required_with:expenses|exists:chart_of_accounts,id',
+            'expenses.*.payee_account_id' => 'required_if:expenses.*.paid_by,company,vendor|nullable|exists:chart_of_accounts,id',
         ]);
 
         DB::beginTransaction();
@@ -545,6 +551,7 @@ class SaleInvoiceController extends Controller
 
             Voucher::where('reference', 'like', "SI-{$invoice->id}-EXPENSE-%")->delete();
             foreach ($invoice->expenses as $i => $expense) {
+                if ($expense->paid_by === SaleInvoiceExpense::PAID_BY_CUSTOMER) continue; // no ledger entry
                 if (!$expense->payeeAccount) {
                     throw new \Exception("Expense #{$expense->id} ({$expense->typeLabel()}) has no valid payee account.");
                 }

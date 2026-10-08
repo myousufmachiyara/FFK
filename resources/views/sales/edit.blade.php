@@ -362,18 +362,36 @@ function addExpenseRow(existing = null) {
         </select></td>
         <td><input type="text" name="expenses[${idx}][description]" class="form-control" value="${desc ?? ''}"></td>
         <td><input type="number" step="any" min="0" name="expenses[${idx}][amount]" class="form-control exp-amount" value="${amount}" oninput="calcSummary()"></td>
-        <td><select name="expenses[${idx}][paid_by]" class="form-control">
+        <td><select name="expenses[${idx}][paid_by]" class="form-control exp-paid-by" onchange="togglePayee(this)">
             <option value="company" ${paidBy==='company'?'selected':''}>Company (FFK)</option>
             <option value="customer" ${paidBy==='customer'?'selected':''}>Customer</option>
             ${paidBy==='vendor'?'<option value="vendor" selected>Vendor (legacy)</option>':''}
         </select></td>
-        <td><select name="expenses[${idx}][payee_account_id]" class="form-control select2-js" required>
+        <td class="payee-cell"><select name="expenses[${idx}][payee_account_id]" class="form-control select2-js payee-select" required>
             <option value="">Select Account</option>${payeeOptions(payeeId)}
         </select></td>
         <td><button type="button" class="btn btn-danger btn-sm" onclick="$(this).closest('tr').remove(); calcSummary();"><i class="fas fa-times"></i></button></td>
     </tr>`;
     $('#expenseBody').append(row);
     $(`#expenseBody tr[data-erow="${idx}"] .select2-js`).select2({ width: '100%' });
+    togglePayee($(`#expenseBody tr[data-erow="${idx}"] .exp-paid-by`)[0]);
+}
+
+// Customer-paid expenses need no account and post no voucher.
+function togglePayee(el) {
+    const $tr = $(el).closest('tr');
+    const isCustomer = $(el).val() === 'customer';
+    const $sel = $tr.find('.payee-select');
+    if (isCustomer) {
+        $sel.val('').trigger('change').prop('disabled', true).prop('required', false);
+        $tr.find('.payee-cell .select2-container').hide();
+        if (!$tr.find('.payee-na').length) $tr.find('.payee-cell').append('<span class="payee-na text-muted small">Not applicable</span>');
+    } else {
+        $sel.prop('disabled', false).prop('required', true);
+        $tr.find('.payee-cell .select2-container').show();
+        $tr.find('.payee-na').remove();
+    }
+    calcSummary();
 }
 
 function calcSummary() {
@@ -386,6 +404,7 @@ function calcSummary() {
     });
 
     $('#expenseBody tr').each(function () {
+        if ($(this).find('.exp-paid-by').val() === 'customer') return;
         expenseAmount += parseFloat($(this).find('.exp-amount').val()) || 0;
     });
 
