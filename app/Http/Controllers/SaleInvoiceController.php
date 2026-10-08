@@ -315,7 +315,7 @@ class SaleInvoiceController extends Controller
             'expenses.*.expense_type'     => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'      => 'nullable|string|max:255',
             'expenses.*.amount'           => 'required_with:expenses|numeric|min:0',
-            'expenses.*.paid_by'          => 'required_with:expenses|in:vendor,company',
+            'expenses.*.paid_by'          => 'required_with:expenses|in:company,customer',
             // Always required — Sale has no invoice-level vendor to fall
             // back to, so both "Vendor" and "Company" need their own
             // account picked directly on the expense row.
@@ -475,7 +475,7 @@ class SaleInvoiceController extends Controller
             'expenses.*.expense_type'     => 'required_with:expenses|in:local_cartage,packaging,plastic_bags,bardana,misc,tulai,others',
             'expenses.*.description'      => 'nullable|string|max:255',
             'expenses.*.amount'           => 'required_with:expenses|numeric|min:0',
-            'expenses.*.paid_by'          => 'required_with:expenses|in:vendor,company',
+            'expenses.*.paid_by'          => 'required_with:expenses|in:company,customer,vendor',
             'expenses.*.payee_account_id' => 'required_with:expenses|exists:chart_of_accounts,id',
         ]);
 

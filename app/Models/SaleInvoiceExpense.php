@@ -16,6 +16,7 @@ class SaleInvoiceExpense extends Model
 
     const PAID_BY_VENDOR  = 'vendor';
     const PAID_BY_COMPANY = 'company';
+    const PAID_BY_CUSTOMER = 'customer';
 
     protected $fillable = [
         'sale_invoice_id',
@@ -56,6 +57,10 @@ class SaleInvoiceExpense extends Model
 
     public function paidByLabel(): string
     {
-        return $this->paid_by === self::PAID_BY_VENDOR ? 'Vendor' : 'Company (FFK)';
+        return match ($this->paid_by) {
+            self::PAID_BY_CUSTOMER => 'Customer',
+            self::PAID_BY_VENDOR   => 'Vendor', // legacy rows
+            default                => 'Company (FFK)',
+        };
     }
 }

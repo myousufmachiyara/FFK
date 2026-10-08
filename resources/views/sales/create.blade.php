@@ -125,7 +125,7 @@
           <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addExpenseRow()"><i class="fas fa-plus"></i> Add Expense</button>
           <p class="text-muted small mt-2 mb-0">
             <i class="fas fa-info-circle"></i> Every expense is always added to the Customer's receivable.
-            Pick who it's payable to on each row — a Vendor or Company (FFK) account. "Paid By" is just a
+            Pick who it's payable to on each row — any account (Vendor, Company (FFK), etc.). "Paid By" is just a
             label for reporting; either way the amount is owed to whichever account you select.
           </p>
         </div>
@@ -372,7 +372,7 @@ function addExpenseRow() {
         <td><input type="number" step="any" min="0" name="expenses[${idx}][amount]" class="form-control exp-amount" oninput="calcSummary()"></td>
         <td><select name="expenses[${idx}][paid_by]" class="form-control">
             <option value="company">Company (FFK)</option>
-            <option value="vendor">Vendor</option>
+            <option value="customer">Customer</option>
         </select></td>
         <td><select name="expenses[${idx}][payee_account_id]" class="form-control select2-js" required>
             <option value="">Select Account</option>${payeeOptions()}

@@ -364,7 +364,8 @@ function addExpenseRow(existing = null) {
         <td><input type="number" step="any" min="0" name="expenses[${idx}][amount]" class="form-control exp-amount" value="${amount}" oninput="calcSummary()"></td>
         <td><select name="expenses[${idx}][paid_by]" class="form-control">
             <option value="company" ${paidBy==='company'?'selected':''}>Company (FFK)</option>
-            <option value="vendor" ${paidBy==='vendor'?'selected':''}>Vendor</option>
+            <option value="customer" ${paidBy==='customer'?'selected':''}>Customer</option>
+            ${paidBy==='vendor'?'<option value="vendor" selected>Vendor (legacy)</option>':''}
         </select></td>
         <td><select name="expenses[${idx}][payee_account_id]" class="form-control select2-js" required>
             <option value="">Select Account</option>${payeeOptions(payeeId)}

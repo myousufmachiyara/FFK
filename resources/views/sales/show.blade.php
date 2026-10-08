@@ -111,7 +111,7 @@
                 <td>{{ $exp->typeLabel() }}</td>
                 <td>{{ $exp->description }}</td>
                 <td>{{ number_format($exp->amount, 2) }}</td>
-                <td><span class="badge {{ $exp->paid_by === 'vendor' ? 'bg-secondary' : 'bg-info text-dark' }}">{{ $exp->paidByLabel() }}</span></td>
+                <td><span class="badge {{ $exp->paid_by === 'company' ? 'bg-info text-dark' : 'bg-secondary' }}">{{ $exp->paidByLabel() }}</span></td>
                 <td>{{ $exp->payeeAccount->name ?? '—' }}</td>
               </tr>
               @empty
