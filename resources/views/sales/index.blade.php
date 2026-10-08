@@ -41,7 +41,7 @@
                 <td>
                     <span class="badge {{ $invoice->type === 'credit' ? 'bg-warning' : 'bg-success' }}">{{ ucfirst($invoice->type) }}</span>
                 </td>
-                <td>{{ number_format($invoice->net_amount, 2) }}</td>
+                <td>{{ number_format($invoice->totalBillAmount(), 2) }}</td>
                 <td>{{ number_format($invoice->amount_received, 2) }}</td>
                 <td class="{{ $invoice->remainingBalance() > 0 ? 'text-danger fw-bold' : '' }}">
                     {{ number_format($invoice->remainingBalance(), 2) }}
