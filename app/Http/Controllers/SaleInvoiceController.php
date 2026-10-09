@@ -75,7 +75,11 @@ class SaleInvoiceController extends Controller
      * live column exists for that case) — same logic Inventory Report's
      * Stock In Hand uses for its no-variation branch.
      */
-    private function resolveAvailableStock(?int $variationId, ?int $productId = null): float
+    /**
+     * @param int|null $excludeInvoiceId  When editing, the invoice being edited —
+     *        its own quantities must not count as already sold.
+     */
+    private function resolveAvailableStock(?int $variationId, ?int $productId = null, ?int $excludeInvoiceId = null): float
     {
         if ($variationId) {
             $variation = ProductVariation::find($variationId);
@@ -97,6 +101,7 @@ class SaleInvoiceController extends Controller
         $sold = (float) DB::table('sale_invoice_items')
             ->join('sale_invoices', 'sale_invoice_items.sale_invoice_id', '=', 'sale_invoices.id')
             ->where('sale_invoice_items.product_id', $productId)
+            ->when($excludeInvoiceId, fn ($q) => $q->where('sale_invoices.id', '!=', $excludeInvoiceId))
             ->sum('sale_invoice_items.quantity');
 
         return round((float) $product->opening_stock + $purchased - $sold, 3);
@@ -496,7 +501,7 @@ class SaleInvoiceController extends Controller
             }
 
             foreach ($request->items as $itemData) {
-                $available = $this->resolveAvailableStock($itemData['variation_id'] ?? null, $itemData['product_id'] ?? null);
+                $available = $this->resolveAvailableStock($itemData['variation_id'] ?? null, $itemData['product_id'] ?? null, (int) $invoice->id);
                 $qty = (float) $itemData['quantity'];
 
                 if ($qty > $available) {

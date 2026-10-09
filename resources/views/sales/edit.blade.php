@@ -238,7 +238,7 @@ function loadVariationsForRow(productId, idx, selectedId) {
     }
     showVariationDropdown(variationSelect);
     variationSelect.html('<option value="">Loading...</option>').trigger('change.select2');
-    fetch(`/product/${productId}/variations`)
+    fetch(`/product/${productId}/variations?exclude_invoice={{ $invoice->id }}`)
         .then(res => res.json())
         .then(data => {
             const variations = data.variation || data.variations || [];

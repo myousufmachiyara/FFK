@@ -254,8 +254,25 @@ class ProductController extends Controller
     // both showed as 0/blank no matter what was actually in the
     // database. Now returns everything the frontend needs.
     // ─────────────────────────────────────────────────────────────
-    public function getVariations($productId)
+    public function getVariations(Request $request, $productId)
     {
+        // When editing a sale invoice, its own quantities are added back so the
+        // form shows (and allows) the stock available to THIS invoice.
+        $excludeInvoice = (int) $request->query('exclude_invoice', 0);
+        $ownQty = $ownWeight = [];
+        $ownNoVarQty = $ownNoVarWeight = 0.0;
+        if ($excludeInvoice) {
+            foreach (DB::table('sale_invoice_items')->where('sale_invoice_id', $excludeInvoice)->where('product_id', $productId)->get() as $r) {
+                if ($r->variation_id) {
+                    $ownQty[$r->variation_id]    = ($ownQty[$r->variation_id] ?? 0) + (float) $r->quantity;
+                    $ownWeight[$r->variation_id] = ($ownWeight[$r->variation_id] ?? 0) + (float) $r->net_weight;
+                } else {
+                    $ownNoVarQty    += (float) $r->quantity;
+                    $ownNoVarWeight += (float) $r->net_weight;
+                }
+            }
+        }
+
         $product = Product::with(['variations', 'measurementUnit'])->find($productId);
 
         if (!$product) {
@@ -302,8 +319,8 @@ class ProductController extends Controller
                 ->where('sale_invoice_items.product_id', $product->id)
                 ->sum('sale_invoice_items.net_weight');
 
-            $stockQty    = round($purchasedQty - $soldQty, 3);
-            $stockWeight = round($purchasedWeight - $soldWeight, 3);
+            $stockQty    = round($purchasedQty - $soldQty + $ownNoVarQty, 3);
+            $stockWeight = round($purchasedWeight - $soldWeight + $ownNoVarWeight, 3);
 
             $variations = collect([[
                 'id'              => null,
@@ -319,7 +336,9 @@ class ProductController extends Controller
                 'selling_price'   => $product->selling_price !== null ? (float) $product->selling_price : null,
             ]]);
         } else {
-            $variations = $product->variations->map(function ($v) use ($unitId) {
+            $variations = $product->variations->map(function ($v) use ($unitId, $ownQty, $ownWeight) {
+                $v->stock_quantity = (float) $v->stock_quantity + ($ownQty[$v->id] ?? 0);
+                $v->stock_weight   = (float) $v->stock_weight + ($ownWeight[$v->id] ?? 0);
                 return [
                     'id'             => $v->id,
                     'sku'            => $v->sku,
