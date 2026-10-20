@@ -169,8 +169,8 @@
                             <td>{{ $row[1] }}</td>
                             <td>
                                 @php $ref = $row[2] ?? ''; @endphp
-                                @if (str_starts_with($ref, 'Voucher #'))
-                                    @php $vid = (int) str_replace('Voucher #', '', $ref); @endphp
+                                @if (str_starts_with($ref, 'Voucher #') || str_starts_with($ref, 'Voucher#'))
+                                    @php $vid = preg_match('/Voucher\s*#\s*(\d+)/', $ref, $m) ? (int) $m[1] : 0; @endphp
                                     {{-- FIX 2: Only print link, no eye icon --}}
                                     <a href="{{ route('vouchers.print', ['type' => 'journal', 'id' => $vid]) }}"
                                        target="_blank" class="ref-link">{{ $ref }}</a>
@@ -198,8 +198,8 @@
                             <td>{{ $row[1] }}</td>
                             <td>
                                 @php $ref = $row[2] ?? ''; @endphp
-                                @if (str_starts_with($ref, 'Voucher #'))
-                                    @php $vid = (int) str_replace('Voucher #', '', explode(' ', $ref)[0]); @endphp
+                                @if (str_starts_with($ref, 'Voucher #') || str_starts_with($ref, 'Voucher#'))
+                                    @php $vid = preg_match('/Voucher\s*#\s*(\d+)/', $ref, $m) ? (int) $m[1] : 0; @endphp
                                     <a href="{{ route('vouchers.print', ['type' => 'journal', 'id' => $vid]) }}"
                                        target="_blank" class="ref-link">{{ $ref }}</a>
                                 @elseif (str_starts_with($ref, 'PI-'))
@@ -235,7 +235,7 @@
                             <td>
                                 @php
                                     $ref = $row[1] ?? '';
-                                    $vid = (int) str_replace('Voucher #', '', $ref);
+                                    $vid = preg_match('/Voucher\s*#\s*(\d+)/', $ref, $m) ? (int) $m[1] : 0;
                                 @endphp
                                 @if ($vid)
                                     <a href="{{ route('vouchers.print', ['type' => 'journal', 'id' => $vid]) }}"
