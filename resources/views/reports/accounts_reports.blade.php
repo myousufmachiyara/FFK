@@ -172,7 +172,7 @@
                                 @if (str_starts_with($ref, 'Voucher #'))
                                     @php $vid = (int) str_replace('Voucher #', '', $ref); @endphp
                                     {{-- FIX 2: Only print link, no eye icon --}}
-                                    <a href="{{ route('vouchers.print', ['type' => 'journal', 'id' => $row->id]) }}"
+                                    <a href="{{ route('vouchers.print', ['type' => 'journal', 'id' => $vid]) }}"
                                        target="_blank" class="ref-link">{{ $ref }}</a>
                                 @elseif (str_starts_with($ref, 'PI-'))
                                     @php $pid = (int) str_replace('PI-', '', $ref); @endphp
