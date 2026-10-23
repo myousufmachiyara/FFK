@@ -172,7 +172,7 @@
                                 @if (str_starts_with($ref, 'Voucher #') || str_starts_with($ref, 'Voucher#'))
                                     @php $vid = preg_match('/Voucher\s*#\s*(\d+)/', $ref, $m) ? (int) $m[1] : 0; @endphp
                                     {{-- FIX 2: Only print link, no eye icon --}}
-                                    <a href="{{ route('vouchers.print', ['type' => 'journal', 'id' => $vid]) }}"
+                                    <a href="{{ route('vouchers.print', ['type' => $voucherTypes[$vid] ?? 'journal', 'id' => $vid]) }}"
                                        target="_blank" class="ref-link">{{ $ref }}</a>
                                 @elseif (str_starts_with($ref, 'PI-'))
                                     @php $pid = (int) str_replace('PI-', '', $ref); @endphp
@@ -200,7 +200,7 @@
                                 @php $ref = $row[2] ?? ''; @endphp
                                 @if (str_starts_with($ref, 'Voucher #') || str_starts_with($ref, 'Voucher#'))
                                     @php $vid = preg_match('/Voucher\s*#\s*(\d+)/', $ref, $m) ? (int) $m[1] : 0; @endphp
-                                    <a href="{{ route('vouchers.print', ['type' => 'journal', 'id' => $vid]) }}"
+                                    <a href="{{ route('vouchers.print', ['type' => $voucherTypes[$vid] ?? 'journal', 'id' => $vid]) }}"
                                        target="_blank" class="ref-link">{{ $ref }}</a>
                                 @elseif (str_starts_with($ref, 'PI-'))
                                     @php $pid = (int) str_replace('PI-', '', $ref); @endphp
@@ -238,7 +238,7 @@
                                     $vid = preg_match('/Voucher\s*#\s*(\d+)/', $ref, $m) ? (int) $m[1] : 0;
                                 @endphp
                                 @if ($vid)
-                                    <a href="{{ route('vouchers.print', ['type' => 'journal', 'id' => $vid]) }}"
+                                    <a href="{{ route('vouchers.print', ['type' => $voucherTypes[$vid] ?? 'journal', 'id' => $vid]) }}"
                                        target="_blank" class="ref-link">{{ $ref }}</a>
                                 @else
                                     {{ $ref }}
@@ -251,7 +251,7 @@
                             {{-- FIX 5: Actions use modal (same as voucher index blade) --}}
                             <td class="text-center no-print">
                                 @if ($vid)
-                                    <a href="{{ route('vouchers.print', ['type' => 'journal', 'id' => $vid]) }}"
+                                    <a href="{{ route('vouchers.print', ['type' => $voucherTypes[$vid] ?? 'journal', 'id' => $vid]) }}"
                                        target="_blank" class="text-success me-1" title="Print">
                                         <i class="fas fa-print"></i>
                                     </a>
