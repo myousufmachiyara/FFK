@@ -73,7 +73,12 @@ class AccountsReportController extends Controller
             'cash_flow'        => $this->cashFlow($from, $to),
         ];
 
-        return view('reports.accounts_reports', compact('reports', 'from', 'to', 'chartOfAccounts'));
+        // voucher id => its real type (payment / receipt / journal …), so the
+        // report can link to /vouchers/{type}/{id}/print with the right type.
+        $voucherTypes = \App\Models\Voucher::whereBetween('date', [$from, $to])
+            ->pluck('voucher_type', 'id')->all();
+
+        return view('reports.accounts_reports', compact('reports', 'from', 'to', 'chartOfAccounts', 'voucherTypes'));
     }
 
     // ─────────────────────────────────────────────────────────────
