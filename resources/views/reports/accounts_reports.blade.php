@@ -160,7 +160,11 @@
                     <tbody>
 
                     @forelse ($reports[$key] ?? [] as $row)
-                        <tr>
+                        @php
+                            $isOpening = in_array($key, ['cash_book', 'bank_book'])
+                                && str_starts_with($row[3] ?? '', 'Opening Balance');
+                        @endphp
+                        <tr class="{{ $isOpening ? 'table-active fw-bold' : '' }}">
 
                         {{-- ── Custom rendering per report type ── --}}
                         @if ($key === 'general_ledger')

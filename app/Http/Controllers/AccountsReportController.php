@@ -490,17 +490,47 @@ class AccountsReportController extends Controller
     {
         if ($ids->isEmpty()) return collect();
 
+        $idsArr = $ids->toArray();
+
+        // ── Opening balance = COA opening figures + every voucher BEFORE $from ──
+        $beforeDate = Carbon::parse($from)->subDay()->toDateString();
+
+        $coaOpeningDr = (float) ChartOfAccounts::whereIn('id', $idsArr)->sum('receivables');
+        $coaOpeningCr = (float) ChartOfAccounts::whereIn('id', $idsArr)->sum('payables');
+
+        $priorDr = (float) Voucher::whereIn('ac_dr_sid', $idsArr)
+            ->where('date', '<=', $beforeDate)
+            ->whereNull('deleted_at')
+            ->sum('amount');
+
+        $priorCr = (float) Voucher::whereIn('ac_cr_sid', $idsArr)
+            ->where('date', '<=', $beforeDate)
+            ->whereNull('deleted_at')
+            ->sum('amount');
+
+        $bal = ($coaOpeningDr + $priorDr) - ($coaOpeningCr + $priorCr);
+
+        $rows = collect();
+        $rows->push([
+            $from,
+            '',
+            '',
+            'Opening Balance (brought forward)',
+            '',
+            '',
+            $this->fmt($bal),
+        ]);
+
+        // ── Period movements ──
         $vouchers = Voucher::with(['debitAccount', 'creditAccount'])
             ->whereBetween('date', [$from, $to])
             ->whereNull('deleted_at')
-            ->where(fn($q) => $q->whereIn('ac_dr_sid', $ids)->orWhereIn('ac_cr_sid', $ids))
+            ->where(fn($q) => $q->whereIn('ac_dr_sid', $idsArr)->orWhereIn('ac_cr_sid', $idsArr))
             ->orderBy('date')
+            ->orderBy('id')
             ->get();
 
-        $bal     = 0;
-        $idsArr  = $ids->toArray();
-
-        return $vouchers->map(function ($v) use ($idsArr, &$bal) {
+        $movements = $vouchers->map(function ($v) use ($idsArr, &$bal) {
             $dr   = in_array($v->ac_dr_sid, $idsArr) ? $v->amount : 0;
             $cr   = in_array($v->ac_cr_sid, $idsArr) ? $v->amount : 0;
             $bal += ($dr - $cr);
@@ -509,12 +539,14 @@ class AccountsReportController extends Controller
                 $v->date,
                 $v->debitAccount->name  ?? '—',
                 $v->creditAccount->name ?? '—',
-                $v->remarks ?? '',               // narration
+                $v->remarks ?? '',
                 $this->fmt($dr),
                 $this->fmt($cr),
                 $this->fmt($bal),
             ];
         });
+
+        return $rows->concat($movements);
     }
 
     // ─────────────────────────────────────────────────────────────
