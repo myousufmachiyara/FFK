@@ -166,7 +166,7 @@ class CommissionReturnController extends Controller
                 'total_customer_commission'  => $totalCustComm,
             ]);
 
-            $residualReversal = round($totalSaleValue - $totalCustComm, 2);
+            $residualReversal = round($totalSaleValue, 2); // full goods value; customer commission is reversed separately
 
             if ($request->return_type === 'vendor') {
                 // ── VENDOR SCENARIO ──
@@ -411,7 +411,7 @@ class CommissionReturnController extends Controller
                 'total_customer_commission'  => $totalCustComm,
             ]);
 
-            $residualReversal = round($totalSaleValue - $totalCustComm, 2);
+            $residualReversal = round($totalSaleValue, 2); // full goods value; customer commission is reversed separately
 
             if ($request->return_type === 'vendor') {
                 $commissionIncomeAccount = ChartOfAccounts::where('account_type', 'revenue')->where('name', 'like', '%Commission%')->first()
@@ -622,11 +622,11 @@ class CommissionReturnController extends Controller
                         <td width="44%">' . e($skuLabel) . '</td>
                         <td width="14%" style="text-align:right;">' . number_format($item->qty, 2) . '</td>
                         <td width="14%" style="text-align:right;">' . number_format($item->net_weight, 2) . '</td>
-                        <td width="28%" style="text-align:right;">' . number_format($item->sale_value - $item->customer_commission, 2) . '</td>
+                        <td width="28%" style="text-align:right;">' . number_format($item->sale_value, 2) . '</td>
                     </tr>';
             }
 
-            $residual = round((float) $return->total_sale_value - (float) $return->total_customer_commission, 2);
+            $residual = round((float) $return->total_sale_value, 2);
             $html .= '
                     <tr style="font-weight:bold;background-color:#F5EFDF;">
                         <td colspan="3" style="text-align:right;">Total Goods Value (to FFK Stock)</td>
@@ -675,7 +675,7 @@ class CommissionReturnController extends Controller
 
         // ── Summary ────────────────────────────────────────────────
         if ($isStockIn) {
-            $residual = round((float) $return->total_sale_value - (float) $return->total_customer_commission, 2);
+            $residual = round((float) $return->total_sale_value, 2);
             $summaryHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
                 <tr><td width="70%">Customer Receivable Reduced By</td><td width="30%" style="text-align:right;">' . number_format($residual, 2) . '</td></tr>
                 <tr><td>Vendor Payable</td><td style="text-align:right;">No Change</td></tr>
@@ -685,13 +685,13 @@ class CommissionReturnController extends Controller
                 </tr>
             </table>';
         } else {
-            $residual = round((float) $return->total_sale_value - (float) $return->total_customer_commission, 2);
+            $residual = round((float) $return->total_sale_value, 2);
             $summaryHtml = '<table width="100%" cellpadding="2" style="font-size:9px;">
                 <tr><td width="70%">Vendor Commission Reversed</td><td width="30%" style="text-align:right;">' . number_format($return->total_vendor_commission, 2) . '</td></tr>
                 <tr><td>Customer Commission Reversed</td><td style="text-align:right;">' . number_format($return->total_customer_commission, 2) . '</td></tr>
                 <tr><td>Goods Value Reversed</td><td style="text-align:right;">' . number_format($residual, 2) . '</td></tr>
                 <tr style="font-weight:bold;background-color:#C9A24B;color:#ffffff;font-size:11px;">
-                    <td>TOTAL CUSTOMER RECEIVABLE REDUCED</td><td style="text-align:right;">' . number_format($return->total_sale_value, 2) . '</td>
+                    <td>TOTAL CUSTOMER RECEIVABLE REDUCED</td><td style="text-align:right;">' . number_format($return->netCustomerReduction(), 2) . '</td>
                 </tr>
             </table>';
         }
@@ -699,9 +699,7 @@ class CommissionReturnController extends Controller
         $pdf->Ln(4);
 
         // ── Amount in Words ──────────────────────────────────────────
-        $wordsAmount = $isStockIn
-            ? round((float) $return->total_sale_value - (float) $return->total_customer_commission, 2)
-            : (float) $return->total_sale_value;
+        $wordsAmount = $return->netCustomerReduction();
 
         $wordsHtml = '<table width="100%" cellpadding="3" style="font-size:9px;border:1px solid #1B3A5C;">
             <tr style="background-color:#F5EFDF;">

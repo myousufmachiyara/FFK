@@ -122,10 +122,19 @@ class CommissionInvoice extends Model
         );
     }
 
-    /** Customer Receivable = Sale Amount + Other Expenses (unaffected by which commission leg applies). */
+    /**
+     * Customer Receivable = Sale Amount + Customer Commission + Other Expenses.
+     * Customer commission is charged ON TOP of the goods value. Vendor
+     * commission does not affect what the customer owes.
+     */
     public function totalCustomerReceivable(): float
     {
-        return round((float) $this->total_sale_amount + (float) $this->total_other_expenses, 2);
+        return round(
+            (float) $this->total_sale_amount
+            + (float) $this->total_customer_commission_amount
+            + (float) $this->total_other_expenses,
+            2
+        );
     }
 
     /** What's left to pay the vendor / collect from the customer. Only meaningful once Delivered. */

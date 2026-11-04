@@ -34,10 +34,18 @@ class CommissionReturn extends Model
         return Voucher::where('reference', 'like', "CR-{$this->id}-%")->get();
     }
 
-    /** The net amount this return actually reduces the Customer's receivable by. */
+    /**
+     * The net amount this return actually reduces the Customer's receivable by.
+     * Vendor return: goods value + customer commission (both reversed).
+     * Stock-in: goods value only (customer still owes the commission).
+     */
     public function netCustomerReduction(): float
     {
-        return round((float) $this->total_sale_value, 2);
+        $goods = (float) $this->total_sale_value;
+        if ($this->isVendorReturn()) {
+            $goods += (float) $this->total_customer_commission;
+        }
+        return round($goods, 2);
     }
 
     /**

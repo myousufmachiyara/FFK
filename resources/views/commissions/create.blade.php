@@ -327,7 +327,7 @@ function calcSummary() {
     $('#sumCustComm').text(custComm.toFixed(2));
     $('#sumExpenses').text(expenses.toFixed(2));
     $('#sumVendorPayable').text((purchase - vendorComm + vendorPaidExpenses).toFixed(2));
-    $('#sumCustomerReceivable').text((sale + expenses).toFixed(2));
+    $('#sumCustomerReceivable').text((sale + custComm + expenses).toFixed(2));
 }
 
 $(document).ready(function () {

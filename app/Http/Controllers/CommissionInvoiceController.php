@@ -502,9 +502,9 @@ class CommissionInvoiceController extends Controller
     //   2) Vendor commission:  DR Vendor            / CR Commission Income = Vendor Commission (reduces vendor payable)
     //   3) Customer commission:DR Customer           / CR Commission Income = Customer Commission
     //   4) Per expense:        DR Customer           / CR (Vendor OR Payee) = expense.amount
-    //   5) Residual:           DR Customer           / CR Clearing          = Sale Total - Customer Commission
+    //   5) Residual:           DR Customer           / CR Clearing          = Sale Total (full goods value)
     //
-    // Customer Receivable always = Sale Total + sum(all expenses), regardless
+    // Customer Receivable = Sale Total + Customer Commission + sum(all expenses), regardless
     // of who ultimately gets paid for each expense — only the CREDIT side of
     // step 4 changes based on paid_by.
     // ─────────────────────────────────────────────────────────────
@@ -602,10 +602,12 @@ class CommissionInvoiceController extends Controller
                 );
             }
 
-            // 5) Residual (goods pass-through) — only customer-side commission
-            // is netted out here; vendor commission doesn't touch what the
-            // customer owes.
-            $residual = round($saleTotal - $customerCommissionTotal, 2);
+            // 5) Residual (goods pass-through) — the FULL sale value. Customer
+            // commission is charged on top (posted in step 3), so it must NOT
+            // be netted out here; otherwise it cancels itself and never
+            // reaches the customer's receivable. Vendor commission doesn't
+            // touch what the customer owes.
+            $residual = round($saleTotal, 2);
             $this->postVoucher(
                 $date, $customerAccount, $clearingAccount, $residual,
                 "CI-{$invoice->id}-DELIVERED-RESIDUAL",

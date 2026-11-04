@@ -92,7 +92,7 @@
         @else
         <p class="text-muted small">
           <i class="fas fa-info-circle"></i> Net reduction to Customer's receivable:
-          <strong>{{ number_format($return->total_sale_value - $return->total_customer_commission, 2) }}</strong>
+          <strong>{{ number_format($return->netCustomerReduction(), 2) }}</strong>
           (goods value only). Vendor Payable and Commission Income are unchanged — the vendor still
           delivered and still earned their commission; this quantity has been added to FFK's own stock instead.
         </p>
