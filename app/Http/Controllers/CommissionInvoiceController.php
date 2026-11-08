@@ -93,8 +93,8 @@ class CommissionInvoiceController extends Controller
     public function create()
     {
         $products  = Product::with('variations')->orderBy('name')->get();
-        $vendors   = ChartOfAccounts::where('account_type', config('commission_accounts.vendor_account_type'))->orderBy('name')->get();
-        $customers = ChartOfAccounts::where('account_type', config('commission_accounts.customer_account_type'))->orderBy('name')->get();
+        $vendors   = ChartOfAccounts::whereIn('account_type', ['customer', 'vendor'])->orderBy('name')->get(); // both customers & vendors — trade either way
+        $customers = ChartOfAccounts::whereIn('account_type', ['customer', 'vendor'])->orderBy('name')->get(); // both customers & vendors — trade either way
         $units     = MeasurementUnit::all();
         $payeeAccounts = ChartOfAccounts::whereIn('account_type', ['vendor', 'cash', 'bank'])->orderBy('name')->get(); // vendor payable, or a direct cash/bank payment
         $kgPerMaund = $this->kgPerMaund();
@@ -263,8 +263,8 @@ class CommissionInvoiceController extends Controller
         }
 
         $products  = Product::with('variations')->orderBy('name')->get();
-        $vendors   = ChartOfAccounts::where('account_type', config('commission_accounts.vendor_account_type'))->orderBy('name')->get();
-        $customers = ChartOfAccounts::where('account_type', config('commission_accounts.customer_account_type'))->orderBy('name')->get();
+        $vendors   = ChartOfAccounts::whereIn('account_type', ['customer', 'vendor'])->orderBy('name')->get(); // both customers & vendors — trade either way
+        $customers = ChartOfAccounts::whereIn('account_type', ['customer', 'vendor'])->orderBy('name')->get(); // both customers & vendors — trade either way
         $units     = MeasurementUnit::all();
         $payeeAccounts = ChartOfAccounts::whereIn('account_type', ['vendor', 'cash', 'bank'])->orderBy('name')->get();
         $kgPerMaund = $this->kgPerMaund();

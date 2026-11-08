@@ -211,8 +211,7 @@ class SaleInvoiceController extends Controller
             $p->computed_stock = $p->variations->sum('stock_quantity') + $p->variations->sum('opening_stock');
         });
 
-        $customers = ChartOfAccounts::where('account_type', config('sale_accounts.customer_account_type'))
-            ->orderBy('name')->get();
+        $customers = ChartOfAccounts::whereIn('account_type', ['customer', 'vendor'])->orderBy('name')->get(); // both customers & vendors — trade either way
         $paymentAccounts = ChartOfAccounts::whereIn('account_type', config('sale_accounts.payment_account_types'))
             ->orderBy('name')->get();
         // Expense payees are Vendor-type accounts only (e.g. a transporter
@@ -448,8 +447,7 @@ class SaleInvoiceController extends Controller
             $p->computed_stock = $p->variations->sum('stock_quantity') + $p->variations->sum('opening_stock');
         });
 
-        $customers = ChartOfAccounts::where('account_type', config('sale_accounts.customer_account_type'))
-            ->orderBy('name')->get();
+        $customers = ChartOfAccounts::whereIn('account_type', ['customer', 'vendor'])->orderBy('name')->get(); // both customers & vendors — trade either way
         $paymentAccounts = ChartOfAccounts::whereIn('account_type', config('sale_accounts.payment_account_types'))
             ->orderBy('name')->get();
         $payeeAccounts = ChartOfAccounts::whereIn('account_type', ['vendor', 'cash', 'bank'])->orderBy('name')->get();

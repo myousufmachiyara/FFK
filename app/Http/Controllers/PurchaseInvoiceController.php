@@ -99,7 +99,7 @@ class PurchaseInvoiceController extends Controller
     public function create()
     {
         $products = Product::with('variations')->orderBy('name')->get();
-        $vendors  = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
+        $vendors  = ChartOfAccounts::whereIn('account_type', ['customer', 'vendor'])->orderBy('name')->get(); // both customers & vendors — trade either way
         $units    = MeasurementUnit::all();
         $payeeAccounts = ChartOfAccounts::whereIn('account_type', ['vendor', 'cash', 'bank'])->orderBy('name')->get(); // vendor payable, or a direct cash/bank payment
         $kgPerMaund = $this->kgPerMaund();
@@ -284,7 +284,7 @@ class PurchaseInvoiceController extends Controller
                 ->with('error', 'Only Pending invoices can be edited.');
         }
 
-        $vendors  = ChartOfAccounts::where('account_type', 'vendor')->orderBy('name')->get();
+        $vendors  = ChartOfAccounts::whereIn('account_type', ['customer', 'vendor'])->orderBy('name')->get(); // both customers & vendors — trade either way
         $products = Product::with('variations')->select('id', 'name', 'measurement_unit')->get();
         $units    = MeasurementUnit::all();
         $payeeAccounts = ChartOfAccounts::whereIn('account_type', ['vendor', 'cash', 'bank'])->orderBy('name')->get();
