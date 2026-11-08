@@ -40,8 +40,8 @@
                   <th>Dispatched Net Wt (kg)</th>
                   <th>Received Bags *</th>
                   <th>Received Net Wt (kg) *</th>
-                  <th>Short Wt (kg)</th>
-                  <th>Shortage Reason</th>
+                  <th>Short / Excess Wt (kg)</th>
+                  <th>Reason (short / excess)</th>
                 </tr>
               </thead>
               <tbody>
@@ -59,7 +59,7 @@
                            class="form-control" value="{{ $item->quantity }}" required>
                   </td>
                   <td>
-                    <input type="number" step="any" min="0" max="{{ $item->net_weight }}"
+                    <input type="number" step="any" min="0"
                            name="items[{{ $i }}][received_net_weight]"
                            class="form-control received-weight"
                            data-dispatched="{{ $item->net_weight }}"
@@ -104,7 +104,7 @@
             </table>
           </div>
           <p class="text-muted small">
-            <i class="fas fa-info-circle"></i> These are allocated across items proportional to dispatched net weight,
+            <i class="fas fa-info-circle"></i> These are allocated across items proportional to received net weight,
             and added into inventory cost when you confirm below. Need to change an amount or payee? Edit is locked
             after In Transit — contact an admin if a correction is needed before receiving.
           </p>
@@ -160,8 +160,18 @@
       const row = this.dataset.row;
       const dispatched = parseFloat(this.dataset.dispatched) || 0;
       const received = parseFloat(this.value) || 0;
-      const short = Math.max(dispatched - received, 0);
-      document.getElementById('short_' + row).value = short.toFixed(2);
+      const diff = received - dispatched;
+      const el = document.getElementById('short_' + row);
+      el.classList.remove('text-danger', 'text-success');
+      if (diff < 0) {
+        el.value = 'Short ' + Math.abs(diff).toFixed(2);
+        el.classList.add('text-danger');
+      } else if (diff > 0) {
+        el.value = 'Excess +' + diff.toFixed(2);
+        el.classList.add('text-success');
+      } else {
+        el.value = '0.00';
+      }
     });
   });
 </script>

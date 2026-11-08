@@ -36,6 +36,7 @@ class PurchaseInvoiceController extends Controller
     private function inventoryAccount(): ChartOfAccounts             { return $this->resolveAccount('inventory', 'Inventory / Stock in Hand'); }
     private function inventoryInTransitAccount(): ChartOfAccounts    { return $this->resolveAccount('inventory_in_transit', 'Inventory In Transit'); }
     private function shortageLossAccount(): ChartOfAccounts          { return $this->resolveAccount('shortage_loss', 'Shortage / Inventory Loss'); }
+    private function excessGainAccount(): ChartOfAccounts            { return $this->resolveAccount('excess_gain', 'Excess Weight Gain'); }
 
     private function kgPerMaund(): int
     {
@@ -499,6 +500,9 @@ class PurchaseInvoiceController extends Controller
     //
     //   DR Actual Inventory        CR Inventory In Transit   (received value, by weight)
     //   DR Shortage/Loss Account   CR Inventory In Transit   (shortage value, if any)
+    //   DR Inventory In Transit    CR Excess Weight Gain     (excess value, if any —
+    //                                                         food items can gain weight
+    //                                                         in transit due to weather)
     //   DR Actual Inventory        CR (Vendor OR Payee)      (per expense — paid_by routed)
     //   DR Vendor                  CR Payment Account        (optional immediate payment)
     // ─────────────────────────────────────────────────────────────
@@ -528,14 +532,21 @@ class PurchaseInvoiceController extends Controller
                 return back()->with('error', 'This invoice is not In Transit — no action taken.');
             }
 
-            $totalDispatchedWeight = $invoice->items->sum(fn ($i) => (float) $i->net_weight);
-            $totalOtherExpenses    = (float) $invoice->total_other_expenses;
-            $perKgExtra = $totalDispatchedWeight > 0 ? ($totalOtherExpenses / $totalDispatchedWeight) : 0;
-
-            $totalReceivedValue   = 0;
-            $totalDispatchedValue = 0;
-
             $itemsInput = collect($request->items)->keyBy('id');
+
+            // Other expenses are spread over the weight actually received,
+            // so the total allocated always equals the total expenses —
+            // whether the lot came in short or heavy.
+            $totalReceivedWeight = $invoice->items->sum(function ($i) use ($itemsInput) {
+                $in = $itemsInput->get($i->id);
+                return $in ? (float) $in['received_net_weight'] : 0;
+            });
+            $totalOtherExpenses = (float) $invoice->total_other_expenses;
+            $perKgExtra = $totalReceivedWeight > 0 ? ($totalOtherExpenses / $totalReceivedWeight) : 0;
+
+            $totalReceivedValue = 0;
+            $totalShortageValue = 0;
+            $totalExcessValue   = 0;
 
             foreach ($invoice->items as $item) {
                 $input = $itemsInput->get($item->id);
@@ -546,26 +557,27 @@ class PurchaseInvoiceController extends Controller
                 $dispatchedQty      = (float) $item->quantity;
                 $receivedQty        = (float) $input['received_packing_qty'];
 
-                if ($receivedWeight > $dispatchedWeight) {
-                    throw new \Exception("Received weight for item #{$item->id} cannot exceed dispatched net weight ({$dispatchedWeight} kg).");
-                }
+                // Received weight MAY exceed dispatched weight (moisture /
+                // weather gain on food items) — no upper cap on weight.
                 if ($receivedQty > $dispatchedQty) {
                     throw new \Exception("Received bags for item #{$item->id} cannot exceed dispatched quantity ({$dispatchedQty} bags).");
                 }
 
                 $shortWeight    = max($dispatchedWeight - $receivedWeight, 0);
+                $excessWeight   = max($receivedWeight - $dispatchedWeight, 0);
                 $allocatedExtra = round($receivedWeight * $perKgExtra, 2);
 
                 $item->update([
                     'received_packing_qty'      => $receivedQty,
                     'received_net_weight'       => $receivedWeight,
                     'short_weight'               => $shortWeight,
-                    'shortage_reason'            => $shortWeight > 0 ? ($input['shortage_reason'] ?? null) : null,
+                    'shortage_reason'            => ($shortWeight > 0 || $excessWeight > 0) ? ($input['shortage_reason'] ?? null) : null,
                     'allocated_additional_cost'  => $allocatedExtra,
                 ]);
 
-                $totalReceivedValue   += $receivedWeight * (float) $item->price;
-                $totalDispatchedValue += $dispatchedWeight * (float) $item->price;
+                $totalReceivedValue += $receivedWeight * (float) $item->price;
+                $totalShortageValue += $shortWeight    * (float) $item->price;
+                $totalExcessValue   += $excessWeight   * (float) $item->price;
 
                 // FIX: stock is now tracked by QUANTITY (bags), not
                 // weight — 'quantity' is the count that gets sold and
@@ -584,7 +596,8 @@ class PurchaseInvoiceController extends Controller
                 }
             }
 
-            $shortageValue = round($totalDispatchedValue - $totalReceivedValue, 2);
+            $shortageValue = round($totalShortageValue, 2);
+            $excessValue   = round($totalExcessValue, 2);
 
             $inventoryAccount = $this->inventoryAccount();
             $transitAccount   = $this->inventoryInTransitAccount();
@@ -602,6 +615,17 @@ class PurchaseInvoiceController extends Controller
                     $request->received_date, $this->shortageLossAccount(), $transitAccount, $shortageValue,
                     "PI-{$invoice->id}-RECEIVE-SHORTAGE",
                     "Purchase Invoice #{$invoice->invoice_no} — weight shortage on receipt"
+                );
+            }
+
+            // Excess weight: the RECEIVE-BASE entry credited Transit with the
+            // full received value, which is more than was put into Transit at
+            // dispatch. Reverse that excess out of Transit into a gain account.
+            if ($excessValue > 0) {
+                $this->postVoucher(
+                    $request->received_date, $transitAccount, $this->excessGainAccount(), $excessValue,
+                    "PI-{$invoice->id}-RECEIVE-EXCESS",
+                    "Purchase Invoice #{$invoice->invoice_no} — excess weight gain on receipt"
                 );
             }
 

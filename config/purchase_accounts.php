@@ -11,4 +11,7 @@ return [
     'inventory_in_transit'      => env('ACC_CODE_INVENTORY_IN_TRANSIT', '105001'),
     'purchase_expenses_payable' => env('ACC_CODE_PURCHASE_EXPENSES_PAYABLE', '203001'),
     'shortage_loss'             => env('ACC_CODE_SHORTAGE_LOSS', '506001'),
+    // Credited when received weight is MORE than dispatched (weather / moisture gain).
+    // Defaults to the seeded "Other Income" account.
+    'excess_gain'               => env('ACC_CODE_EXCESS_GAIN', '402001'),
 ];
