@@ -88,7 +88,7 @@
               <tr>
                 <th>#</th><th>Item</th><th>Variation</th><th>Packing</th>
                 <th>Wt/Packing</th><th>Qty (bags)</th><th>Gross Wt</th><th>Net Wt</th>
-                <th>Rec. Bags</th><th>Rec. Net Wt</th><th>Short Wt</th>
+                <th>Rec. Bags</th><th>Rec. Net Wt</th><th>Short / Excess Wt</th>
                 <th>Rate (40 kg)</th><th>Rate (kg)</th><th>Amount</th><th>Landed/kg</th>
               </tr>
             </thead>
@@ -105,7 +105,20 @@
                 <td>{{ number_format($item->net_weight, 2) }}</td>
                 <td>{{ $item->received_packing_qty !== null ? number_format($item->received_packing_qty, 0) : '—' }}</td>
                 <td>{{ $item->received_net_weight !== null ? number_format($item->received_net_weight, 2) : '—' }}</td>
-                <td>{{ $item->short_weight > 0 ? number_format($item->short_weight, 2) : '—' }}</td>
+                @php
+                  $wtDiff = $item->received_net_weight !== null
+                      ? (float) $item->received_net_weight - (float) $item->net_weight
+                      : 0;
+                @endphp
+                <td>
+                  @if($wtDiff < -0.0005)
+                    <span class="text-danger">Short {{ number_format(abs($wtDiff), 2) }}</span>
+                  @elseif($wtDiff > 0.0005)
+                    <span class="text-success">Excess +{{ number_format($wtDiff, 2) }}</span>
+                  @else
+                    —
+                  @endif
+                </td>
                 <td>{{ number_format($item->rate_per_40kg, 2) }}</td>
                 <td>{{ number_format($item->price, 4) }}</td>
                 <td>{{ number_format($item->amount, 2) }}</td>
