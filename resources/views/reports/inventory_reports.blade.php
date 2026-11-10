@@ -122,27 +122,30 @@
                                 <td>{{ \Carbon\Carbon::parse($row['date'])->format('d-M-Y') }}</td>
                                 <td><span class="badge {{ $badgeClass }}">{{ $row['type'] }}</span></td>
                                 <td>
-                                    @if (str_starts_with($desc, 'PI-'))
-                                        @php
-                                            preg_match('/PI-(\d+)/', $desc, $m);
-                                            $pid = $m[1] ?? null;
-                                        @endphp
-                                        @if ($pid)
-                                            <a href="{{ route('purchase_invoices.show', $pid) }}"
-                                               target="_blank" class="ref-link text-success">{{ $desc }}</a>
-                                        @else
-                                            {{ $desc }}
-                                        @endif
-                                    @elseif (str_starts_with($desc, 'SI-'))
-                                        @php $sid = (int) str_replace('SI-', '', $desc); @endphp
-                                        <a href="{{ route('sale_invoices.print', $sid) }}"
-                                           target="_blank" class="ref-link text-primary">{{ $desc }}</a>
-                                        <a href="{{ route('sale_invoices.edit', $sid) }}"
-                                           class="ms-1 no-print text-secondary"><i class="fas fa-edit fa-xs"></i></a>
-                                    @elseif (str_starts_with($desc, 'PR-'))
-                                        <span class="text-warning">{{ $desc }}</span>
-                                    @elseif (str_starts_with($desc, 'SR-'))
-                                        <span class="text-info">{{ $desc }}</span>
+                                    @php
+                                        // Link by the document's real id (doc_id); the text shows its
+                                        // invoice / return number. Number → view page, icon → print/PDF.
+                                        $docRoute = match ($row['type']) {
+                                            'Purchase'        => 'purchase_invoices',
+                                            'Sale'            => 'sale_invoices',
+                                            'Purchase Return' => 'purchase_returns',
+                                            'Sale Return'     => 'sale_returns',
+                                            default           => null,
+                                        };
+                                        $docId = $row['doc_id'] ?? null;
+                                        $docColor = match ($row['type']) {
+                                            'Purchase'        => 'text-success',
+                                            'Sale'            => 'text-primary',
+                                            'Purchase Return' => 'text-warning',
+                                            'Sale Return'     => 'text-info',
+                                            default           => '',
+                                        };
+                                    @endphp
+                                    @if ($docRoute && $docId)
+                                        <a href="{{ route($docRoute . '.show', $docId) }}"
+                                           target="_blank" class="ref-link {{ $docColor }}">{{ $desc }}</a>
+                                        <a href="{{ route($docRoute . '.print', $docId) }}" target="_blank"
+                                           class="ms-1 no-print text-secondary" title="Print / PDF"><i class="fas fa-print fa-xs"></i></a>
                                     @else
                                         {{ $desc }}
                                     @endif

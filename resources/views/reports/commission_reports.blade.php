@@ -9,6 +9,24 @@
       <header class="card-header"><h2 class="card-title">Commission Reports</h2></header>
 
       <div class="card-body">
+        @php
+          $tabLabels = [
+            'CR'  => 'Commission Register',
+            'VW'  => 'Vendor Wise',
+            'CW'  => 'Customer Wise',
+            'STA' => 'Status Overview',
+            'OUT' => 'Outstanding',
+            'EXP' => 'Other Expenses',
+          ];
+          // Subtitle for the PDF: period + any active filters.
+          $pdfFilters = collect([
+            \Carbon\Carbon::parse($from)->format('d-M-Y') . ' to ' . \Carbon\Carbon::parse($to)->format('d-M-Y'),
+            $vendorId   ? 'Vendor: '   . optional($vendors->firstWhere('id', $vendorId))->name     : null,
+            $customerId ? 'Customer: ' . optional($customers->firstWhere('id', $customerId))->name : null,
+            $status     ? 'Status: '   . ucwords(str_replace('_', ' ', $status))                    : null,
+          ])->filter()->implode('  |  ');
+        @endphp
+
         {{-- Filter bar --}}
         <form method="GET" action="{{ route('reports.commission') }}" class="row g-2 mb-3 align-items-end">
           <input type="hidden" name="tab" value="{{ $tab }}">
@@ -47,21 +65,18 @@
               <option value="delivered" {{ $status == 'delivered' ? 'selected' : '' }}>Delivered</option>
             </select>
           </div>
-          <div class="col-md-2">
+          <div class="col-md-2 d-flex gap-2">
             <button type="submit" class="btn btn-primary w-100">Filter</button>
+            <button type="button" class="btn btn-danger" title="Export PDF"
+                    onclick="exportPDF('comm-report-table', @js('Commission Report — ' . ($tabLabels[$tab] ?? '')), @js($pdfFilters))">
+              <i class="fas fa-file-pdf"></i>
+            </button>
           </div>
         </form>
 
         {{-- Tabs --}}
         <ul class="nav nav-tabs mb-3">
-          @foreach([
-            'CR'  => 'Commission Register',
-            'VW'  => 'Vendor Wise',
-            'CW'  => 'Customer Wise',
-            'STA' => 'Status Overview',
-            'OUT' => 'Outstanding',
-            'EXP' => 'Other Expenses',
-          ] as $key => $label)
+          @foreach($tabLabels as $key => $label)
           <li class="nav-item">
             <a class="nav-link {{ $tab == $key ? 'active' : '' }}"
                href="{{ route('reports.commission', array_merge(request()->query(), ['tab' => $key])) }}">
@@ -82,7 +97,7 @@
 
         {{-- ═══════════ COMMISSION REGISTER ═══════════ --}}
         @if($tab === 'CR')
-        <div class="table-responsive">
+        <div class="table-responsive" id="comm-report-table">
           <table class="table table-bordered table-sm table-striped">
             <thead>
               <tr>
@@ -133,7 +148,7 @@
 
         {{-- ═══════════ VENDOR WISE ═══════════ --}}
         @if($tab === 'VW')
-        <div class="table-responsive">
+        <div class="table-responsive" id="comm-report-table">
           <table class="table table-bordered table-sm table-striped">
             <thead>
               <tr>
@@ -161,7 +176,7 @@
 
         {{-- ═══════════ CUSTOMER WISE ═══════════ --}}
         @if($tab === 'CW')
-        <div class="table-responsive">
+        <div class="table-responsive" id="comm-report-table">
           <table class="table table-bordered table-sm table-striped">
             <thead>
               <tr>
@@ -190,7 +205,7 @@
 
         {{-- ═══════════ STATUS OVERVIEW ═══════════ --}}
         @if($tab === 'STA')
-        <div class="table-responsive">
+        <div class="table-responsive" id="comm-report-table">
           <table class="table table-bordered table-sm table-striped">
             <thead>
               <tr>
@@ -222,7 +237,7 @@
           and Customer Receivable here are the full invoice figures, settled via your general Payment Voucher
           system outside this report.
         </p>
-        <div class="table-responsive">
+        <div class="table-responsive" id="comm-report-table">
           <table class="table table-bordered table-sm table-striped">
             <thead>
               <tr>
@@ -255,7 +270,7 @@
 
         {{-- ═══════════ OTHER EXPENSES ═══════════ --}}
         @if($tab === 'EXP')
-        <div class="table-responsive">
+        <div class="table-responsive" id="comm-report-table">
           <table class="table table-bordered table-sm table-striped">
             <thead>
               <tr>
@@ -297,6 +312,37 @@
 </div>
 
 <script>
+// Same PDF export used by the other report pages: opens a clean, print-ready
+// copy of the current tab's table — choose "Save as PDF" in the print dialog.
+function exportPDF(tableId, title, period) {
+    const el = document.getElementById(tableId);
+    if (!el) return;
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('.no-print').forEach(e => e.remove());
+    clone.querySelectorAll('.badge').forEach(b => {
+        b.replaceWith(document.createTextNode(b.textContent.trim()));
+    });
+    clone.querySelectorAll('a').forEach(a => {
+        a.replaceWith(document.createTextNode(a.textContent.trim()));
+    });
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + title + '</title>'
+        + '<style>@page{size:landscape}body{font-family:Arial,sans-serif;font-size:11px;margin:20px}'
+        + 'h2{font-size:14px;margin-bottom:4px}p{font-size:10px;color:#555;margin:0 0 10px}'
+        + 'table{width:100%;border-collapse:collapse}'
+        + 'th{background:#1a1a2e;color:#fff;padding:5px 7px;text-align:left}'
+        + 'td{padding:4px 7px;border-bottom:0.5px solid #ddd}'
+        + 'tr:nth-child(even) td{background:#f9f9f9}'
+        + 'tfoot td{background:#e9ecef;font-weight:bold}'
+        + '.text-end{text-align:right}.text-center{text-align:center}.fw-bold{font-weight:bold}</style></head><body>'
+        + '<h2>' + title + '</h2><p>' + period + '</p>'
+        + clone.innerHTML
+        + '<script>window.onload=function(){window.print();}<\/script>'
+        + '</body></html>';
+    const win = window.open('', '_blank', 'width=1000,height=700');
+    win.document.write(html);
+    win.document.close();
+}
+
 $(document).ready(function () {
     $('.select2-report-filter').select2({ width: '100%' });
 });

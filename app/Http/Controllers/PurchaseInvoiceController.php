@@ -109,7 +109,8 @@ class PurchaseInvoiceController extends Controller
 
     /**
      * Shared server-side item + expense computation for store()/update().
-     * NEVER trust client-submitted gross_weight/amount/totals.
+     * NEVER trust client-submitted amount/totals. A typed gross_weight is
+     * only kept when it agrees with wt_per_packing × quantity (see below).
      */
     private function syncItemsAndExpenses(PurchaseInvoice $invoice, array $items, array $expenses): array
     {
@@ -127,6 +128,21 @@ class PurchaseInvoiceController extends Controller
             $ratePer40kg  = (float) $itemData['rate_per_40kg'];
 
             $calc = PurchaseInvoiceItem::computeLine($wtPerPacking, $qty, $netOverride, $ratePer40kg, $kgPerMaund);
+
+            // Gross Wt can be typed on the form, with Wt/Packing derived
+            // from it (gross ÷ qty, rounded to 3 decimals). Keep the exact
+            // typed gross when it only differs from wt × qty by that
+            // rounding — e.g. 1000 kg over 3 bags stays 1000, not 999.999.
+            $grossIn = isset($itemData['gross_weight']) && $itemData['gross_weight'] !== ''
+                ? (float) $itemData['gross_weight'] : null;
+            if ($grossIn !== null && $grossIn > 0
+                && abs($grossIn - $calc['grossWeight']) <= ($qty * 0.0005) + 0.001) {
+                $calc['grossWeight'] = round($grossIn, 3);
+                if ($netOverride === null || $netOverride <= 0) {
+                    $calc['netWeight'] = $calc['grossWeight'];
+                    $calc['amount']    = round($calc['ratePerKg'] * $calc['netWeight'], 2);
+                }
+            }
 
             $invoice->items()->create([
                 'item_id'         => $itemData['item_id'],
@@ -193,6 +209,7 @@ class PurchaseInvoiceController extends Controller
             'items.*.packing_unit_id'      => 'nullable|exists:measurement_units,id',
             'items.*.wt_per_packing'       => 'required|numeric|min:0.001',
             'items.*.quantity'             => 'required|numeric|min:0.01',
+            'items.*.gross_weight'         => 'nullable|numeric|min:0',
             'items.*.net_weight'           => 'nullable|numeric|min:0',
             'items.*.rate_per_40kg'        => 'required|numeric|min:0',
             'expenses'                     => 'nullable|array',
@@ -312,6 +329,7 @@ class PurchaseInvoiceController extends Controller
             'items.*.packing_unit_id'      => 'nullable|exists:measurement_units,id',
             'items.*.wt_per_packing'       => 'required|numeric|min:0.001',
             'items.*.quantity'             => 'required|numeric|min:0.01',
+            'items.*.gross_weight'         => 'nullable|numeric|min:0',
             'items.*.net_weight'           => 'nullable|numeric|min:0',
             'items.*.rate_per_40kg'        => 'required|numeric|min:0',
             'expenses'                     => 'nullable|array',

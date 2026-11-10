@@ -203,9 +203,9 @@ function addItemRow() {
                 <option value="">—</option>${unitOptions()}
             </select>
         </td>
-        <td><input type="number" step="any" min="0" name="items[${idx}][wt_per_packing]" class="form-control wt-packing" oninput="calcRow(${idx})" required></td>
+        <td><input type="number" step="any" min="0" name="items[${idx}][wt_per_packing]" class="form-control wt-packing" oninput="onWtInput(${idx}, 'packing')" required></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][quantity]" class="form-control qty" oninput="calcRow(${idx})" required></td>
-        <td><input type="text" class="form-control readonly-calc gross-weight" readonly value="0.00"></td>
+        <td><input type="number" step="any" min="0" name="items[${idx}][gross_weight]" class="form-control gross-weight" placeholder="= wt × qty" oninput="onWtInput(${idx}, 'gross')"></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][net_weight]" class="form-control net-weight" placeholder="= gross wt" oninput="calcRow(${idx})"></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][rate_per_40kg]" class="form-control rate-40kg" oninput="onRateInput(${idx}, 'maund')" required></td>
         <td><input type="number" step="any" min="0" name="items[${idx}][rate_per_kg]" class="form-control rate-kg" oninput="onRateInput(${idx}, 'kg')"></td>
@@ -266,18 +266,37 @@ function onRateInput(idx, source) {
     calcRow(idx);
 }
 
+// ── Two-way gross weight ─────────────────────────────────────────────
+// Type into EITHER Wt/Packing OR Gross Wt — whichever was typed last
+// drives the other through Qty:
+//   Wt/Packing typed  →  Gross Wt   = Wt/Packing × Qty
+//   Gross Wt typed    →  Wt/Packing = Gross Wt ÷ Qty
+// Changing Qty afterwards keeps whichever one you typed fixed.
+function onWtInput(idx, source) {
+    $(`#itemBody tr[data-row="${idx}"]`).attr('data-wt-src', source);
+    calcRow(idx);
+}
+
 function calcRow(idx) {
     const $row = $(`#itemBody tr[data-row="${idx}"]`);
-    const wtPacking = parseFloat($row.find('.wt-packing').val()) || 0;
     const qty = parseFloat($row.find('.qty').val()) || 0;
     const rateKg = parseFloat($row.find('.rate-kg').val()) || 0;
     let netInput = $row.find('.net-weight').val();
 
-    const grossWeight = wtPacking * qty;
+    let wtPacking, grossWeight;
+    if ($row.attr('data-wt-src') === 'gross') {
+        grossWeight = parseFloat($row.find('.gross-weight').val()) || 0;
+        wtPacking   = qty > 0 ? grossWeight / qty : 0;
+        $row.find('.wt-packing').val(wtPacking > 0 ? +wtPacking.toFixed(3) : '');
+    } else {
+        wtPacking   = parseFloat($row.find('.wt-packing').val()) || 0;
+        grossWeight = wtPacking * qty;
+        $row.find('.gross-weight').val(grossWeight > 0 ? +grossWeight.toFixed(3) : '');
+    }
+
     const netWeight = (netInput !== '' && !isNaN(parseFloat(netInput))) ? parseFloat(netInput) : grossWeight;
     const amount = rateKg * netWeight;
 
-    $row.find('.gross-weight').val(grossWeight.toFixed(2));
     $row.find('.amount').val(amount.toFixed(2));
 
     calcSummary();

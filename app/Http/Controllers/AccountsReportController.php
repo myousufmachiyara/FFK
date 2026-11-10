@@ -98,32 +98,85 @@ class AccountsReportController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────
-    // HELPER — turn a voucher's reference into a readable, linkable label.
+    // HELPERS — voucher reference → document number + links.
     //
-    // The Purchase/Sale/Commission modules all generate system vouchers
-    // with references like "PI-42-INTRANSIT", "SI-17-RECEIPT-1",
-    // "CI-9-DELIVERED-COMMISSION" — this parses that pattern into
-    // something a person can read ("PI-42 (In Transit)") while keeping
-    // the leading "PI-{id}" / "SI-{id}" / "CI-{id}" intact so the blade's
-    // existing prefix-based linking (str_starts_with + int cast) keeps
-    // working without needing to know the exact suffix format.
-    //
-    // Manual journal vouchers (no reference) fall back to "Voucher #{id}"
-    // exactly as before.
+    // System vouchers carry references like "PI-42-INTRANSIT" where 42 is
+    // the document's DATABASE ID — not the invoice number the user sees
+    // (e.g. "000038"). Showing the id as if it were the invoice number
+    // caused mismatches between the ledger, the invoice screen and its
+    // PDF. These helpers look up the real invoice / return number for
+    // display, and build links from the id so they always open the
+    // right document.
     // ─────────────────────────────────────────────────────────────
+    private const DOC_TYPES = [
+        'PI' => ['table' => 'purchase_invoices',   'no' => 'invoice_no', 'route' => 'purchase_invoices'],
+        'SI' => ['table' => 'sale_invoices',       'no' => 'invoice_no', 'route' => 'sale_invoices'],
+        'CI' => ['table' => 'commission_invoices', 'no' => 'invoice_no', 'route' => 'commission_invoices'],
+        'PR' => ['table' => 'purchase_returns',    'no' => 'return_no',  'route' => 'purchase_returns'],
+        'SR' => ['table' => 'sale_returns',        'no' => 'return_no',  'route' => 'sale_returns'],
+        'CR' => ['table' => 'commission_returns',  'no' => 'return_no',  'route' => 'commission_returns'],
+    ];
+
+    /** [prefix => [id => document number]] — filled by preloadDocNumbers() */
+    private array $docNumbers = [];
+
+    private function parseReference(?string $reference): ?array
+    {
+        if ($reference && preg_match('/^(PI|SI|CI|PR|SR|CR)-(\d+)(?:-(.+))?$/', $reference, $m)) {
+            return ['prefix' => $m[1], 'id' => (int) $m[2], 'stage' => $m[3] ?? null];
+        }
+        return null;
+    }
+
+    // One query per document type for a whole batch of vouchers.
+    private function preloadDocNumbers($vouchers): void
+    {
+        $ids = [];
+        foreach ($vouchers as $v) {
+            if ($p = $this->parseReference($v->reference)) {
+                $ids[$p['prefix']][] = $p['id'];
+            }
+        }
+        foreach ($ids as $prefix => $list) {
+            $cfg = self::DOC_TYPES[$prefix];
+            if (!\Schema::hasTable($cfg['table'])) continue;
+            $found = DB::table($cfg['table'])->whereIn('id', array_unique($list))->pluck($cfg['no'], 'id')->all();
+            $this->docNumbers[$prefix] = ($this->docNumbers[$prefix] ?? []) + $found;
+        }
+    }
+
     private function describeVoucherReference(?string $reference, int $voucherId): string
     {
         if (!$reference) {
             return "Voucher #{$voucherId}";
         }
 
-        if (preg_match('/^(PI|SI|CI)-(\d+)-(.+)$/', $reference, $m)) {
-            $stageLabel = ucwords(strtolower(str_replace(['-', '_'], ' ', $m[3])));
-            return "{$m[1]}-{$m[2]} ({$stageLabel})";
+        if ($p = $this->parseReference($reference)) {
+            $no    = $this->docNumbers[$p['prefix']][$p['id']] ?? $p['id'];
+            $label = "{$p['prefix']}-{$no}";
+            if ($p['stage']) {
+                $label .= ' (' . ucwords(strtolower(str_replace(['-', '_'], ' ', $p['stage']))) . ')';
+            }
+            return $label;
         }
 
-        // Unrecognized format (e.g. legacy PR-/SR- style references) — show as-is.
+        // Unrecognized format — show as-is.
         return $reference;
+    }
+
+    // ['show' => url, 'print' => url] for the document behind a voucher, or null.
+    private function voucherDocLinks(?string $reference): ?array
+    {
+        $p = $this->parseReference($reference);
+        if (!$p) return null;
+
+        $route = self::DOC_TYPES[$p['prefix']]['route'];
+        if (!\Route::has("{$route}.show")) return null;
+
+        return [
+            'show'  => route("{$route}.show", $p['id']),
+            'print' => \Route::has("{$route}.print") ? route("{$route}.print", $p['id']) : null,
+        ];
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -219,6 +272,8 @@ class AccountsReportController extends Controller
             ->orderBy('date')
             ->get();
 
+        $this->preloadDocNumbers($vouchers);
+
         foreach ($vouchers as $v) {
             $dr = ($v->ac_dr_sid == $accountId) ? $v->amount : 0;
             $cr = ($v->ac_cr_sid == $accountId) ? $v->amount : 0;
@@ -233,6 +288,7 @@ class AccountsReportController extends Controller
                 $this->fmt($dr),
                 $this->fmt($cr),
                 $this->fmt($runningBal),
+                $this->voucherDocLinks($v->reference), // [7] links for ref + narration
             ]);
         }
 
@@ -274,6 +330,8 @@ class AccountsReportController extends Controller
             ->orderBy('date')
             ->get();
 
+        $this->preloadDocNumbers($vouchers);
+
         $movements = $vouchers->map(function ($v) use ($accountId, $isDebitNat, &$runningBal) {
             $isDr     = $v->ac_dr_sid == $accountId;
             $drAmount = $isDr ? $v->amount : 0;
@@ -293,6 +351,7 @@ class AccountsReportController extends Controller
                 $this->fmt($drAmount),
                 $this->fmt($crAmount),
                 $this->fmt($runningBal),
+                $this->voucherDocLinks($v->reference), // [7] links for ref + narration
             ];
         });
 
@@ -543,6 +602,7 @@ class AccountsReportController extends Controller
                 $this->fmt($dr),
                 $this->fmt($cr),
                 $this->fmt($bal),
+                $this->voucherDocLinks($v->reference), // [7] link for narration
             ];
         });
 

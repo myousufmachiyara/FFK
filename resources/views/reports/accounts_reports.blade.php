@@ -159,6 +159,18 @@
                     </thead>
                     <tbody>
 
+                    @php
+                        // Turns the first "#000123" in a narration into a link to that
+                        // invoice/return (opens its view page). Text is escaped first.
+                        $linkNarration ??= function (string $text, ?array $links): string {
+                            $safe = e($text);
+                            if (!$links || $safe === '') return $safe;
+                            $a = fn ($t) => '<a href="' . e($links['show']) . '" target="_blank" class="ref-link">' . $t . '</a>';
+                            return preg_match('/#[^\s,;]+/u', $safe)
+                                ? preg_replace_callback('/#[^\s,;]+/u', fn ($m) => $a($m[0]), $safe, 1)
+                                : $a($safe);
+                        };
+                    @endphp
                     @forelse ($reports[$key] ?? [] as $row)
                         @php
                             $isOpening = in_array($key, ['cash_book', 'bank_book'])
@@ -172,26 +184,21 @@
                             <td>{{ $row[0] }}</td>
                             <td>{{ $row[1] }}</td>
                             <td>
-                                @php $ref = $row[2] ?? ''; @endphp
+                                @php $ref = $row[2] ?? ''; $links = $row[7] ?? null; @endphp
                                 @if (str_starts_with($ref, 'Voucher #') || str_starts_with($ref, 'Voucher#'))
                                     @php $vid = preg_match('/Voucher\s*#\s*(\d+)/', $ref, $m) ? (int) $m[1] : 0; @endphp
-                                    {{-- FIX 2: Only print link, no eye icon --}}
                                     <a href="{{ route('vouchers.print', ['type' => $voucherTypes[$vid] ?? 'journal', 'id' => $vid]) }}"
                                        target="_blank" class="ref-link">{{ $ref }}</a>
-                                @elseif (str_starts_with($ref, 'PI-'))
-                                    @php $pid = (int) str_replace('PI-', '', $ref); @endphp
-                                    <a href="{{ route('purchase_invoices.print', $pid) }}"
-                                       target="_blank" class="ref-link text-success">{{ $ref }}</a>
-                                @elseif (str_starts_with($ref, 'SI-'))
-                                    @php $sid = (int) str_replace('SI-', '', $ref); @endphp
-                                    <a href="{{ route('sale_invoices.print', $sid) }}"
-                                       target="_blank" class="ref-link text-primary">{{ $ref }}</a>
+                                @elseif ($links)
+                                    {{-- Links are built from the document's id; the label shows its real invoice/return no. --}}
+                                    <a href="{{ $links['print'] ?? $links['show'] }}" target="_blank"
+                                       class="ref-link {{ str_starts_with($ref, 'SI-') || str_starts_with($ref, 'SR-') ? 'text-primary' : 'text-success' }}">{{ $ref }}</a>
                                 @else
                                     <span class="text-muted fst-italic">{{ $ref }}</span>
                                 @endif
                             </td>
-                            {{-- FIX 1: Narration / remarks --}}
-                            <td class="narration">{{ $row[3] ?? '' }}</td>
+                            {{-- Narration — the "#invoice no" inside it opens the invoice --}}
+                            <td class="narration">{!! $linkNarration($row[3] ?? '', $row[7] ?? null) !!}</td>
                             <td class="text-end">{{ $row[4] ?? '' }}</td>
                             <td class="text-end">{{ $row[5] ?? '' }}</td>
                             <td class="text-end fw-bold">{{ $row[6] ?? '' }}</td>
@@ -201,24 +208,20 @@
                             <td>{{ $row[0] }}</td>
                             <td>{{ $row[1] }}</td>
                             <td>
-                                @php $ref = $row[2] ?? ''; @endphp
+                                @php $ref = $row[2] ?? ''; $links = $row[7] ?? null; @endphp
                                 @if (str_starts_with($ref, 'Voucher #') || str_starts_with($ref, 'Voucher#'))
                                     @php $vid = preg_match('/Voucher\s*#\s*(\d+)/', $ref, $m) ? (int) $m[1] : 0; @endphp
                                     <a href="{{ route('vouchers.print', ['type' => $voucherTypes[$vid] ?? 'journal', 'id' => $vid]) }}"
                                        target="_blank" class="ref-link">{{ $ref }}</a>
-                                @elseif (str_starts_with($ref, 'PI-'))
-                                    @php $pid = (int) str_replace('PI-', '', $ref); @endphp
-                                    <a href="{{ route('purchase_invoices.print', $pid) }}"
-                                       target="_blank" class="ref-link text-success">{{ $ref }}</a>
-                                @elseif (str_starts_with($ref, 'SI-'))
-                                    @php $sid = (int) str_replace('SI-', '', $ref); @endphp
-                                    <a href="{{ route('sale_invoices.print', $sid) }}"
-                                       target="_blank" class="ref-link text-primary">{{ $ref }}</a>
+                                @elseif ($links)
+                                    {{-- Links are built from the document's id; the label shows its real invoice/return no. --}}
+                                    <a href="{{ $links['print'] ?? $links['show'] }}" target="_blank"
+                                       class="ref-link {{ str_starts_with($ref, 'SI-') || str_starts_with($ref, 'SR-') ? 'text-primary' : 'text-success' }}">{{ $ref }}</a>
                                 @else
                                     <span class="text-muted fst-italic">{{ $ref }}</span>
                                 @endif
                             </td>
-                            <td class="narration">{{ $row[3] ?? '' }}</td>
+                            <td class="narration">{!! $linkNarration($row[3] ?? '', $row[7] ?? null) !!}</td>
                             <td class="text-end">{{ $row[4] ?? '' }}</td>
                             <td class="text-end">{{ $row[5] ?? '' }}</td>
                             <td class="text-end fw-bold">{{ $row[6] ?? '' }}</td>
@@ -228,7 +231,7 @@
                             <td>{{ $row[0] }}</td>
                             <td>{{ $row[1] }}</td>
                             <td>{{ $row[2] }}</td>
-                            <td class="narration">{{ $row[3] ?? '' }}</td>
+                            <td class="narration">{!! $linkNarration($row[3] ?? '', $row[7] ?? null) !!}</td>
                             <td class="text-end">{{ $row[4] ?? '' }}</td>
                             <td class="text-end">{{ $row[5] ?? '' }}</td>
                             <td class="text-end fw-bold">{{ $row[6] ?? '' }}</td>

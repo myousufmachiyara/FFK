@@ -114,6 +114,7 @@ class InventoryReportController extends Controller
                 ? DB::table('purchase_return_items')
                     ->join('purchase_returns', 'purchase_return_items.purchase_return_id', '=', 'purchase_returns.id')
                     ->where('purchase_return_items.item_id', $itemId)
+                    ->whereNull('purchase_returns.deleted_at')
                     ->where('purchase_returns.return_date', '<', $from)
                     ->sum('purchase_return_items.quantity')
                 : 0;
@@ -122,6 +123,7 @@ class InventoryReportController extends Controller
                 ? DB::table('sale_return_items')
                     ->join('sale_returns', 'sale_return_items.sale_return_id', '=', 'sale_returns.id')
                     ->where('sale_return_items.product_id', $itemId)
+                    ->whereNull('sale_returns.deleted_at')
                     ->where('sale_returns.return_date', '<', $from)
                     ->sum('sale_return_items.qty')
                 : 0;
@@ -174,6 +176,7 @@ class InventoryReportController extends Controller
                     'purchase_invoices.received_at as date',
                     DB::raw("'Purchase' as type"),
                     DB::raw("CONCAT('PI-', purchase_invoices.invoice_no) as description"),
+                    'purchase_invoices.id as doc_id',
                     'purchase_invoice_items.received_packing_qty as qty_in',
                     DB::raw('0 as qty_out'),
                     'purchase_invoice_items.received_net_weight as weight_in',
@@ -190,6 +193,7 @@ class InventoryReportController extends Controller
                     'sale_invoices.date as date',
                     DB::raw("'Sale' as type"),
                     DB::raw("CONCAT('SI-', sale_invoices.invoice_no) as description"),
+                    'sale_invoices.id as doc_id',
                     DB::raw('0 as qty_in'),
                     'sale_invoice_items.quantity as qty_out',
                     DB::raw('0 as weight_in'),
@@ -206,13 +210,15 @@ class InventoryReportController extends Controller
                     ->select(
                         'purchase_returns.return_date as date',
                         DB::raw("'Purchase Return' as type"),
-                        DB::raw("CONCAT('PR-', purchase_returns.id) as description"),
+                        DB::raw("CONCAT('PR-', purchase_returns.return_no) as description"),
+                        'purchase_returns.id as doc_id',
                         DB::raw('0 as qty_in'),
                         'purchase_return_items.quantity as qty_out',
                         DB::raw('0 as weight_in'),
                         'purchase_return_items.net_weight as weight_out'
                     )
                     ->where('purchase_return_items.item_id', $itemId)
+                    ->whereNull('purchase_returns.deleted_at')
                     ->whereBetween('purchase_returns.return_date', [$from, $to]);
 
                 $itemLedger = $itemLedger->union($purchaseReturns);
@@ -224,13 +230,15 @@ class InventoryReportController extends Controller
                     ->select(
                         'sale_returns.return_date as date',
                         DB::raw("'Sale Return' as type"),
-                        DB::raw("CONCAT('SR-', sale_returns.id) as description"),
+                        DB::raw("CONCAT('SR-', sale_returns.return_no) as description"),
+                        'sale_returns.id as doc_id',
                         'sale_return_items.qty as qty_in',
                         DB::raw('0 as qty_out'),
                         'sale_return_items.net_weight as weight_in',
                         DB::raw('0 as weight_out')
                     )
                     ->where('sale_return_items.product_id', $itemId)
+                    ->whereNull('sale_returns.deleted_at')
                     ->whereBetween('sale_returns.return_date', [$from, $to]);
 
                 $itemLedger = $itemLedger->union($saleReturns);
