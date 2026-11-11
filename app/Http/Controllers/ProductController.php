@@ -230,6 +230,9 @@ class ProductController extends Controller
                 ProductVariation::whereIn('id', $request->removed_variations)->delete();
             }
 
+            // Opening weight / rate feed the average cost — re-cost this product's sales.
+            \App\Services\SaleCostRecalculator::recalculate([$product->id]);
+
             DB::commit();
             return redirect()->route('products.index')->with('success', 'Product updated successfully.');
         } catch (\Throwable $e) {

@@ -703,6 +703,10 @@ class PurchaseInvoiceController extends Controller
 
             $this->logStatusChange($invoice, PurchaseInvoice::STATUS_IN_TRANSIT, PurchaseInvoice::STATUS_RECEIVED, $request->remarks);
 
+            // This receipt changes the average purchase cost of these items —
+            // re-cost their sales so COGS / profit use the new average.
+            \App\Services\SaleCostRecalculator::recalculate($invoice->items->pluck('item_id')->all());
+
             DB::commit();
             Log::info('[PI] Received', [
                 'invoice_id' => $invoice->id,
@@ -778,6 +782,9 @@ class PurchaseInvoiceController extends Controller
                 $invoice, PurchaseInvoice::STATUS_RECEIVED, PurchaseInvoice::STATUS_IN_TRANSIT,
                 'Reverted from Received (mistaken receipt). ' . ($request->remarks ?? '')
             );
+
+            // This lot no longer counts toward the average cost — re-cost sales.
+            \App\Services\SaleCostRecalculator::recalculate($invoice->items->pluck('item_id')->all());
 
             DB::commit();
             Log::info('[PI] Reverted to In Transit', ['invoice_id' => $invoice->id]);

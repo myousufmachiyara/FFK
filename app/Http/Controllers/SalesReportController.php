@@ -279,7 +279,8 @@ class SalesReportController extends Controller
             })->sortByDesc('date')->values();
         }
 
-        $customers = ChartOfAccounts::where('account_type', 'customer')->get();
+        // Sales can be made to vendors too, so the filter lists both.
+        $customers = ChartOfAccounts::whereIn('account_type', ['customer', 'vendor'])->orderBy('name')->get();
 
         return view('reports.sales_reports', compact(
             'tab',
